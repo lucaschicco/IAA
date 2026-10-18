@@ -1,0 +1,227 @@
+## Slide 1
+
+Asistente de IA para Consorcios
+Consulta de Normativa y Expensas
+
+IA Agéntica · Maestría en Explotación de Datos y Descubrimiento del Conocimiento (UBA)
+
+Grupo 6  ·  10/09/2026
+
+## Slide 2
+
+EL PROBLEMA
+
+Dificultad para consultar rápida y eficientemente la documentación.
+
+Reglamento de propiedad horizontal  + manual de prácticas consorciales + precedentes de resolución de conflictos previos del consorcio  + marco legal general.
+Ese corpus responde la mayoría de las consultas cotidianas.
+
+Consulta por mail, WhatsApp o a otros vecinos.
+
+Alguien busca a mano
+en papeles, mensajes viejos, reglamentos 
+
+Responde — o responde
+de memoria, sin verificar
+
+Horas a días
+
+de tiempo de respuesta, sin trazabilidad de en qué se basó la respuesta.
+
+02
+
+## Slide 3
+
+Usuarios
+
+Propietarios e inquilinos
+
+Consultan cosas como:
+¿puedo cerrar un balcón? · ¿quién paga una filtración que viene de la unidad de arriba? · ¿puedo tener perro? · ¿qué necesito para usar el SUM? · ¿por qué aumentó la expensa este mes?
+Vía actual: preguntarle a un vecino o al encargado, esperar a la próxima reunión informal, o directamente no preguntar.
+
+Administrador o vecino a cargo
+
+En consorcios chicos (4 a 15 unidades) sin administración profesional, resuelve sin formación específica ni memoria institucional.
+Busca en un grupo de WhatsApp viejo o pregunta a quien lleva más tiempo en el edificio — memoria que se pierde si esa persona se muda.
+Cada consulta que el sistema resuelve bien es tiempo que no consume; cada consulta que escala llega con el contexto ya armado.
+
+03
+
+## Slide 4
+
+Por qué hace falta un modelo de lenguaje
+
+a) Relación entre documentos: hace falta un modelo que interprete varios documentos a la vez — por ejemplo, actas que modifican o dejan sin efecto partes del reglamento con el tiempo.
+b) Distancia entre la pregunta y el texto: el vecino pregunta “¿puedo poner una parrilla en el balcón?” y el reglamento habla de “artefactos de combustión” — sin solapamiento léxico, hace falta recuperación densa.
+c) Precedentes sin registro formal: gran parte de la convivencia se resolvió una vez, de manera informal, y quedó como costumbre — hace falta reconocer un caso nuevo como similar a uno viejo, aunque esté descripto con otras palabras.
+
+Dónde NO usamos LLM:  los montos de expensas no los genera el modelo. Los trae una consulta estructurada y se verifican programáticamente antes de responder.
+
+04
+
+## Slide 5
+
+LA SOLUCIÓN
+
+Un chatbot conversacional con tres funcionalidades
+
+Consultas de reglamento
+
+Responde con la cita exacta que fundamenta la respuesta.
+
+Precedentes y contexto para decidir
+
+Recupera cómo se resolvió algo similar antes en el mismo consorcio.
+
+Consultas de expensas por unidad
+
+Responde el dato real y por qué varió.
+
+05
+
+## Slide 6
+
+Chatbot Conversacional
+
+Consulta en
+lenguaje natural
+
+El sistema identifica
+qué funcionalidad  corresponde
+
+Funcionalidades
+ejecutan y responden
+
+¿Verificación contra
+la fuente está ok?
+
+Sí
+Responde con cita / dato verificado
+
+No
+Escala a un humano con el contexto armado
+
+06
+
+## Slide 7
+
+DATOS
+
+Corpus documental 
+
+Corpus
+Origen
+Reglamentos de copropiedad
+Reglamento de copropiedad y Manual de prácticas consorciales CABA
+Liquidaciones de expensas
+Copias de liquidaciones reales
+Normativa general
+CCyC arts. 2037–2072, Ley 941 y Ley 3254 CABA
+Historial de resoluciones informales
+Datos sintéticos
+
+07
+
+## Slide 8
+
+EVALUACIÓN
+
+Partición fija dev/test, antes de iterar sobre prompts
+
+Conjunto de evaluación:  preguntas anotadas con el fragmento correcto y la respuesta esperada. Incluye tres tipos difíciles:
+
+1
+
+Reglamento particular contradice el default legal
+
+2
+
+Una asamblea o documento informal (precedente) modificó lo que dice el reglamento
+
+3
+
+Preguntas no cubiertas por el corpus — la respuesta correcta es abstenerse
+
+Retrieval (recall@k, MRR) evaluado por separado de la Generación (exactitud, tasa de alucinación de citas, vigencia). Precedentes (recall@k de casos relevantes, tasa de abstención correcta). Derivación: precisión y recall de responder-vs-escalar. Expensas: exactitud de la atribución causal.
+
+Función
+Baseline
+Hipótesis
+Núcleo
+LLM zero-shot sin corpus del edificio
+Supera en exactitud y reduce alucinación de citas
+Retrieval
+BM25 / búsqueda léxica
+Recall@k mejora, sobre todo sin solapamiento léxico
+Derivación
+Clasificador clásico
+Comparable, sin requerir conjunto etiquetado previo
+Expensas
+Diff por nombre idéntico de rubro
+Atribuye bien aunque el rubro cambie de nombre
+Precedentes
+Buscar a mano en mensajes/actas, o preguntar a quien lleva más tiempo
+Mayor cobertura y consistencia que la memoria de una persona
+
+08
+
+## Slide 9
+
+RIESGOS
+
+Riesgo mayor y Plan B
+
+RIESGO 1
+
+El sistema asevera algo incorrecto con apariencia de certeza, en cualquiera de sus tres funciones
+
+RIESGO 2
+
+Un precedente arbitrario se trata como válido solo por haber ocurrido — jurisprudencia que nadie decidió deliberadamente
+
+PLAN B
+
+Cada respuesta pasa por una verificación puntual antes de emitirse — la cita existe literalmente en el fragmento recuperado, el tema no está en la lista cerrada de escalado obligatorio, o el monto coincide exactamente con el dato de la tabla, según la función. Si la verificación falla o no se supera el umbral de confianza, el sistema no responde: deriva a un humano con el contexto ya armado.
+
+Para el corpus, la mitigación es acotar el alcance a lo que se puede procesar bien: dos reglamentos reales bien digitalizados (OCR revisado a mano) más actas sintéticas generadas sobre esa misma estructura, con el generador evaluado como parte del sistema. Si el OCR se vuelve un cuello de botella, se recorta el alcance a los edificios que ya tienen su documentación en formato digital.
+
+09
+
+## Slide 10
+
+ECONOMÍA DEL SISTEMA
+
+Costo por consulta
+
+costo_consulta = tokens_entrada × precio_in + tokens_salida × precio_out
+
+tokens_entrada ≈ system prompt + k fragmentos recuperados + historial
+
+A estimar y reportar:  costo por consulta · costo fijo de indexación inicial y de re-indexación al incorporar un acta · latencia extremo a extremo.
+
+Comparación:  contra el costo del proceso manual actual — minutos de un empleado por consulta.
+
+10
+
+## Slide 11
+
+ALCANCE
+
+Qué no vamos a hacer
+
+Fuera de este MVP
+
+Monitoreo de vencimientos y cláusulas de contratos con proveedores
+
+Reportes de actividad agregada para la administración
+
+Asistente de reservas de espacios comunes
+
+Fuera del sistema, en cualquier versión
+
+No da opinión legal ni interpreta casos ambiguos: cita la norma y deriva
+
+No gestiona pagos, cobranzas, planes de pago ni descuentos
+
+11

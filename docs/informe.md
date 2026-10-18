@@ -31,8 +31,9 @@ Falta: completar la comparación y buscar algunos papers sobre el tema.
 ## 4. Datos
 
 Tenemos, de un consorcio real:
-- 4 actas de asamblea y 2 convocatorias
+- reglamento de copropiedad del edificio (10/04/2025)
 - reglamento de cocheras
+- 4 actas de asamblea y 2 convocatorias
 - 8 liquidaciones de expensas (febrero a septiembre 2026)
 - unas 30 facturas y comprobantes
 - comunicados de la administración
@@ -40,8 +41,7 @@ Tenemos, de un consorcio real:
 Y normativa pública: modelo de reglamento, manual de prácticas consorciales, leyes 941 y 3254.
 
 Falta:
-- conseguir el reglamento de copropiedad del edificio;
-- pasar las actas a texto y las liquidaciones a una tabla;
+- pasar el reglamento y las actas a texto (son PDF escaneados, hay que revisar el OCR) y las liquidaciones a una tabla;
 - sacar los datos personales.
 
 ## 5. Cómo funciona el sistema

@@ -9,7 +9,8 @@ Asistente para la administración de consorcios: responde consultas sobre reglam
 - `docs/informe.md`: el informe del TP, organizado según lo que pide la consigna.
 - `docs/bitacora.md`: notas de cómo fue el desarrollo.
 - `docs/fuentes.md`: qué datos usa el sistema y de dónde salen.
-- `datos/`: documentos, expensas, facturas, proveedores y preguntas de prueba, todo anonimizado.
+- `docs/consigna.md` y `docs/propuesta/`: consigna, propuesta presentada, devolución de la cátedra, entrevista e ideas de módulos.
+- `datos/`: normativa, documentos, expensas, facturas y comunicados reales del consorcio, más proveedores y preguntas de prueba.
 - `src/`: el código.
 
 ## Cómo correrlo
