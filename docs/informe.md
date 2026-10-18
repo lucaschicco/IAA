@@ -24,25 +24,35 @@ Falta: decidir si apuntamos a consorcios chicos o a administraciones profesional
 
 ## 3. Antecedentes
 
-Mercado: hay productos como CONSO, Adminia y PropietarIA (ver planilla "Competidores" en el Drive). Ninguno responde citando el reglamento real del edificio.
+Mercado: hay productos como CONSO, Adminia y PropietarIA (ver `docs/propuesta/Competidores.xlsx`). Ninguno responde citando el reglamento real del edificio.
 
 Falta: completar la comparación y buscar algunos papers sobre el tema.
 
 ## 4. Datos
 
-Tenemos, de un consorcio real:
-- reglamento de copropiedad del edificio (10/04/2025)
-- reglamento de cocheras
-- 4 actas de asamblea y 2 convocatorias
-- 8 liquidaciones de expensas (febrero a septiembre 2026)
-- unas 30 facturas y comprobantes
-- comunicados de la administración
+Todo está en `datos/`. Del consorcio Mercedes 274 (real):
 
-Y normativa pública: modelo de reglamento, manual de prácticas consorciales, leyes 941 y 3254.
+| Qué | Cantidad | ¿Tiene texto? |
+|---|---|---|
+| Reglamento de copropiedad (10/04/2025) | 1 (60 páginas) | No, escaneado |
+| Reglamento de cocheras (12/05/2026) | 1 | Sí |
+| Actas de asamblea (2024 a 2026) | 4 (16 páginas) | No, escaneadas |
+| Convocatorias a asamblea | 2 | Sí |
+| Liquidaciones de expensas (feb a sep 2026) | 8 (unas 16 páginas c/u) | Sí |
+| Facturas y comprobantes | 29 | Sí, salvo 1 |
+| Listado de gastos de agosto 2026 (del sistema de la administración) | 1 | Sí |
+| Comunicados de la administración (jun a sep 2026) | 1 documento | Sí |
+
+El listado de gastos de agosto tiene, para cada gasto, proveedor, número de factura, monto y categoría. Sirve como respuesta correcta para evaluar la carga de facturas.
+
+Normativa pública: modelo de reglamento, manual de prácticas consorciales, leyes 941 y 3254 (todas con texto).
+
+Inventado: listado de proveedores.
 
 Falta:
-- pasar el reglamento y las actas a texto (son PDF escaneados, hay que revisar el OCR) y las liquidaciones a una tabla;
-- sacar los datos personales.
+- OCR del reglamento de copropiedad y las actas (76 páginas) y revisión a mano;
+- pasar las liquidaciones a una tabla;
+- armar la tabla de unidades y las preguntas de prueba.
 
 ## 5. Cómo funciona el sistema
 
