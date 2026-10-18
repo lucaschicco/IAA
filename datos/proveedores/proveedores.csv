@@ -1,0 +1,11 @@
+id,nombre,rubro,telefono,email,habitual,fecha_alta
+1,Ascensores del Oeste,ascensores,11-0000-0001,contacto@ascensoresoeste.example,si,2023-03-01
+2,Porteros Electricos Flores,porteros electricos,11-0000-0002,info@porterosflores.example,si,2022-08-15
+3,Plomeria Integral Caballito,plomeria,11-0000-0003,plomeria@integral.example,si,2021-05-10
+4,Fumigaciones Sur,fumigacion,11-0000-0004,turnos@fumisur.example,si,2020-01-20
+5,Limpieza de Tanques Agua Clara,limpieza de tanques,11-0000-0005,agenda@aguaclara.example,si,2019-11-02
+6,Matafuegos Seguridad Total,matafuegos,11-0000-0006,ventas@seguridadtotal.example,si,2022-02-28
+7,Electricidad Martinez,electricidad,11-0000-0007,martinez@electricidad.example,no,2025-06-12
+8,Portones y Automatismos Norte,portones,11-0000-0008,soporte@portonesnorte.example,si,2023-09-05
+9,Impermeabilizaciones Techo Seguro,impermeabilizacion,11-0000-0009,obras@techoseguro.example,no,2026-01-18
+10,Destapaciones Rapidas 24hs,destapaciones,11-0000-0010,urgencias@destapaciones.example,no,2024-04-30

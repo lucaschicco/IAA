@@ -46,12 +46,19 @@ Falta:
 
 ## 5. Cómo funciona el sistema
 
-1. El usuario pregunta.
-2. El sistema decide si es una consulta de reglamento o de expensas.
-3. Busca la respuesta en los documentos o en la tabla.
-4. Si puede verificarla, responde con la cita. Si no, deriva a la administración.
+Un asistente al que le escriben los vecinos y la administración. Según lo que llega, hace una de estas cosas:
 
-Falta: diagrama y elección de modelos.
+- **Consultas de reglamento:** busca en los documentos y responde citando la fuente.
+- **Consultas de expensas:** trae el dato real de la tabla y explica por qué varió.
+- **Carga de facturas y documentos:** la administración sube una factura o una foto; el sistema extrae los datos y la administración los revisa antes de guardarlos.
+- **Reclamos:** registra el reclamo, lo asocia a una unidad y permite consultar en qué estado está.
+- **Proveedores:** sugiere a quién llamar según el rubro y compara presupuestos.
+
+Las acciones importantes (guardar una factura, contactar a un proveedor) pasan por una bandeja donde la administración aprueba, edita o rechaza. Cuando el sistema no puede verificar una respuesta, deriva a la administración.
+
+Las fuentes de datos que usa cada parte están en `docs/fuentes.md`.
+
+Falta: diagrama, elección de modelos, y definir el orden en que construimos cada parte.
 
 ## 6. Búsqueda en reglamento y actas
 
