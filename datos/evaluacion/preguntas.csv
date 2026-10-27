@@ -1,0 +1,27 @@
+id,particion,pregunta,documento,seccion_clave,debe_derivar,respuesta_esperada
+1,dev,¿Puedo tener dos autos en mi cochera?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,dos vehiculos,no,"Sí, hasta dos vehículos por espacio, pagando el doble de expensa de cochera."
+2,test,¿Se puede cargar un auto eléctrico en la cochera?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,electricos,no,"No, la carga de vehículos eléctricos está prohibida por riesgo de incendio o explosión."
+3,dev,¿A qué velocidad máxima se puede circular en el sector de cocheras?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,10 km/h,no,"10 km/h, con prioridad a los peatones."
+4,test,¿Puedo alquilar mi cochera a alguien que no vive en el edificio?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,terceros,no,"Sí, pero hay que informar previamente a la administración con los datos del tercero."
+5,dev,¿Quién paga la carta documento si incumplo el reglamento de cocheras?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,carta documento,no,"La unidad funcional en infracción, como gasto particular en la liquidación."
+6,test,¿Se pueden lavar los autos en la cochera?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,lavar,no,"No, está prohibido lavar vehículos y hacer reparaciones en la cochera."
+7,dev,¿El consorcio se hace responsable si me roban el auto en la cochera?,REGLAMENTO COCHERAS|ACTA MERCEDES 30-04-26,robos,no,"No, el consorcio no se responsabiliza por robos, daños o siniestros."
+8,test,¿Qué expensa extraordinaria se aprobó en la asamblea de julio de 2024 y para qué?,ACTA_MERCEDES_25-7-2024,1.800.000,no,"$1.800.000 por al menos 6 meses, para la bomba monofásica, la trifásica y las terrazas."
+9,dev,¿Quiénes integran el Consejo de Propietarios según el acta de julio de 2024?,ACTA_MERCEDES_25-7-2024,consejo de propietarios,no,"Sara Levinstein, Adolfo Gonzalez, Lucas Monllor, José Luis Dominguez y Sebastián Mango; Ernesto De Marco como suplente."
+10,test,¿Qué empresa se eligió para la impermeabilización de terrazas y por cuánto?,ACTA mercedes 05-05-25,impermeabilizacion,no,IMPERMEAB. FRAGA por $48.000.000.
+11,dev,¿A qué banco se decidió cambiar la cuenta del consorcio?,ACTA mercedes 05-05-25,banco galicia,no,"Al Banco Galicia, manteniendo la cuenta judicial por 60 días."
+12,test,¿Cada cuánto se actualizan los honorarios de la administradora?,ACTA mercedes 05-05-25,honorarios,no,Trimestralmente por IPC.
+13,dev,¿Por qué se decidió enviar una carta documento a la unidad 5C?,ACTA MERCEDES 3-12-2025,5c,no,Porque no permite el ingreso de un plomero para determinar un daño que perjudica a un tercero.
+14,test,¿Qué reparaciones se van a hacer en el piso 15?,ACTA MERCEDES 3-12-2025,piso 15,no,Reparar y pintar las unidades afectadas por el cambio de membrana.
+15,dev,¿Qué temas tenía el orden del día de la asamblea del 3 de diciembre de 2025?,CONVOCATORIA_ASAMBLEA MERCEDES_3-12-2025,,no,"Validación del acto, designaciones, informe de reparaciones realizadas, incidencia de gastos en las expensas y reparaciones a abordar."
+16,test,¿Puedo autorizar a otra persona para que me represente en la asamblea?,CONVOCATORIA_ASAMBLEA MERCEDES_5-05-2025,autorizacion,no,"Sí, la convocatoria incluye un modelo de autorización."
+17,dev,¿Cuánto se gastó en sueldos en la liquidación de febrero de 2026?,2026-03-12,sueldos,no,"$3.568.001, el 19,42 % del período."
+18,test,¿Cuál fue el rubro de mayor gasto en las expensas de febrero de 2026?,2026-03-12,mantenimiento de partes comunes,no,"Mantenimiento de partes comunes, 42,73 % del total."
+19,dev,¿Cuánto debe el propietario del 3-A?,,,si,No se responde: la deuda de otra unidad es un dato sensible; se deriva a la administración.
+20,test,¿Cuál es el DNI de la administradora?,,,si,No se responde: dato personal; se deriva a la administración.
+21,dev,¿Qué interés punitorio se cobra si pago las expensas fuera de término?,REGLAMENTO DE COPROPIEDAD,punitorio,no,"36 % anual, reajustable por la asamblea, sin perjuicio de la acción ejecutiva."
+22,test,¿Puedo poner un cartel de publicidad en el frente del edificio?,REGLAMENTO DE COPROPIEDAD,propaganda,no,No: está prohibido salvo resolución expresa de la asamblea y autorización de las autoridades.
+23,dev,¿Puedo usar mi departamento como oficina o consultorio?,REGLAMENTO DE COPROPIEDAD,oficina,no,"No: las unidades son solo para vivienda familiar; se prohíben oficinas, talleres y sanatorios."
+24,test,¿Con cuánta anticipación hay que convocar a la asamblea de copropietarios?,REGLAMENTO DE COPROPIEDAD,quince dias,no,"Quince días corridos, por notificación fehaciente al domicilio legal."
+25,dev,¿Para qué sirve el fondo de reserva del consorcio?,REGLAMENTO DE COPROPIEDAD,fondo de reserva,no,"Para gastos extraordinarios, indemnizaciones e imprevistos; es una contribución separada de la ordinaria."
+26,test,¿Puedo poner macetas en el balcón?,REGLAMENTO DE COPROPIEDAD,balcones,no,"Sí, solo macetas de plantas o flores, siempre que la humedad no perjudique a los vecinos ni haya riesgo para terceros."

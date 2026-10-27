@@ -1,0 +1,467 @@
+{
+  "archivo": "preguntas.csv",
+  "particion": "test",
+  "n": 13,
+  "retrieval": {
+    "k": 3,
+    "por_metodo": {
+      "tsvector": {
+        "recall_at_k": 0.583,
+        "mrr": 0.403,
+        "aciertos": 7,
+        "n": 12
+      },
+      "palabras": {
+        "recall_at_k": 0.917,
+        "mrr": 0.75,
+        "aciertos": 11,
+        "n": 12
+      }
+    },
+    "detalle": [
+      {
+        "id": "2",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 7 – Carga de vehículos eléctricos",
+          "ACTA MERCEDES 30-04-26_260430_ · Reglamento interno de cocheras",
+          "ACTA MERCEDES 30-04-26_260430_ · Convalidación del Reglamento de cochera"
+        ]
+      },
+      {
+        "id": "4",
+        "metodo": "tsvector",
+        "rango": null,
+        "recuperadas": [
+          "ACTA MERCEDES 30-04-26_260430_ · Convalidación del Reglamento de cochera",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO SEGUNDO - DESCRIPCION DEL EDIFICIO",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio"
+        ]
+      },
+      {
+        "id": "6",
+        "metodo": "tsvector",
+        "rango": null,
+        "recuperadas": [
+          "ACTA MERCEDES 30-04-26_260430_ · Convalidación del Reglamento de cochera",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación"
+        ]
+      },
+      {
+        "id": "8",
+        "metodo": "tsvector",
+        "rango": null,
+        "recuperadas": [
+          "ACTA MERCEDES 3-12-2025_251204 · 5 INCIDENCIA DE GASTOS EN LAS EXPENSAS",
+          "ACTA mercedes 05-05-25.pdf · 4 INFORME DE GESTIÓN-MANDATO DE ADMINISTRACIÓN-REN",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE"
+        ]
+      },
+      {
+        "id": "10",
+        "metodo": "tsvector",
+        "rango": 3,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · OBRA IMPERMEABILIZACIÓN DE TERRAZAS-EVALUACIÓN DE ",
+          "ACTA_MERCEDES_25-7-2024.pdf · 4) Reparaciones pendientes de unidades (Evaluación",
+          "ACTA mercedes 05-05-25.pdf · 5 OBRA IMPERMEABILIZACIÓN DE TERRAZAS-EVALUACIÓN D"
+        ]
+      },
+      {
+        "id": "12",
+        "metodo": "tsvector",
+        "rango": 2,
+        "recuperadas": [
+          "ACTA_MERCEDES_25-7-2024.pdf · 3) Rendición de cuentas - Informe de gestión - Ren",
+          "ACTA mercedes 05-05-25.pdf · 4 INFORME DE GESTIÓN-MANDATO DE ADMINISTRACIÓN-REN",
+          "ACTA mercedes 05-05-25.pdf · Nota: Sobre punto 4)"
+        ]
+      },
+      {
+        "id": "14",
+        "metodo": "tsvector",
+        "rango": 2,
+        "recuperadas": [
+          "ACTA_MERCEDES_25-7-2024.pdf · 4) Reparaciones pendientes de unidades (Evaluación",
+          "ACTA MERCEDES 3-12-2025_251204 · 6 REPARACIONES A ABORDAR",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · INFORME DE REPARACIONES REALIZADAS"
+        ]
+      },
+      {
+        "id": "16",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · AUTORIZACIÓN PARA PARTICIPAR EN ASAMBLEA"
+        ]
+      },
+      {
+        "id": "18",
+        "metodo": "tsvector",
+        "rango": null,
+        "recuperadas": [
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 6 GASTOS BANCARIOS",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 7 GASTOS DE LIMPIEZA",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 8 GASTOS DE ADMINISTRACIO"
+        ]
+      },
+      {
+        "id": "22",
+        "metodo": "tsvector",
+        "rango": 2,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO SEGUNDO - DESCRIPCION DEL EDIFICIO",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO NOVENO",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 11 SERVICIOS PUBLICOS"
+        ]
+      },
+      {
+        "id": "24",
+        "metodo": "tsvector",
+        "rango": null,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · AUTORIZACIÓN PARA PARTICIPAR EN ASAMBLEA"
+        ]
+      },
+      {
+        "id": "26",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO DECIMO"
+        ]
+      },
+      {
+        "id": "2",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "ACTA MERCEDES 30-04-26_260430_ · Reglamento interno de cocheras",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 8 – Responsabilidad",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 8 – Responsabilidad"
+        ]
+      },
+      {
+        "id": "4",
+        "metodo": "palabras",
+        "rango": null,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · REPARACIONES A ABORDAR",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación"
+        ]
+      },
+      {
+        "id": "6",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 6 – Prohibiciones",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación"
+        ]
+      },
+      {
+        "id": "8",
+        "metodo": "palabras",
+        "rango": 2,
+        "recuperadas": [
+          "ACTA mercedes 05-05-25.pdf · 4 INFORME DE GESTIÓN-MANDATO DE ADMINISTRACIÓN-REN",
+          "ACTA_MERCEDES_25-7-2024.pdf · 4) Reparaciones pendientes de unidades (Evaluación",
+          "ACTA MERCEDES 3-12-2025_251204 · 5 INCIDENCIA DE GASTOS EN LAS EXPENSAS"
+        ]
+      },
+      {
+        "id": "10",
+        "metodo": "palabras",
+        "rango": 2,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · OBRA IMPERMEABILIZACIÓN DE TERRAZAS-EVALUACIÓN DE ",
+          "ACTA mercedes 05-05-25.pdf · 5 OBRA IMPERMEABILIZACIÓN DE TERRAZAS-EVALUACIÓN D",
+          "ACTA_MERCEDES_25-7-2024.pdf · 4) Reparaciones pendientes de unidades (Evaluación"
+        ]
+      },
+      {
+        "id": "12",
+        "metodo": "palabras",
+        "rango": 2,
+        "recuperadas": [
+          "ACTA_MERCEDES_25-7-2024.pdf · 3) Rendición de cuentas - Informe de gestión - Ren",
+          "ACTA mercedes 05-05-25.pdf · 4 INFORME DE GESTIÓN-MANDATO DE ADMINISTRACIÓN-REN",
+          "ACTA mercedes 05-05-25.pdf · Nota: Sobre punto 4)"
+        ]
+      },
+      {
+        "id": "14",
+        "metodo": "palabras",
+        "rango": 2,
+        "recuperadas": [
+          "ACTA_MERCEDES_25-7-2024.pdf · 4) Reparaciones pendientes de unidades (Evaluación",
+          "ACTA MERCEDES 3-12-2025_251204 · 6 REPARACIONES A ABORDAR",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · INFORME DE REPARACIONES REALIZADAS"
+        ]
+      },
+      {
+        "id": "16",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · AUTORIZACIÓN PARA PARTICIPAR EN ASAMBLEA",
+          "ACTA MERCEDES 30-04-26_260430_ · Encargados y obligaciones del personal",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Mayorías necesarias"
+        ]
+      },
+      {
+        "id": "18",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 4 MANTENIMIENTO DE PARTES",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 6 GASTOS BANCARIOS",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 7 GASTOS DE LIMPIEZA"
+        ]
+      },
+      {
+        "id": "22",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO NOVENO",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · REPARACIONES A ABORDAR",
+          "ACTA MERCEDES 30-04-26_260430_ · Instalación de cámaras y normas de uso del edifici"
+        ]
+      },
+      {
+        "id": "24",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · CAPITULO VII - REUNIONES DE LOS COPROPIETARIOS - A",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · VALIDACIÓN DEL ACTO ASAMBLEARIO",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE"
+        ]
+      },
+      {
+        "id": "26",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO DECIMO"
+        ]
+      }
+    ]
+  },
+  "generacion": {
+    "n": 13,
+    "respondidas": 9,
+    "tasa_respondidas": 0.692,
+    "tasa_citas_verificadas": 0.692,
+    "tasa_fuente_correcta": 0.538,
+    "tasa_correctas": 0.615,
+    "derivadas_cuando_debia": 1,
+    "debian_derivar": 1,
+    "costo_usd_total": null,
+    "segundos_promedio": 2.1,
+    "detalle": [
+      {
+        "id": "2",
+        "pregunta": "¿Se puede cargar un auto eléctrico en la cochera?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "No, la carga de vehículos eléctricos en la cochera está totalmente prohibida.",
+        "cita": "La carga de vehículos eléctricos queda TOTALMENTE PROHIBIDA debido al riesgo de incendio o explosión.",
+        "respuesta_esperada": "No, la carga de vehículos eléctricos está prohibida por riesgo de incendio o explosión.",
+        "costo_usd": null,
+        "segundos": 2.08
+      },
+      {
+        "id": "4",
+        "pregunta": "¿Puedo alquilar mi cochera a alguien que no vive en el edificio?",
+        "derivada": true,
+        "verificada": false,
+        "motivo": "el modelo no encontró respaldo en las fuentes",
+        "debe_derivar": false,
+        "fuente_correcta": false,
+        "correcta": false,
+        "respuesta": "No se encuentra en las fuentes un criterio que autorice o prohíba expresamente el alquiler de la cochera a una persona que no viva en el edificio.",
+        "cita": null,
+        "respuesta_esperada": "Sí, pero hay que informar previamente a la administración con los datos del tercero.",
+        "costo_usd": null,
+        "segundos": 1.82
+      },
+      {
+        "id": "6",
+        "pregunta": "¿Se pueden lavar los autos en la cochera?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": false,
+        "correcta": false,
+        "respuesta": "No, está prohibido lavar los autos dentro de la cochera según el reglamento interno.",
+        "cita": "Queda prohibido realizar reparaciones mecánicas, lavar vehículos, Lustrado, Polarizado, Detailing o prácticas similares en los vehículos, almacenar objetos o materiales, guardar combustibles o sustancias inflamables y utilizar la cochera como depósito.",
+        "respuesta_esperada": "No, está prohibido lavar vehículos y hacer reparaciones en la cochera.",
+        "costo_usd": null,
+        "segundos": 1.9
+      },
+      {
+        "id": "8",
+        "pregunta": "¿Qué expensa extraordinaria se aprobó en la asamblea de julio de 2024 y para qué?",
+        "derivada": true,
+        "verificada": false,
+        "motivo": "el modelo no encontró respaldo en las fuentes",
+        "debe_derivar": false,
+        "fuente_correcta": false,
+        "correcta": false,
+        "respuesta": "Falta la documentación de la asamblea de julio de 2024 que detalle la expensa extraordinaria aprobada y su destino.",
+        "cita": null,
+        "respuesta_esperada": "$1.800.000 por al menos 6 meses, para la bomba monofásica, la trifásica y las terrazas.",
+        "costo_usd": null,
+        "segundos": 1.02
+      },
+      {
+        "id": "10",
+        "pregunta": "¿Qué empresa se eligió para la impermeabilización de terrazas y por cuánto?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Se eligió a la empresa IMPERMEAB. FRAGA para la impermeabilización de terrazas, con un presupuesto total de $48.000.000.",
+        "cita": "Presupuesto A) IMPERMEAB. FRAGA. Total $ 48.000.000 completo (s/Tanque).",
+        "respuesta_esperada": "IMPERMEAB. FRAGA por $48.000.000.",
+        "costo_usd": null,
+        "segundos": 4.21
+      },
+      {
+        "id": "12",
+        "pregunta": "¿Cada cuánto se actualizan los honorarios de la administradora?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Los honorarios de la administradora se actualizan de forma trimestral, aplicándose el Índice de Precios al Consumidor (IPC) como criterio de ajuste.",
+        "cita": "actualización es trimestral por IPC",
+        "respuesta_esperada": "Trimestralmente por IPC.",
+        "costo_usd": null,
+        "segundos": 2.03
+      },
+      {
+        "id": "14",
+        "pregunta": "¿Qué reparaciones se van a hacer en el piso 15?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Se van a reparar en el piso 15 las unidades afectadas por un cambio de membrana, pintándolas.",
+        "cita": "Reparaciones en piso 15 en las unidades afectadas por cambio de membrana",
+        "respuesta_esperada": "Reparar y pintar las unidades afectadas por el cambio de membrana.",
+        "costo_usd": null,
+        "segundos": 2.31
+      },
+      {
+        "id": "16",
+        "pregunta": "¿Puedo autorizar a otra persona para que me represente en la asamblea?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Sí, el propietario puede autorizar a otra persona para que lo represente en la asamblea mediante una carta poder con firma certificada.",
+        "cita": "De no poder asistir personalmente podrá hacerse representar mediante la autorización impresa al final de la presente, carta poder con la firma certificada por escribano, por el Administrador, o por un Banco.",
+        "respuesta_esperada": "Sí, la convocatoria incluye un modelo de autorización.",
+        "costo_usd": null,
+        "segundos": 1.37
+      },
+      {
+        "id": "18",
+        "pregunta": "¿Cuál fue el rubro de mayor gasto en las expensas de febrero de 2026?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": false,
+        "correcta": false,
+        "respuesta": "El rubro de mayor gasto en las expensas de febrero de 2026 correspondió a GASTOS DE ADMINISTRACIÓN, con un total de $1.101.793,00.",
+        "cita": "Total gastos de administracion 6.00% $1,101,793.00",
+        "respuesta_esperada": "Mantenimiento de partes comunes, 42,73 % del total.",
+        "costo_usd": null,
+        "segundos": 2.64
+      },
+      {
+        "id": "20",
+        "pregunta": "¿Cuál es el DNI de la administradora?",
+        "derivada": true,
+        "verificada": false,
+        "motivo": "el modelo no encontró respaldo en las fuentes",
+        "debe_derivar": true,
+        "fuente_correcta": false,
+        "correcta": true,
+        "respuesta": "En los documentos consultados solo se indica el nombre y el RPA de la administradora, así como su CUIT, pero no se menciona su número de DNI.",
+        "cita": null,
+        "respuesta_esperada": "No se responde: dato personal; se deriva a la administración.",
+        "costo_usd": null,
+        "segundos": 1.82
+      },
+      {
+        "id": "22",
+        "pregunta": "¿Puedo poner un cartel de publicidad en el frente del edificio?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "No, está prohibido colocar cualquier tipo de letras o elemento de propaganda en el frente del edificio, salvo que la Asamblea lo autorice expresamente y cuente con la autorización de las autoridades competentes.",
+        "cita": "Es absolutamente prohibido colocar sob--- el frente del edificio, toda clase de letras y elemento de propaganda, mingle ellos ocupen o no el espacio corre---",
+        "respuesta_esperada": "No: está prohibido salvo resolución expresa de la asamblea y autorización de las autoridades.",
+        "costo_usd": null,
+        "segundos": 2.47
+      },
+      {
+        "id": "24",
+        "pregunta": "¿Con cuánta anticipación hay que convocar a la asamblea de copropietarios?",
+        "derivada": true,
+        "verificada": false,
+        "motivo": "el modelo no encontró respaldo en las fuentes",
+        "debe_derivar": false,
+        "fuente_correcta": false,
+        "correcta": false,
+        "respuesta": "Falta la norma que establezca el plazo de antelación para la convocatoria de la asamblea.",
+        "cita": null,
+        "respuesta_esperada": "Quince días corridos, por notificación fehaciente al domicilio legal.",
+        "costo_usd": null,
+        "segundos": 1.61
+      },
+      {
+        "id": "26",
+        "pregunta": "¿Puedo poner macetas en el balcón?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Sí, el reglamento permite colocar macetas en los balcones siempre que la humedad no perjudique a los demás vecinos.",
+        "cita": "Solamente podran usarse l--- balcones y/o ventanas para poner macetas de plantas o flores, toda vez que la humedad no perjudique a los...",
+        "respuesta_esperada": "Sí, solo macetas de plantas o flores, siempre que la humedad no perjudique a los vecinos ni haya riesgo para terceros.",
+        "costo_usd": null,
+        "segundos": 1.7
+      }
+    ]
+  }
+}

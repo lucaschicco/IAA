@@ -1,0 +1,471 @@
+{
+  "archivo": "preguntas.csv",
+  "particion": "dev",
+  "n": 13,
+  "retrieval": {
+    "k": 3,
+    "por_metodo": {
+      "tsvector": {
+        "recall_at_k": 1.0,
+        "mrr": 0.861,
+        "aciertos": 12,
+        "n": 12
+      },
+      "palabras": {
+        "recall_at_k": 0.917,
+        "mrr": 0.722,
+        "aciertos": 11,
+        "n": 12
+      }
+    },
+    "detalle": [
+      {
+        "id": "1",
+        "metodo": "tsvector",
+        "rango": 2,
+        "recuperadas": [
+          "ACTA MERCEDES 30-04-26_260430_ · Convalidación del Reglamento de cochera",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación"
+        ]
+      },
+      {
+        "id": "3",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación",
+          "ACTA MERCEDES 30-04-26_260430_ · Convalidación del Reglamento de cochera",
+          "ACTA MERCEDES 30-04-26_260430_ · Reglamento interno de cocheras"
+        ]
+      },
+      {
+        "id": "5",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 12 – Sanciones",
+          "ACTA MERCEDES 3-12-2025_251204 · Emisión de Carta Documento por Daño a Terceros (Un",
+          "ACTA MERCEDES 30-04-26_260430_ · Convalidación del Reglamento de cochera"
+        ]
+      },
+      {
+        "id": "7",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 8 – Responsabilidad",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 8 – Responsabilidad",
+          "2026-02-11-210807-MERCEDES_274 · Expensas 2026-01 · rubro 1 SUELDOS"
+        ]
+      },
+      {
+        "id": "9",
+        "metodo": "tsvector",
+        "rango": 2,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE DOS PROPIETARIOS PARA REFRENDAR EL ",
+          "ACTA_MERCEDES_25-7-2024.pdf · 6) Altas y bajas Consejo de Propietarios.",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE DOS PROPIETARIOS PARA REFRENDAR EL "
+        ]
+      },
+      {
+        "id": "11",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "ACTA mercedes 05-05-25.pdf · 6 DEFINICIÓN DE TRABAJOS A REALIZAR",
+          "2026-02-11-210807-MERCEDES_274 · Expensas 2026-01 · rubro 1 SUELDOS",
+          "2026-07-07-211102-MERCEDES_274 · Expensas 2026-06 · rubro 1 SUELDOS"
+        ]
+      },
+      {
+        "id": "13",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "ACTA MERCEDES 3-12-2025_251204 · Emisión de Carta Documento por Daño a Terceros (Un"
+        ]
+      },
+      {
+        "id": "15",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · AUTORIZACIÓN PARA PARTICIPAR EN ASAMBLEA"
+        ]
+      },
+      {
+        "id": "17",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 1 SUELDOS",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 6 GASTOS BANCARIOS",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 7 GASTOS DE LIMPIEZA"
+        ]
+      },
+      {
+        "id": "21",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Artículo Once",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · INCIDENCIA DE GASTOS EN LAS EXPENSAS",
+          "ACTA MERCEDES 3-12-2025_251204 · 5 INCIDENCIA DE GASTOS EN LAS EXPENSAS"
+        ]
+      },
+      {
+        "id": "23",
+        "metodo": "tsvector",
+        "rango": 3,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 8 – Responsabilidad",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO DECIMO TERCERO"
+        ]
+      },
+      {
+        "id": "25",
+        "metodo": "tsvector",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Fondo de Reserva",
+          "2026-02-11-210807-MERCEDES_274 · Expensas 2026-01 · rubro 1 SUELDOS",
+          "2026-07-07-211102-MERCEDES_274 · Expensas 2026-06 · rubro 1 SUELDOS"
+        ]
+      },
+      {
+        "id": "1",
+        "metodo": "palabras",
+        "rango": 2,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 9 – Uso por terceros",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación"
+        ]
+      },
+      {
+        "id": "3",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 4 – Uso del espacio",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 6 – Prohibiciones"
+        ]
+      },
+      {
+        "id": "5",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 12 – Sanciones",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 12 – Sanciones",
+          "ACTA MERCEDES 3-12-2025_251204 · Emisión de Carta Documento por Daño a Terceros (Un"
+        ]
+      },
+      {
+        "id": "7",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 8 – Responsabilidad",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 8 – Responsabilidad",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · AUTORIZACIÓN PARA PARTICIPAR EN ASAMBLEA"
+        ]
+      },
+      {
+        "id": "9",
+        "metodo": "palabras",
+        "rango": 3,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE DOS PROPIETARIOS PARA REFRENDAR EL ",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · DESIGNACIÓN DE DOS PROPIETARIOS PARA REFRENDAR EL ",
+          "ACTA_MERCEDES_25-7-2024.pdf · 6) Altas y bajas Consejo de Propietarios."
+        ]
+      },
+      {
+        "id": "11",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "ACTA mercedes 05-05-25.pdf · 6 DEFINICIÓN DE TRABAJOS A REALIZAR",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · INFORME DE REPARACIONES REALIZADAS",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · INFORME DE GESTIÓN-MANDATO DE ADMINISTRACIÓN-RENDI"
+        ]
+      },
+      {
+        "id": "13",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "ACTA MERCEDES 3-12-2025_251204 · Emisión de Carta Documento por Daño a Terceros (Un",
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 12 – Sanciones",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 12 – Sanciones"
+        ]
+      },
+      {
+        "id": "15",
+        "metodo": "palabras",
+        "rango": null,
+        "recuperadas": [
+          "CONVOCATORIA_ASAMBLEA MERCEDES · VALIDACIÓN DEL ACTO ASAMBLEARIO",
+          "ACTA_MERCEDES_25-7-2024.pdf · 2) Reglas para deliberar.",
+          "ACTA MERCEDES 3-12-2025_251204 · 4 INFORME DE REPARACIONES REALIZADAS"
+        ]
+      },
+      {
+        "id": "17",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 1 SUELDOS",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 4 MANTENIMIENTO DE PARTES",
+          "2026-03-12-150356-MERCEDES_274 · Expensas 2026-02 · rubro 6 GASTOS BANCARIOS"
+        ]
+      },
+      {
+        "id": "21",
+        "metodo": "palabras",
+        "rango": 1,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Artículo Once",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Artículo VIGESIMO SEXTO",
+          "CONVOCATORIA_ASAMBLEA MERCEDES · INCIDENCIA DE GASTOS EN LAS EXPENSAS"
+        ]
+      },
+      {
+        "id": "23",
+        "metodo": "palabras",
+        "rango": 3,
+        "recuperadas": [
+          "REGLAMENTO COCHERAS MERCEDES_1 · Artículo 5 – Circulación",
+          "ACTA MERCEDES 30-04-26_260430_ · Articulo 8 – Responsabilidad",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · ARTICULO DECIMO TERCERO"
+        ]
+      },
+      {
+        "id": "25",
+        "metodo": "palabras",
+        "rango": 2,
+        "recuperadas": [
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Artículo Décimo Octavo",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Artículo quinto",
+          "REGLAMENTO DE COPROPIEDAD_10-0 · Fondo de Reserva"
+        ]
+      }
+    ]
+  },
+  "generacion": {
+    "n": 13,
+    "respondidas": 12,
+    "tasa_respondidas": 0.923,
+    "tasa_citas_verificadas": 0.923,
+    "tasa_fuente_correcta": 0.846,
+    "tasa_correctas": 0.923,
+    "derivadas_cuando_debia": 1,
+    "debian_derivar": 1,
+    "costo_usd_total": null,
+    "segundos_promedio": 2.0,
+    "detalle": [
+      {
+        "id": "1",
+        "pregunta": "¿Puedo tener dos autos en mi cochera?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Sí, el reglamento interno permite estacionar hasta dos vehículos en el espacio asignado a su unidad, abonando el doble de la expensa de cochera para el segundo vehículo.",
+        "cita": "Dentro de su espacio se permiten hasta 2 vehículos. En dicho caso, se abonará el doble de expensa de cochera, la mitad por prorrateo, y la mitad como gasto particular, con el detalle de vehículo adicional.",
+        "respuesta_esperada": "Sí, hasta dos vehículos por espacio, pagando el doble de expensa de cochera.",
+        "costo_usd": null,
+        "segundos": 2.33
+      },
+      {
+        "id": "3",
+        "pregunta": "¿A qué velocidad máxima se puede circular en el sector de cocheras?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "La velocidad máxima permitida en el sector de cocheras es de 10 km/h.",
+        "cita": "En el sector cocheras la velocidad máxima será de 10 km/h. Se deberá circular únicamente por los sectores habilitados, realizar maniobras con precaución y dar prioridad a peatones.",
+        "respuesta_esperada": "10 km/h, con prioridad a los peatones.",
+        "costo_usd": null,
+        "segundos": 1.74
+      },
+      {
+        "id": "5",
+        "pregunta": "¿Quién paga la carta documento si incumplo el reglamento de cocheras?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Los gastos de la carta documento por incumplir el reglamento de cocheras los asume la unidad funcional que incurrió en la infracción, es decir, el propietario de la cochera infractora.",
+        "cita": "Los gastos derivados de dicha notificación, incluyendo costos de envío y honorarios por redacción, serán a exclusivo cargo de la unidad funcional en infracción, imputándose como gasto particular bajo el concepto “Notificación de Incumplimiento a Reglamento de Cocheras”. ",
+        "respuesta_esperada": "La unidad funcional en infracción, como gasto particular en la liquidación.",
+        "costo_usd": null,
+        "segundos": 2.08
+      },
+      {
+        "id": "7",
+        "pregunta": "¿El consorcio se hace responsable si me roban el auto en la cochera?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "El consorcio no se hace responsable si le roban el auto en la cochera; cada propietario asume la responsabilidad por robos, daños o siniestros de su vehículo o de las personas autorizadas a usar la cochera.",
+        "cita": "El Consorcio no se responsabiliza por robos, daños o siniestros que pudieran ocurrir en los vehículos estacionados.",
+        "respuesta_esperada": "No, el consorcio no se responsabiliza por robos, daños o siniestros.",
+        "costo_usd": null,
+        "segundos": 1.98
+      },
+      {
+        "id": "9",
+        "pregunta": "¿Quiénes integran el Consejo de Propietarios según el acta de julio de 2024?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Según el acta del 25 de julio de 2024, el Consejo de Propietarios está integrado por Sara Levinstein, Adolfo González, Lucas Monllor, José Luis Domínguez y Sebastián Mango, y Ernesto De Marco figura como suplente.",
+        "cita": "6) El Consejo de propietarios queda conformado por\nSara Levinstein, Adolfo Gonzalez, Lucas Monllor,\nJosé Luis Dominguez, Sebastián Mango.\nSuplentes (colaboradores): Ernesto De Marco.",
+        "respuesta_esperada": "Sara Levinstein, Adolfo Gonzalez, Lucas Monllor, José Luis Dominguez y Sebastián Mango; Ernesto De Marco como suplente.",
+        "costo_usd": null,
+        "segundos": 2.52
+      },
+      {
+        "id": "11",
+        "pregunta": "¿A qué banco se decidió cambiar la cuenta del consorcio?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": false,
+        "correcta": false,
+        "respuesta": "En la asamblea se aprobó cambiar la cuenta del consorcio al Banco Galicia.",
+        "cita": "Caja: BANCO GALICIA BUENSO AIRES - Forma: Transferencia",
+        "respuesta_esperada": "Al Banco Galicia, manteniendo la cuenta judicial por 60 días.",
+        "costo_usd": null,
+        "segundos": 2.8
+      },
+      {
+        "id": "13",
+        "pregunta": "¿Por qué se decidió enviar una carta documento a la unidad 5C?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "Se decidió enviar una carta documento a la unidad 5C porque su propietario no permite que ingrese un plomero para determinar un daño que perjudica a un tercero.",
+        "cita": "cuando en un departamento deje entrar al plomero para determinar daño a 3º perjudica a tercero. Se enviará una carta documento.",
+        "respuesta_esperada": "Porque no permite el ingreso de un plomero para determinar un daño que perjudica a un tercero.",
+        "costo_usd": null,
+        "segundos": 1.75
+      },
+      {
+        "id": "15",
+        "pregunta": "¿Qué temas tenía el orden del día de la asamblea del 3 de diciembre de 2025?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "El orden del día de la asamblea del 3 de diciembre de 2025 incluía los siguientes temas: validación del acto asambleario; designación de presidente y secretario de actas; designación de dos propietarios para refendar el acta; informe de reparaciones realizadas; incidencia de gastos en las expensas; y reparaciones a abordar.",
+        "cita": "ORDEN DEL DÍA\n1 VALIDACIÓN DEL ACTO ASAMBLEARIO\n2 DESIGNACIÓN DE PRESIDENTE Y SECRETARIO DE ACTAS DE LA ASAMBLEA\n3 DESIGNACIÓN DE DOS PROPIETARIOS PARA REFRENDAR EL ACTA\n4 INFORME DE REPARACIONES REALIZADAS\n5 INCIDENCIA DE GASTOS EN LAS EXPENSAS\n6 REPARACIONES A ABORDAR",
+        "respuesta_esperada": "Validación del acto, designaciones, informe de reparaciones realizadas, incidencia de gastos en las expensas y reparaciones a abordar.",
+        "costo_usd": null,
+        "segundos": 2.34
+      },
+      {
+        "id": "17",
+        "pregunta": "¿Cuánto se gastó en sueldos en la liquidación de febrero de 2026?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "En la liquidación de expensas de febrero de 2026 se gastó $3,568,001.00 en sueldos.",
+        "cita": "Total sueldos 19.42% $3,568,001.00",
+        "respuesta_esperada": "$3.568.001, el 19,42 % del período.",
+        "costo_usd": null,
+        "segundos": 1.31
+      },
+      {
+        "id": "19",
+        "pregunta": "¿Cuánto debe el propietario del 3-A?",
+        "derivada": true,
+        "verificada": false,
+        "motivo": "el modelo no encontró respaldo en las fuentes",
+        "debe_derivar": true,
+        "fuente_correcta": false,
+        "correcta": true,
+        "respuesta": "Falta una fuente que indique el monto adeudado por el propietario del 3-A, como una liquidación de expensas o similar.",
+        "cita": null,
+        "respuesta_esperada": "No se responde: la deuda de otra unidad es un dato sensible; se deriva a la administración.",
+        "costo_usd": null,
+        "segundos": 1.12
+      },
+      {
+        "id": "21",
+        "pregunta": "¿Qué interés punitorio se cobra si pago las expensas fuera de término?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "El reglamento establece que el interés punitorio por el pago fuera de término de las expensas comunes es del 36 % anual.",
+        "cita": "dará derecho al cobro de un interes punitorio del 36 por ciento anual, el que sera reajustado",
+        "respuesta_esperada": "36 % anual, reajustable por la asamblea, sin perjuicio de la acción ejecutiva.",
+        "costo_usd": null,
+        "segundos": 2.14
+      },
+      {
+        "id": "23",
+        "pregunta": "¿Puedo usar mi departamento como oficina o consultorio?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "No, el reglamento prohíbe destinar su departamento a oficinas o consultorios.",
+        "cita": "Bajo ningun concepto, casa o situacion, las unidades de propiedad exclusiva destinadas a viviendas podran ser empleadas para industrias, talleres, sanatorios, oficinas de renate, consultorios para la atencion de enfermedades infecciosas o contagiosas",
+        "respuesta_esperada": "No: las unidades son solo para vivienda familiar; se prohíben oficinas, talleres y sanatorios.",
+        "costo_usd": null,
+        "segundos": 2.29
+      },
+      {
+        "id": "25",
+        "pregunta": "¿Para qué sirve el fondo de reserva del consorcio?",
+        "derivada": false,
+        "verificada": true,
+        "motivo": "cita encontrada en el texto original",
+        "debe_derivar": false,
+        "fuente_correcta": true,
+        "correcta": true,
+        "respuesta": "El fondo de reserva se constituye para atender gastos extraordinarios, indemnizaciones y otros gastos especiales o imprevistos, mediante una contribución distinta a la ordinaria.",
+        "cita": "ARTICULO VIGESIMO CUARTO. FONDO DE RESERVA. Para la atencion de gastos extraordinarios indemnizaciones yDESIGNADOS otros gastos especiales o imprevistos debera constituirse un \"FONDO DE RESERVA\" en forma de una contribucion ajena a la ordinaria.",
+        "respuesta_esperada": "Para gastos extraordinarios, indemnizaciones e imprevistos; es una contribución separada de la ordinaria.",
+        "costo_usd": null,
+        "segundos": 1.63
+      }
+    ]
+  }
+}
