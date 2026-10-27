@@ -1,0 +1,286 @@
+"""Línea de comandos: `consorcio <subcomando>`.
+
+  consorcio ingestar <pdf> [--metodo auto|texto|tesseract|vision] [--paginas 1-3] [--sin-persistir] [--reusar-texto]
+                           [--proveedor google_genai --modelo gemini-2.5-flash --modelo-vision ...]
+  consorcio clasificar <pdf>            # solo la decisión del clasificador, sin modelo
+  consorcio evaluar-ocr <pdf> <ref.md>  # compara la transcripción contra una referencia
+  consorcio preguntar "¿...?" [--k 3] [--busqueda tsvector|palabras] [--sin-persistir] [--json]
+  consorcio expensas [resumen|rubros|gastos|unidades] [--periodo 2026-07] [--unidad 5-D] [--texto limpieza]
+  consorcio evaluar-consultas <preguntas.csv> [--particion dev|test|todas] [--k 3] [--con-modelo]
+  consorcio documentos [--desactivar X | --activar X]   # lista lo que hay en Postgres; X: id o parte del nombre
+  consorcio consorcios [--asignar-chat ID --a CONSORCIO] [--crear ID --nombre "..."]   # bases y chats
+  consorcio consultas [--consorcio ID] [--origen telegram|cli|evaluacion] [--ultimas 20]   # qué se preguntó y qué se contestó
+  consorcio migrar                      # migra una base anterior al 26/10 (ids sin consorcio)
+  (ingestar, preguntar, expensas, evaluar-consultas y documentos aceptan --consorcio ID; por defecto CONSORCIO_POR_DEFECTO)
+  consorcio grafo                       # conteo de nodos en Neo4j
+  consorcio dibujar-grafo [ingesta|consulta]   # imprime el grafo de LangGraph en Mermaid
+  consorcio bot                         # bot de Telegram (long polling); necesita TELEGRAM_BOT_TOKEN
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from .observabilidad import configurar_logging
+
+
+def main(argv: list[str] | None = None) -> int:
+    configurar_logging()
+    parser = argparse.ArgumentParser(prog="consorcio", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("ingestar", help="procesa un PDF de punta a punta")
+    p.add_argument("pdf")
+    p.add_argument("--metodo", choices=["auto", "texto", "tesseract", "vision"], default="auto")
+    p.add_argument("--paginas", help="rango de páginas a procesar, p. ej. 1-3,7 (por defecto todas)")
+    p.add_argument("--sin-persistir", action="store_true", help="no escribe en Postgres ni Neo4j")
+    p.add_argument("--reusar-texto", action="store_true",
+                   help="reutiliza las páginas OCR/visión guardadas de una corrida anterior del mismo archivo")
+    _arg_consorcio(p)
+    _args_modelo(p)
+
+    p = sub.add_parser("clasificar", help="muestra la decisión del clasificador de calidad")
+    p.add_argument("pdf")
+
+    p = sub.add_parser("evaluar-ocr", help="mide la transcripción contra un .md de referencia")
+    p.add_argument("pdf")
+    p.add_argument("referencia")
+    p.add_argument("--metodo", choices=["auto", "texto", "tesseract", "vision"], default="auto")
+    p.add_argument("--paginas", help="rango de páginas, p. ej. 1-3")
+    p.add_argument("--sin-transcripcion", action="store_true", help="no imprime el texto transcripto")
+    _args_modelo(p)
+
+    p = sub.add_parser("preguntar", help="responde una consulta con cita verificada (tool 2)")
+    p.add_argument("pregunta")
+    p.add_argument("--k", type=int, default=3, help="secciones a recuperar")
+    p.add_argument("--busqueda", choices=["tsvector", "palabras"], default="tsvector")
+    p.add_argument("--sin-persistir", action="store_true", help="no guarda la consulta en Postgres")
+    p.add_argument("--json", action="store_true", help="imprime el estado completo en JSON")
+    _arg_consorcio(p)
+    _args_modelo(p)
+
+    p = sub.add_parser("expensas", help="consulta las liquidaciones por SQL, sin modelo")
+    p.add_argument("que", nargs="?", choices=["resumen", "rubros", "gastos", "unidades"], default="resumen")
+    p.add_argument("--periodo", help="AAAA-MM")
+    p.add_argument("--unidad", help="piso-depto (5-D, COCH-16) o número de UF")
+    p.add_argument("--texto", help="filtra gastos por rubro, proveedor o concepto")
+    _arg_consorcio(p)
+
+    p = sub.add_parser("evaluar-consultas", help="recall@k del buscador y, opcionalmente, calidad de las respuestas")
+    p.add_argument("csv")
+    p.add_argument("--particion", choices=["dev", "test", "todas"], default="dev")
+    p.add_argument("--k", type=int, default=3)
+    p.add_argument("--con-modelo", action="store_true", help="también responde cada pregunta (gasta tokens)")
+    p.add_argument("--sin-detalle", action="store_true")
+    _arg_consorcio(p)
+    _args_modelo(p)
+
+    p = sub.add_parser("documentos", help="lista los documentos guardados en Postgres")
+    p.add_argument("--desactivar", metavar="ID_O_NOMBRE", help="el buscador deja de usar ese documento (no se borra)")
+    p.add_argument("--activar", metavar="ID_O_NOMBRE", help="vuelve a incluirlo en el buscador")
+    p.add_argument("--consorcio", help="solo ese consorcio (por defecto, todos)")
+    p = sub.add_parser("consorcios", help="lista las bases (consorcios) y qué chats usa cada una")
+    p.add_argument("--asignar-chat", type=int, metavar="CHAT_ID", help="hace que ese chat de Telegram use --a")
+    p.add_argument("--a", metavar="CONSORCIO", help="consorcio destino de --asignar-chat")
+    p.add_argument("--crear", metavar="CONSORCIO", help="crea un consorcio (slug: letras, números y guiones)")
+    p.add_argument("--nombre", help="nombre legible para --crear o --a")
+    sub.add_parser("migrar", help="migra una base anterior al 26/10/2026 al esquema con consorcios")
+    p = sub.add_parser("consultas", help="últimas consultas registradas (pregunta, respuesta, cita, canal)")
+    p.add_argument("--consorcio", help="solo esa base")
+    p.add_argument("--origen", choices=["telegram", "cli", "evaluacion"])
+    p.add_argument("--ultimas", type=int, default=20)
+    sub.add_parser("grafo", help="conteo de nodos por etiqueta en Neo4j")
+    p = sub.add_parser("dibujar-grafo", help="grafo de LangGraph en Mermaid")
+    p.add_argument("cual", nargs="?", choices=["ingesta", "consulta"], default="ingesta")
+    p = sub.add_parser("bot", help="bot de Telegram: recibe PDFs y preguntas por chat")
+    _args_modelo(p)
+
+    args = parser.parse_args(argv)
+    _aplicar_modelo(args)
+
+    if args.cmd == "ingestar":
+        from .ingesta.grafo import ingestar_pdf
+
+        metodo = None if args.metodo == "auto" else args.metodo
+        final = ingestar_pdf(args.pdf, metodo=metodo, sin_persistir=args.sin_persistir, paginas=args.paginas,
+                             reusar_texto=args.reusar_texto, consorcio_id=args.consorcio)
+        _imprimir_resumen(final)
+        return 1 if final.get("errores") else 0
+
+    if args.cmd == "clasificar":
+        from .ingesta.clasificador import clasificar_pdf, herramientas_disponibles
+
+        c = clasificar_pdf(args.pdf)
+        print(json.dumps({"herramientas": herramientas_disponibles(), **c.como_dict()}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "evaluar-ocr":
+        from .ingesta.evaluar import evaluar_transcripcion
+
+        metodo = None if args.metodo == "auto" else args.metodo
+        res = evaluar_transcripcion(args.pdf, args.referencia, metodo, args.paginas)
+        if args.sin_transcripcion:
+            res.pop("transcripcion", None)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "preguntar":
+        from .consulta.grafo import preguntar
+
+        final = preguntar(args.pregunta, k=args.k, metodo_busqueda=args.busqueda, sin_persistir=args.sin_persistir,
+                          consorcio_id=args.consorcio)
+        if args.json:
+            print(json.dumps({k: v for k, v in final.items() if not k.startswith("_")}, ensure_ascii=False, indent=2))
+        else:
+            print(final.get("mensaje", ""))
+            print()
+            print(f"[{'derivada' if final.get('derivada') else 'respondida'} · {final.get('motivo')} · "
+                  f"{len(final.get('resultados', []))} secciones recuperadas · "
+                  f"{json.dumps(final.get('costo'), ensure_ascii=False)} · {final.get('segundos')} s]")
+        return 0
+
+    if args.cmd == "expensas":
+        from .almacen.postgres import consultar_expensas
+
+        for fila in consultar_expensas(args.que, args.periodo, args.unidad, args.texto, consorcio_id=args.consorcio):
+            print(json.dumps(fila, ensure_ascii=False))
+        return 0
+
+    if args.cmd == "evaluar-consultas":
+        from .consulta.evaluar import evaluar_consultas
+
+        res = evaluar_consultas(args.csv, args.particion, args.k, args.con_modelo, consorcio_id=args.consorcio)
+        if args.sin_detalle:
+            res["retrieval"].pop("detalle", None)
+            if "generacion" in res:
+                res["generacion"].pop("detalle", None)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "documentos":
+        from .almacen.postgres import activar_documento, listar_documentos
+
+        if args.desactivar or args.activar:
+            cambiados = activar_documento(args.desactivar or args.activar, activo=bool(args.activar),
+                                          consorcio_id=args.consorcio)
+            print(f"{'activados' if args.activar else 'desactivados'}: {cambiados}")
+            return 0 if cambiados else 1
+        for d in listar_documentos(args.consorcio):
+            print(json.dumps(d, ensure_ascii=False))
+        return 0
+
+    if args.cmd == "consorcios":
+        from .almacen.postgres import asegurar_consorcio, asignar_chat, listar_consorcios
+
+        if args.crear:
+            asegurar_consorcio(args.crear, args.nombre)
+        if args.asignar_chat is not None:
+            if not args.a:
+                parser.error("--asignar-chat necesita --a CONSORCIO")
+            asignar_chat(args.asignar_chat, args.a, args.nombre)
+        for c in listar_consorcios():
+            print(json.dumps(c, ensure_ascii=False))
+        return 0
+
+    if args.cmd == "consultas":
+        from .almacen.postgres import listar_consultas
+
+        for c in reversed(listar_consultas(args.consorcio, args.origen, args.ultimas)):
+            print(json.dumps(c, ensure_ascii=False))
+        return 0
+
+    if args.cmd == "migrar":
+        from .almacen import grafo_neo4j, postgres
+
+        cambios = postgres.migrar_consorcios()
+        n = grafo_neo4j.migrar_consorcios(cambios)
+        print(json.dumps({"documentos_migrados": len(cambios), "nodos_neo4j": n, "cambios": cambios},
+                         ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "grafo":
+        from .almacen.grafo_neo4j import resumen_grafo
+
+        print(json.dumps(resumen_grafo(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "bot":
+        from .canales.telegram import correr_bot
+
+        return correr_bot()
+
+    if args.cmd == "dibujar-grafo":
+        if args.cual == "consulta":
+            from .consulta.grafo import construir_grafo
+        else:
+            from .ingesta.grafo import construir_grafo
+
+        print(construir_grafo().get_graph().draw_mermaid())
+        return 0
+
+    parser.print_help()
+    return 2
+
+
+def _arg_consorcio(p) -> None:
+    p.add_argument("--consorcio", metavar="ID", help="base (consorcio) sobre la que opera; por defecto CONSORCIO_POR_DEFECTO")
+
+
+def _args_modelo(p) -> None:
+    p.add_argument("--proveedor", choices=["google_genai", "anthropic", "openai", "openrouter", "ollama", "fake"],
+                   help="pisa LLM_PROVIDER para esta corrida")
+    p.add_argument("--modelo", help="pisa LLM_MODEL para esta corrida")
+    p.add_argument("--modelo-vision", help="pisa LLM_MODEL_VISION para esta corrida")
+
+
+def _aplicar_modelo(args) -> None:
+    from .config import config
+
+    if getattr(args, "proveedor", None):
+        config.llm_provider = args.proveedor
+        if not getattr(args, "modelo", None):
+            config.llm_model = ""  # usar el default del nuevo proveedor
+    if getattr(args, "modelo", None):
+        config.llm_model = args.modelo
+    if getattr(args, "modelo_vision", None):
+        config.llm_model_vision = args.modelo_vision
+
+
+def _imprimir_resumen(final: dict) -> None:
+    ext = final.get("extraccion", {})
+    meta = ext.get("metadatos", {})
+    liq = final.get("liquidacion")
+    resumen = {
+        "documento_id": final.get("documento_id"),
+        "archivo": final.get("nombre_archivo"),
+        "clasificacion": {k: v for k, v in final.get("clasificacion", {}).items() if k != "paginas"},
+        "proveedor_modelo": f"{_cfg().llm_provider}:{_cfg().modelo}",
+        "tipo_documento": meta.get("tipo_documento"),
+        "titulo": meta.get("titulo"),
+        "fecha_documento": meta.get("fecha_documento"),
+        "entidades": {k: len(ext.get(k, [])) for k in
+                      ("personas", "organizaciones", "direcciones", "eventos", "unidades", "montos", "secciones")},
+        "liquidacion": (
+            {"periodo": liq.get("periodo"), "vencimientos": [liq.get("primer_vencimiento"), liq.get("segundo_vencimiento")],
+             "rubros": len(liq.get("rubros", [])), "gastos": len(liq.get("gastos", [])),
+             "unidades": liq.get("filas_prorrateo"), "filas_no_parseadas": liq.get("filas_no_parseadas")}
+            if liq else None
+        ),
+        "costo": final.get("costo"),
+        "segundos_total": final.get("segundos_total"),
+        "persistido": final.get("persistido"),
+        "errores": final.get("errores", []),
+    }
+    print(json.dumps(resumen, ensure_ascii=False, indent=2))
+
+
+def _cfg():
+    from .config import config
+
+    return config
+
+
+if __name__ == "__main__":
+    sys.exit(main())
