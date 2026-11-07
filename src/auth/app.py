@@ -4,10 +4,12 @@ from fastapi import FastAPI
 
 from auth.rutas import router
 from auth.rutas_unidades import router as router_unidades
+from almacen.rutas import router as router_archivos
 
-app = FastAPI(title="Consorcios: autenticación y roles")
+app = FastAPI(title="Consorcios")
 app.include_router(router)
 app.include_router(router_unidades)
+app.include_router(router_archivos)
 
 
 @app.get("/salud")

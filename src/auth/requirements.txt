@@ -6,3 +6,6 @@ pyjwt>=2.9
 email-validator>=2.2
 pytest>=8
 httpx>=0.27
+boto3>=1.34
+python-multipart>=0.0.9
+moto[s3]>=5.0

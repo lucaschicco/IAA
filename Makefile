@@ -12,8 +12,8 @@ PYTHON ?= python3
 
 ayuda:
 	@echo "make instalar      Instala las dependencias de Python"
-	@echo "make db            Levanta Postgres en Docker (crea las tablas la primera vez)"
-	@echo "make db-apagar     Apaga Postgres (los datos se conservan)"
+	@echo "make db            Levanta Postgres y el bucket de PDF en Docker"
+	@echo "make db-apagar     Apaga Postgres y el bucket (los datos se conservan)"
 	@echo "make db-reiniciar  Borra todos los datos y arranca de cero"
 	@echo "make auth          Levanta el backend de login en http://localhost:8000/docs"
 	@echo "make test-auth     Corre los tests de login y permisos"
@@ -22,14 +22,14 @@ instalar:
 	$(PYTHON) -m pip install -r src/auth/requirements.txt
 
 db:
-	docker compose up -d --wait db
+	docker compose up -d --wait db bucket
 
 db-apagar:
 	docker compose down
 
 db-reiniciar:
 	docker compose down -v
-	docker compose up -d --wait db
+	docker compose up -d --wait db bucket
 
 auth:
 	@test -n "$(JWT_SECRETO)" || (echo "Falta JWT_SECRETO en el .env" && exit 1)
