@@ -68,7 +68,7 @@ CREATE TABLE invitaciones (
     email         TEXT NOT NULL,
     rol           rol NOT NULL,
     token_hash    TEXT NOT NULL UNIQUE,
-    creada_por    BIGINT NOT NULL REFERENCES usuarios(id),
+    creada_por    BIGINT REFERENCES usuarios(id),   -- NULL: creada desde la terminal (alta de consorcio)
     creada_en     TIMESTAMPTZ NOT NULL DEFAULT now(),
     vence_en      TIMESTAMPTZ NOT NULL,
     usada_en      TIMESTAMPTZ                -- NULL mientras no se use
