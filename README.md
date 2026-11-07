@@ -80,7 +80,17 @@ flowchart TD
 
 ## Cómo correrlo
 
-Pendiente.
+Hace falta Python 3.11 o más nuevo y Docker.
+
+```bash
+cp .env.example .env      # y completar JWT_SECRETO con una clave larga
+make instalar             # dependencias de Python
+make db                   # levanta Postgres
+make test-auth            # corre los tests de login y permisos
+make auth                 # levanta el backend en http://localhost:8000/docs
+```
+
+Escribí `make` solo para ver todos los comandos. Para dar de alta un consorcio, ver `src/auth/LEEME.md`.
 
 ## Integrantes
 
