@@ -29,6 +29,7 @@ ENTORNO_FIJO = {
     "WEB_SECRETO": "secreto-solo-para-tests-de-mas-de-32-caracteres",
     "WEB_MAX_MB_PDF": "20",
     "WEB_SESION_HORAS": "8",
+    "JWT_SECRETO": "secreto-solo-para-tests-0123456789abcdef",
     "S3_BUCKET": "consorcio-crudos-test",  # test_crudos y test_duplicados lo vacían
 }
 os.environ.update(ENTORNO_FIJO)

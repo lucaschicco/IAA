@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..almacen.postgres import (
     Membresia,
-    MembresiaUnidad,
+    UnidadFuncional,
     Usuario,
     asegurar_consorcio,
     crear_tablas,
@@ -27,12 +27,16 @@ PALMERAS, ROBLES = "demo-palmeras", "demo-robles"
 CONSORCIOS = {PALMERAS: "Edificio Las Palmeras (demo)", ROBLES: "Edificio Los Robles (demo)"}
 PERIODOS = ("2026-07", "2026-08")
 
+# Contraseña de los usuarios demo para probar el login real (`WEB_SELECTOR_USUARIOS=false`). El de plataforma no
+# la tiene: ve el CRM, que cruza consorcios, y solo entra con el selector de desarrollo.
+CONTRASENA_DEMO = "demo-consorcio-2026"
+
 # sujeto_externo, nombre, plataforma, [(consorcio, rol, unidades)]
 USUARIOS = [
-    ("demo-admin-palmeras", "Ana Administradora (demo)", False, [(PALMERAS, "administrador", ())]),
+    ("demo-admin-palmeras", "Ana Administradora (demo)", False, [(PALMERAS, "administracion", ())]),
     ("demo-prop-palmeras", "Pablo Propietario (demo)", False, [(PALMERAS, "propietario", (3,))]),
     ("demo-prop-robles", "Rita Propietaria (demo)", False, [(ROBLES, "propietario", (1,))]),
-    ("demo-multi", "Marta Multiconsorcio (demo)", False, [(PALMERAS, "propietario", (5,)), (ROBLES, "administrador", ())]),
+    ("demo-multi", "Marta Multiconsorcio (demo)", False, [(PALMERAS, "propietario", (5,)), (ROBLES, "administracion", ())]),
     ("demo-plataforma", "Equipo de plataforma (demo)", True, []),
 ]
 
@@ -120,29 +124,52 @@ def _documentos(cid: str) -> None:
                  _secciones(("Rubros de la liquidación", "expensas", f"Rubros de gastos del período {periodo}.", 1)), liq)
 
 
-def _asegurar_membresia(s: Session, usuario_id: int, cid: str, rol: str, unidades: tuple[int, ...]) -> None:
-    membresia = s.scalars(
-        select(Membresia).where(Membresia.usuario_id == usuario_id, Membresia.consorcio_id == cid)
-    ).first()
-    if membresia is None:
-        membresia = Membresia(usuario_id=usuario_id, consorcio_id=cid, rol=rol)
-        s.add(membresia)
-    membresia.rol = rol
-    actuales = {u.uf for u in membresia.unidades}
-    membresia.unidades.extend(MembresiaUnidad(uf=uf) for uf in sorted(set(unidades) - actuales))
+def _unidades_funcionales(s: Session, cid: str) -> dict[int, int]:
+    """Las unidades del edificio, con su número de UF como en la liquidación. Devuelve UF -> id."""
+    ids = {}
+    for uf, piso_depto in enumerate(EDIFICIOS[cid]["unidades"], start=1):
+        piso, _, depto = piso_depto.partition("-")
+        unidad = s.scalars(select(UnidadFuncional).where(UnidadFuncional.consorcio_id == cid,
+                                                         UnidadFuncional.uf == uf)).first()
+        if unidad is None:
+            unidad = UnidadFuncional(consorcio_id=cid, uf=uf, piso=piso, depto=depto)
+            s.add(unidad)
+            s.flush()
+        ids[uf] = unidad.id
+    return ids
+
+
+def _asegurar_membresia(s: Session, usuario_id: int, cid: str, rol: str, unidad_id: int | None) -> None:
+    existe = s.scalars(select(Membresia).where(
+        Membresia.usuario_id == usuario_id, Membresia.consorcio_id == cid, Membresia.rol == rol,
+        Membresia.unidad_id.is_(None) if unidad_id is None else Membresia.unidad_id == unidad_id,
+    )).first()
+    if existe is None:
+        s.add(Membresia(usuario_id=usuario_id, consorcio_id=cid, rol=rol, unidad_id=unidad_id))
 
 
 def _usuarios() -> None:
+    from ..auth.seguridad import hashear_contrasena
+
+    hash_demo = hashear_contrasena(CONTRASENA_DEMO)
     with Session(engine()) as s:
+        unidades = {cid: _unidades_funcionales(s, cid) for cid in CONSORCIOS}
         for sujeto, nombre, plataforma, membresias in USUARIOS:
             usuario = s.scalars(select(Usuario).where(Usuario.sujeto_externo == sujeto)).first()
             if usuario is None:
                 usuario = Usuario(sujeto_externo=sujeto)
                 s.add(usuario)
             usuario.nombre, usuario.plataforma = nombre, plataforma
+            if not plataforma:
+                usuario.email = f"{sujeto}@demo.test"
+                usuario.hash_contrasena = hash_demo
             s.flush()
-            for cid, rol, unidades in membresias:
-                _asegurar_membresia(s, usuario.id, cid, rol, unidades)
+            for cid, rol, ufs in membresias:
+                if ufs:
+                    for uf in ufs:
+                        _asegurar_membresia(s, usuario.id, cid, rol, unidades[cid][uf])
+                else:
+                    _asegurar_membresia(s, usuario.id, cid, rol, None)
         s.commit()
 
 

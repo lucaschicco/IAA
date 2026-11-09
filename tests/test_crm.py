@@ -110,7 +110,7 @@ def _usuario(s: Session, sufijo: str, membresias: tuple[str, ...], actividad: ti
                    ultima_actividad=None if actividad is None else AHORA - actividad)
     s.add(fila)
     s.flush()
-    s.add_all(Membresia(usuario_id=fila.id, consorcio_id=cid, rol="propietario") for cid in membresias)
+    s.add_all(Membresia(usuario_id=fila.id, consorcio_id=cid, rol="consejo") for cid in membresias)
     return fila.id
 
 
@@ -149,7 +149,7 @@ def escenario() -> dict[str, int]:
         _solicitud(s, B, u4, "reclamo", "aprobada", "reclamo", espera_s=10)
         _solicitud(s, A, u1, "reclamo", "rechazada", "reclamo", creado_en=HACE_10D, espera_s=10)
 
-        adm, prop = "administrador", "propietario"
+        adm, prop = "administracion", "propietario"
         _turno(s, A, u1, prop, "reglamento", "respondida", secciones=(1, 2, 3), costo=0.01, feedback=1,
                consulta=_consulta(s, True))
         _turno(s, A, u1, prop, "reglamento", "respondida", secciones=(4,), costo=0.02, feedback=-1,
@@ -259,7 +259,7 @@ def test_uso_por_usuario_consorcio_y_rol(escenario):
         {"usuario_id": escenario["u3"], "turnos": 2}, {"usuario_id": escenario["u4"], "turnos": 1},
     ]
     assert uso["por_consorcio"] == {A: 7, B: 2}
-    assert uso["por_rol"] == {"propietario": 7, "administrador": 2}
+    assert uso["por_rol"] == {"propietario": 7, "administracion": 2}
     assert crm.panel(DESDE, HASTA, B)["uso"]["por_rol"] == {"propietario": 2}
 
 

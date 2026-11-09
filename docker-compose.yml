@@ -11,6 +11,9 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    # API JSON del login (`make api`): solo en la máquina local
+    ports:
+      - "127.0.0.1:8001:8001"
     command: sleep infinity
 
   # Bot de Telegram. Tiene perfil para que `docker compose up -d` no lo levante sin token:

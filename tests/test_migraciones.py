@@ -143,7 +143,7 @@ def test_stamp_y_upgrade_conservan_los_datos(base_vacia, pasada_por_migrar):
 
     assert _conteos() == antes
     assert _escalar("SELECT count(*) FROM consultas WHERE usuario_id IS NULL") == antes["consultas"]
-    assert _existe("usuarios") and _existe("membresias") and _existe("membresia_unidades")
+    assert _existe("usuarios") and _existe("membresias") and _existe("unidades_funcionales")
     assert postgres.listar_documentos("edificio-a")[0]["archivo"] == "a.pdf"  # crear_tablas ya no frena
     command.check(_alembic())  # también tras `migrar_consorcios`: el --autogenerate no propone nada
 
@@ -299,6 +299,7 @@ def test_0007_rellena_el_libro_de_gastos(base_vacia):
     ]
     assert _escalar("SELECT plataforma FROM usuarios") is False
     assert _escalar("SELECT ultima_actividad FROM usuarios") is None
+    command.upgrade(_alembic(), "head")
     command.check(_alembic())
 
 
@@ -422,3 +423,55 @@ def test_dos_procesos_sobre_base_vacia_no_chocan(base_vacia):
         h.join(timeout=60)
     assert errores == []
     assert _escalar("SELECT version_num FROM alembic_version") == postgres._revision_head()
+
+
+def _base_con_membresias_0007() -> None:
+    """Dos usuarios con el modelo anterior: un propietario con dos UF y un administrador con un turno."""
+    command.upgrade(_alembic(), "0007_agente")
+    for sql in (
+        "INSERT INTO consorcios (id, nombre, creado_en) VALUES ('a', 'A', now())",
+        "INSERT INTO usuarios (id, sujeto_externo) VALUES (1, 'prop'), (2, 'admin')",
+        # Sin ids explícitos: la migración inserta membresías y usa la secuencia
+        "INSERT INTO membresias (usuario_id, consorcio_id, rol) VALUES (1, 'a', 'propietario'), "
+        "(2, 'a', 'administrador')",
+        "INSERT INTO membresia_unidades (membresia_id, uf) SELECT id, uf FROM membresias, (VALUES (3), (7)) v(uf) "
+        "WHERE usuario_id = 1",
+        "INSERT INTO turnos (usuario_id, consorcio_id, rol, canal, origen, resultado, segundos, modelo, "
+        "skill_version, creado_en) VALUES (2, 'a', 'administrador', 'web', 'usuario', 'respondida', 1.0, 'm', 'v', now())",
+    ):
+        _ejecutar(sql)
+
+
+def test_0008_pasa_las_membresias_al_modelo_del_login(base_vacia):
+    _base_con_membresias_0007()
+
+    command.upgrade(_alembic(), "0008_login")
+
+    assert not _existe("membresia_unidades") and _existe("invitaciones") and _existe("accesos")
+    with postgres.engine().connect() as con:
+        filas = sorted(tuple(f) for f in con.execute(text(
+            "SELECT m.usuario_id, m.rol, u.uf FROM membresias m "
+            "LEFT JOIN unidades_funcionales u ON u.id = m.unidad_id")).all())
+    assert filas == [(1, "propietario", 3), (1, "propietario", 7), (2, "administracion", None)]
+    assert _escalar("SELECT rol FROM turnos") == "administracion"
+    assert resolver_identidad("prop", "a").unidades == (3, 7)
+    assert resolver_identidad("admin", "a").es_administracion
+    command.check(_alembic())
+
+
+def test_0008_downgrade_y_upgrade_limpios(base_vacia):
+    _base_con_membresias_0007()
+    command.upgrade(_alembic(), "0008_login")
+
+    command.downgrade(_alembic(), "0007_agente")
+
+    with postgres.engine().connect() as con:
+        filas = sorted(tuple(f) for f in con.execute(text(
+            "SELECT m.usuario_id, m.rol, mu.uf FROM membresias m "
+            "LEFT JOIN membresia_unidades mu ON mu.membresia_id = m.id")).all())
+    assert filas == [(1, "propietario", 3), (1, "propietario", 7), (2, "administrador", None)]
+    assert _escalar("SELECT rol FROM turnos") == "administrador"
+
+    command.upgrade(_alembic(), "head")
+    assert resolver_identidad("prop", "a").unidades == (3, 7)
+    command.check(_alembic())

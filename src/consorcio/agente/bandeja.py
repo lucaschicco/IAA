@@ -33,7 +33,7 @@ class TurnoAjeno(Exception):
 
 
 def _exigir_administrador(identidad: Identidad) -> None:
-    if identidad.rol != "administrador":
+    if not identidad.es_administracion:
         raise SinPermiso("solo un administrador del consorcio puede hacer esto")
 
 

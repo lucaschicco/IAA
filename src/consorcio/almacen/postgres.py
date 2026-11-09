@@ -23,6 +23,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     String,
     Text,
@@ -75,6 +76,7 @@ class Consorcio(Base):
     __tablename__ = "consorcios"
     id: Mapped[str] = mapped_column(String(60), primary_key=True)  # slug: mercedes-274, chat-123
     nombre: Mapped[str] = mapped_column(Text)
+    direccion: Mapped[str | None] = mapped_column(Text)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
 
 
@@ -347,40 +349,107 @@ class Consulta(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
 
 
-# ---- Usuarios (ver identidad.py). El login queda afuera: solo entrega `sujeto_externo`.
+# ---- Usuarios (ver identidad.py) y login (ver auth/). El resto del sistema solo usa `sujeto_externo`.
+
+ROLES = ("administracion", "consejo", "propietario", "inquilino")
+ROLES_CON_UNIDAD = ("propietario", "inquilino")
 
 
 class Usuario(Base):
+    """Quien entra al sistema. Mail y contraseña son del login: los usuarios demo y los de plataforma pueden no
+    tenerlos. La contraseña nunca se guarda, solo su hash (Argon2)."""
+
     __tablename__ = "usuarios"
-    __table_args__ = (UniqueConstraint("sujeto_externo", name="uq_usuarios_sujeto_externo"),)
+    __table_args__ = (
+        UniqueConstraint("sujeto_externo", name="uq_usuarios_sujeto_externo"),
+        Index("uq_usuarios_email", text("lower(email)"), unique=True),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     sujeto_externo: Mapped[str] = mapped_column(Text)  # identificador que entrega el login
     nombre: Mapped[str | None] = mapped_column(Text)
+    email: Mapped[str | None] = mapped_column(Text)
+    hash_contrasena: Mapped[str | None] = mapped_column(Text)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     plataforma: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))  # equipo: ve el CRM
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, server_default=text("now()"))
+    ultimo_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ultima_actividad: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class UnidadFuncional(Base):
+    """Un departamento o cochera del edificio. `uf` es su número en la liquidación: con eso el agente busca sus
+    expensas. No es `Unidad`, que son las unidades que se extraen de los documentos."""
+
+    __tablename__ = "unidades_funcionales"
+    __table_args__ = (
+        UniqueConstraint("consorcio_id", "piso", "depto", name="uq_unidades_funcionales_piso_depto"),
+        UniqueConstraint("consorcio_id", "uf", name="uq_unidades_funcionales_uf"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    piso: Mapped[str] = mapped_column(Text)
+    depto: Mapped[str] = mapped_column(Text)
+    uf: Mapped[int | None] = mapped_column(Integer)
+    porcentual: Mapped[float | None] = mapped_column(Numeric(6, 3))
+
+
 class Membresia(Base):
-    """Qué rol tiene un usuario en un consorcio. Sin membresía no hay acceso a ese consorcio."""
+    """Qué es una persona en un consorcio: una fila por usuario, consorcio, unidad y rol. Alguien puede ser
+    propietario de dos unidades y además del consejo. Sin membresía activa no hay acceso a ese consorcio."""
 
     __tablename__ = "membresias"
     __table_args__ = (
-        UniqueConstraint("usuario_id", "consorcio_id", name="uq_membresias_usuario_consorcio"),
-        CheckConstraint("rol IN ('administrador', 'propietario')", name="ck_membresias_rol"),
+        UniqueConstraint("usuario_id", "consorcio_id", "unidad_id", "rol",
+                         name="uq_membresias_usuario_consorcio_unidad_rol", postgresql_nulls_not_distinct=True),
+        CheckConstraint(f"rol IN {ROLES}", name="ck_membresias_rol"),
+        CheckConstraint(
+            "(rol IN ('propietario', 'inquilino') AND unidad_id IS NOT NULL) "
+            "OR (rol = 'administracion' AND unidad_id IS NULL) OR rol = 'consejo'",
+            name="ck_membresias_unidad",
+        ),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
     consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
-    rol: Mapped[str] = mapped_column(String(20))  # administrador | propietario
-    unidades: Mapped[list[MembresiaUnidad]] = relationship(cascade="all, delete-orphan", passive_deletes=True)
+    unidad_id: Mapped[int | None] = mapped_column(ForeignKey("unidades_funcionales.id", name="fk_membresias_unidad_id"))
+    rol: Mapped[str] = mapped_column(String(20))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, server_default=text("now()"))
+    unidad: Mapped[UnidadFuncional | None] = relationship()
 
 
-class MembresiaUnidad(Base):
-    __tablename__ = "membresia_unidades"
-    __table_args__ = (UniqueConstraint("membresia_id", "uf", name="uq_membresia_unidades_membresia_uf"),)
+class Invitacion(Base):
+    """Invitación de la administración. Se guarda el hash del token, no el token: quien lea la base no puede
+    usar los links."""
+
+    __tablename__ = "invitaciones"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_invitaciones_token_hash"),
+        CheckConstraint(f"rol IN {ROLES}", name="ck_invitaciones_rol"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
-    membresia_id: Mapped[int] = mapped_column(ForeignKey("membresias.id", ondelete="CASCADE"))
-    uf: Mapped[int] = mapped_column(Integer)
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    unidad_id: Mapped[int | None] = mapped_column(ForeignKey("unidades_funcionales.id"))
+    email: Mapped[str] = mapped_column(Text)
+    rol: Mapped[str] = mapped_column(String(20))
+    token_hash: Mapped[str] = mapped_column(Text)
+    creada_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))  # None: desde la terminal
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, server_default=text("now()"))
+    vence_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    usada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Acceso(Base):
+    """Cada intento de login, exitoso o no: bloquea intentos repetidos y alimenta las métricas de uso."""
+
+    __tablename__ = "accesos"
+    __table_args__ = (Index("ix_accesos_email_momento", text("lower(email)"), "momento"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))  # None si el mail no existe
+    email: Mapped[str] = mapped_column(Text)
+    exitoso: Mapped[bool] = mapped_column(Boolean)
+    ip: Mapped[str | None] = mapped_column(Text)
+    momento: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, server_default=text("now()"))
 
 
 # ---- Agente (ver agente/). `turnos` no guarda texto: es lo que lee el CRM. El texto vive en `mensajes`,

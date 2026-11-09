@@ -240,7 +240,7 @@ def test_salida_router_no_tiene_consorcio_y_rechaza_formatos_invalidos():
 
 
 def test_consorcio_ajeno_en_la_salida_del_router_se_ignora(monkeypatch):
-    router_devuelve(monkeypatch, intencion="expensas", que="resumen", consorcio_id=ROBLES, usuario_id=999, rol="administrador")
+    router_devuelve(monkeypatch, intencion="expensas", que="resumen", consorcio_id=ROBLES, usuario_id=999, rol="administracion")
     r = atender("expensas", yo(), None, "web")
     assert "500.000,00" in r["mensaje"] and "510.000,00" not in r["mensaje"]  # total de julio: Palmeras y Robles
     assert turno(r["turno_id"]).consorcio_id == PALMERAS

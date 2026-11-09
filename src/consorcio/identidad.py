@@ -1,9 +1,11 @@
 """Quién es el usuario dentro de un consorcio.
 
 Agnóstico al login: quien autentique solo entrega `sujeto_externo` y `resolver_identidad` devuelve
-la identidad en ese consorcio, o falla si no hay membresía. El rol y las unidades informan, no
-filtran: dentro de un consorcio los propietarios pueden ver las expensas por unidad, porque así
-circula la liquidación. Lo que nunca se cruza es de un consorcio a otro.
+la identidad en ese consorcio, o falla si no hay membresía activa. El login de Lucas (`auth/`) guarda varias
+filas por persona y consorcio (una por unidad y rol); acá se juntan en una sola `Identidad`.
+
+El rol y las unidades informan, no filtran: dentro de un consorcio los propietarios pueden ver las expensas por
+unidad, porque así circula la liquidación. Lo que nunca se cruza es de un consorcio a otro.
 """
 from __future__ import annotations
 
@@ -12,7 +14,18 @@ from dataclasses import dataclass
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .almacen.postgres import Consorcio, Membresia, Usuario, crear_tablas, engine
+from .almacen.postgres import (
+    ROLES,
+    Consorcio,
+    Membresia,
+    UnidadFuncional,
+    Usuario,
+    crear_tablas,
+    engine,
+)
+
+# El rol que manda cuando una persona tiene varios en el mismo consorcio
+PRIORIDAD_ROLES = {rol: i for i, rol in enumerate(ROLES)}  # administracion > consejo > propietario > inquilino
 
 
 class SinMembresia(Exception):
@@ -22,47 +35,71 @@ class SinMembresia(Exception):
 MENSAJE_SIN_MEMBRESIA = "No hay membresía para ese usuario en ese consorcio."
 
 
+def rol_principal(roles) -> str:
+    return min(roles, key=PRIORIDAD_ROLES.__getitem__)
+
+
 @dataclass(frozen=True)
 class Identidad:
     usuario_id: int
     consorcio_id: str
-    rol: str  # administrador | propietario
-    unidades: tuple[int, ...]  # UF de la membresía
+    rol: str  # el principal: administracion | consejo | propietario | inquilino
+    unidades: tuple[int, ...]  # número de UF de cada unidad propia (las que no tienen UF cargada no cuentan)
+    roles: frozenset[str] = frozenset()
+
+    @property
+    def es_administracion(self) -> bool:
+        return "administracion" in self.roles or self.rol == "administracion"
+
+
+def _membresias_activas(sujeto_externo: str):
+    return (
+        select(Membresia.consorcio_id, Membresia.usuario_id, Membresia.rol, UnidadFuncional.uf)
+        .join(Usuario, Usuario.id == Membresia.usuario_id)
+        .outerjoin(UnidadFuncional, UnidadFuncional.id == Membresia.unidad_id)
+        .where(Usuario.sujeto_externo == sujeto_externo, Usuario.activo, Membresia.activo)
+    )
 
 
 def resolver_identidad(sujeto_externo: str, consorcio_id: str) -> Identidad:
     crear_tablas()
     with Session(engine()) as s:
-        membresia = s.scalars(
-            select(Membresia).join(Usuario, Usuario.id == Membresia.usuario_id).where(
-                Usuario.sujeto_externo == sujeto_externo, Membresia.consorcio_id == consorcio_id
-            )
-        ).first()
-        if membresia is None:
-            raise SinMembresia(MENSAJE_SIN_MEMBRESIA)
-        return Identidad(
-            usuario_id=membresia.usuario_id, consorcio_id=membresia.consorcio_id, rol=membresia.rol,
-            unidades=tuple(sorted(u.uf for u in membresia.unidades)),
-        )
+        filas = s.execute(_membresias_activas(sujeto_externo).where(Membresia.consorcio_id == consorcio_id)).all()
+    if not filas:
+        raise SinMembresia(MENSAJE_SIN_MEMBRESIA)
+    roles = frozenset(f.rol for f in filas)
+    return Identidad(
+        usuario_id=filas[0].usuario_id, consorcio_id=consorcio_id, rol=rol_principal(roles),
+        unidades=tuple(sorted({f.uf for f in filas if f.uf is not None and f.rol in ("propietario", "inquilino")})),
+        roles=roles,
+    )
 
 
 def es_plataforma(sujeto_externo: str) -> bool:
     """Equipo de la plataforma: entra al CRM, sin necesidad de membresía en ningún consorcio."""
     crear_tablas()
     with Session(engine()) as s:
-        return bool(s.scalar(select(Usuario.plataforma).where(Usuario.sujeto_externo == sujeto_externo)))
+        return bool(s.scalar(select(Usuario.plataforma).where(Usuario.sujeto_externo == sujeto_externo,
+                                                              Usuario.activo)))
 
 
 def membresias_de(sujeto_externo: str) -> list[dict]:
-    """Los consorcios de un usuario, para elegir en cuál entrar."""
+    """Los consorcios de un usuario, para elegir en cuál entrar: uno por consorcio, con su rol principal."""
     crear_tablas()
     with Session(engine()) as s:
         filas = s.execute(
             select(Membresia.consorcio_id, Consorcio.nombre, Membresia.rol)
             .join(Usuario, Usuario.id == Membresia.usuario_id).join(Consorcio, Consorcio.id == Membresia.consorcio_id)
-            .where(Usuario.sujeto_externo == sujeto_externo).order_by(Consorcio.nombre)
+            .where(Usuario.sujeto_externo == sujeto_externo, Usuario.activo, Membresia.activo)
         ).all()
-    return [{"consorcio_id": cid, "nombre": nombre, "rol": rol} for cid, nombre, rol in filas]
+    por_consorcio: dict[str, tuple[str, set[str]]] = {}
+    for cid, nombre, rol in filas:
+        por_consorcio.setdefault(cid, (nombre, set()))[1].add(rol)
+    return sorted(
+        ({"consorcio_id": cid, "nombre": nombre, "rol": rol_principal(roles)}
+         for cid, (nombre, roles) in por_consorcio.items()),
+        key=lambda m: m["nombre"],
+    )
 
 
 def registrar_actividad(usuario_id: int, cada_segundos: int = 60) -> None:

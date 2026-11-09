@@ -66,6 +66,18 @@ web-down:
 sembrar-demo: ## Crea los consorcios y usuarios inventados de la web (idempotente)
 	$(RUN) consorcio sembrar-demo
 
+# ---- Login (src/consorcio/auth/, de Lucas)
+.PHONY: alta-consorcio alta-unidades api
+
+alta-consorcio: ## make alta-consorcio NOMBRE="Mercedes 274" DIRECCION="..." ADMIN=mail [ID=mercedes-274]: imprime la invitación del admin
+	$(RUN) python -m consorcio.auth.alta consorcio --nombre "$(NOMBRE)" --direccion "$(DIRECCION)" --admin-email "$(ADMIN)" $(if $(ID),--id $(ID))
+
+alta-unidades: ## make alta-unidades CONSORCIO=mercedes-274 CSV=datos/unidades/unidades.csv (piso,depto[,uf][,porcentual])
+	$(RUN) python -m consorcio.auth.alta unidades --consorcio-id "$(CONSORCIO)" --csv "$(CSV)"
+
+api:          ## API JSON del login en http://127.0.0.1:8001/docs (necesita JWT_SECRETO en .env)
+	$(RUN) uvicorn consorcio.auth.app:app --host 0.0.0.0 --port 8001 --reload
+
 gasto:        ## Gasto en modelos del mes contra el tope
 	$(RUN) consorcio gasto
 

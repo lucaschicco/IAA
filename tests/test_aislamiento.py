@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from consorcio import cli
 from consorcio.almacen import postgres
-from consorcio.almacen.postgres import Consulta, Membresia, MembresiaUnidad, Usuario
+from consorcio.almacen.postgres import Consulta, Membresia, UnidadFuncional, Usuario
 from consorcio.config import config
 from consorcio.consulta import grafo
 from consorcio.consulta.buscador import armar_contexto, buscar_secciones, paginas_de
@@ -192,9 +192,10 @@ def test_propietario_ve_todas_las_unidades_de_su_consorcio_y_ninguna_ajena(dos_c
         ana = Usuario(sujeto_externo="login|ana")
         s.add(ana)
         s.flush()
-        m = Membresia(usuario_id=ana.id, consorcio_id=A, rol="propietario")
-        m.unidades = [MembresiaUnidad(uf=1)]
-        s.add(m)
+        unidad = UnidadFuncional(consorcio_id=A, piso="1", depto="A", uf=1)
+        s.add(unidad)
+        s.flush()
+        s.add(Membresia(usuario_id=ana.id, consorcio_id=A, rol="propietario", unidad_id=unidad.id))
         s.commit()
     identidad = resolver_identidad("login|ana", A)
     assert identidad.unidades == (1,)

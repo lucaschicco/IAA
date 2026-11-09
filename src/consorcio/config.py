@@ -82,6 +82,9 @@ class Config(BaseSettings):
     web_max_mb_pdf: int = 20
     web_sesion_horas: int = 8
 
+    # Login (ver auth/). JWT_SECRETO firma los tokens de la API JSON (`make api`); la web usa WEB_SECRETO.
+    jwt_secreto: str = ""
+
     # Bases de datos
     postgres_url: str = "postgresql+psycopg://consorcio:consorcio@localhost:5432/consorcio"
 

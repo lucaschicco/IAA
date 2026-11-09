@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from consorcio.almacen import postgres
-from consorcio.almacen.postgres import Membresia, MembresiaUnidad, Usuario
+from consorcio.almacen.postgres import Membresia, UnidadFuncional, Usuario
 from consorcio.config import config
 from consorcio.identidad import Identidad, SinMembresia, resolver_identidad
 
@@ -49,9 +49,13 @@ def base():
         beto = Usuario(sujeto_externo="login|beto", nombre="Beto Inventado")
         s.add_all([ana, beto])
         s.flush()
-        m = Membresia(usuario_id=ana.id, consorcio_id="edificio-a", rol="propietario")
-        m.unidades = [MembresiaUnidad(uf=12), MembresiaUnidad(uf=3)]
-        s.add_all([m, Membresia(usuario_id=beto.id, consorcio_id="edificio-b", rol="administrador")])
+        u12 = UnidadFuncional(consorcio_id="edificio-a", piso="6", depto="B", uf=12)
+        u3 = UnidadFuncional(consorcio_id="edificio-a", piso="1", depto="C", uf=3)
+        s.add_all([u12, u3])
+        s.flush()
+        s.add_all([Membresia(usuario_id=ana.id, consorcio_id="edificio-a", rol="propietario", unidad_id=u.id)
+                   for u in (u12, u3)])
+        s.add(Membresia(usuario_id=beto.id, consorcio_id="edificio-b", rol="administracion"))
         s.commit()
     yield
     _vaciar_base()
@@ -60,7 +64,7 @@ def base():
 def test_identidad_es_inmutable():
     i = Identidad(usuario_id=1, consorcio_id="edificio-a", rol="propietario", unidades=(3, 12))
     with pytest.raises(FrozenInstanceError):
-        i.rol = "administrador"
+        i.rol = "administracion"
     assert isinstance(i.unidades, tuple)
 
 
@@ -70,7 +74,7 @@ def test_resolver_identidad_devuelve_rol_y_unidades(base):
     assert (i.consorcio_id, i.rol, i.unidades) == ("edificio-a", "propietario", (3, 12))
     assert isinstance(i.usuario_id, int)
     beto = resolver_identidad("login|beto", "edificio-b")
-    assert (beto.rol, beto.unidades) == ("administrador", ())
+    assert (beto.rol, beto.unidades) == ("administracion", ())
 
 
 @requiere_postgres
@@ -90,22 +94,39 @@ def test_sin_membresia_falla_siempre_con_el_mismo_mensaje(base):
 @requiere_postgres
 @pytest.mark.parametrize("fila", [
     lambda ids: Usuario(sujeto_externo="login|ana"),
-    lambda ids: Membresia(usuario_id=ids["ana"], consorcio_id="edificio-a", rol="administrador"),
-    lambda ids: Membresia(usuario_id=ids["ana"], consorcio_id="edificio-b", rol="inquilino"),
-    lambda ids: MembresiaUnidad(membresia_id=ids["membresia"], uf=3),
-], ids=["sujeto-duplicado", "membresia-duplicada", "rol-invalido", "uf-duplicada"])
+    lambda ids: Membresia(usuario_id=ids["ana"], consorcio_id="edificio-a", rol="propietario", unidad_id=ids["u3"]),
+    lambda ids: Membresia(usuario_id=ids["ana"], consorcio_id="edificio-b", rol="vecino"),
+    lambda ids: Membresia(usuario_id=ids["ana"], consorcio_id="edificio-b", rol="propietario"),
+    lambda ids: Membresia(usuario_id=ids["ana"], consorcio_id="edificio-a", rol="administracion", unidad_id=ids["u3"]),
+    lambda ids: UnidadFuncional(consorcio_id="edificio-a", piso="9", depto="Z", uf=3),
+], ids=["sujeto-duplicado", "membresia-duplicada", "rol-invalido", "propietario-sin-unidad",
+        "administracion-con-unidad", "uf-duplicada"])
 def test_la_base_exige_unicidad_y_rol(base, fila):
     with Session(postgres.engine()) as s:
         ana = s.query(Usuario).filter_by(sujeto_externo="login|ana").one()
-        ids = {"ana": ana.id, "membresia": s.query(Membresia).filter_by(usuario_id=ana.id).one().id}
-        s.add(fila(ids))
+        u3 = s.query(UnidadFuncional).filter_by(consorcio_id="edificio-a", uf=3).one()
+        s.add(fila({"ana": ana.id, "u3": u3.id}))
         with pytest.raises(IntegrityError):
             s.commit()
 
 
 @requiere_postgres
-def test_borrar_la_membresia_borra_sus_unidades(base):
-    with postgres.engine().begin() as con:  # cascada de la base, sin pasar por el ORM
-        con.execute(text("DELETE FROM membresias WHERE rol = 'propietario'"))
+def test_varios_roles_se_juntan_y_manda_el_principal(base):
     with Session(postgres.engine()) as s:
-        assert s.query(MembresiaUnidad).count() == 0
+        ana = s.query(Usuario).filter_by(sujeto_externo="login|ana").one()
+        s.add(Membresia(usuario_id=ana.id, consorcio_id="edificio-a", rol="consejo"))
+        s.commit()
+    i = resolver_identidad("login|ana", "edificio-a")
+    assert (i.rol, i.unidades, i.roles) == ("consejo", (3, 12), frozenset({"consejo", "propietario"}))
+    assert not i.es_administracion
+
+
+@requiere_postgres
+def test_membresia_o_usuario_inactivo_no_entra(base):
+    with postgres.engine().begin() as con:
+        con.execute(text("UPDATE usuarios SET activo = false WHERE sujeto_externo = 'login|beto'"))
+        con.execute(text("UPDATE membresias SET activo = false WHERE rol = 'propietario' AND unidad_id = "
+                         "(SELECT id FROM unidades_funcionales WHERE uf = 12)"))
+    with pytest.raises(SinMembresia):
+        resolver_identidad("login|beto", "edificio-b")
+    assert resolver_identidad("login|ana", "edificio-a").unidades == (3,)

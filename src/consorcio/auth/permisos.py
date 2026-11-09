@@ -1,9 +1,12 @@
-"""Quién es el usuario y qué puede hacer. Lo usan todas las demás partes del sistema."""
+"""Quién es el usuario de la API JSON y qué puede hacer.
+
+La web no usa esto: resuelve la identidad con `consorcio.identidad`, a partir del `sujeto_externo` que le
+entrega el login."""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from auth.db import obtener_conexion
-from auth.seguridad import leer_token_sesion
+from .db import obtener_conexion
+from .seguridad import leer_token_sesion
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -28,10 +31,10 @@ def usuario_actual(credenciales: HTTPAuthorizationCredentials | None = Depends(_
         raise _no_autenticado()
     usuario["membresias"] = con.execute(
         """SELECT m.consorcio_id, c.nombre AS consorcio, m.unidad_id,
-                  u.piso, u.depto, m.rol::text AS rol
+                  u.piso, u.depto, u.uf, m.rol
            FROM membresias m
            JOIN consorcios c ON c.id = m.consorcio_id
-           LEFT JOIN unidades u ON u.id = m.unidad_id
+           LEFT JOIN unidades_funcionales u ON u.id = m.unidad_id
            WHERE m.usuario_id = %s AND m.activo
            ORDER BY m.consorcio_id, m.rol""",
         (usuario_id,),
@@ -39,20 +42,18 @@ def usuario_actual(credenciales: HTTPAuthorizationCredentials | None = Depends(_
     return usuario
 
 
-def tiene_rol(usuario: dict, consorcio_id: int, roles: set[str]) -> bool:
+def tiene_rol(usuario: dict, consorcio_id: str, roles: set[str]) -> bool:
     return any(m["consorcio_id"] == consorcio_id and m["rol"] in roles
                for m in usuario["membresias"])
 
 
-def exigir_rol(usuario: dict, consorcio_id: int, roles: set[str]) -> None:
+def exigir_rol(usuario: dict, consorcio_id: str, roles: set[str]) -> None:
     if not tiene_rol(usuario, consorcio_id, roles):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés permiso para esto")
 
 
-def unidades_propias(usuario: dict, consorcio_id: int) -> list[int]:
-    """Las unidades que la persona puede consultar en ese consorcio.
-    El chat tiene que usar esto, y no la unidad que el vecino escriba,
-    para que nadie pueda ver las expensas de otro departamento."""
+def unidades_propias(usuario: dict, consorcio_id: str) -> list[int]:
+    """Las unidades (ids de `unidades_funcionales`) que la persona puede consultar en ese consorcio."""
     return sorted({m["unidad_id"] for m in usuario["membresias"]
                    if m["consorcio_id"] == consorcio_id
                    and m["rol"] in ("propietario", "inquilino")

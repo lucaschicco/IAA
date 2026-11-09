@@ -1,13 +1,13 @@
 """Contraseñas y tokens."""
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
-from auth import config
+from . import config
 
 _hasher = PasswordHasher()
 # Hash de una contraseña cualquiera. Se usa cuando el mail no existe, para que
@@ -28,15 +28,16 @@ def verificar_contrasena(hash_guardado: str | None, contrasena: str) -> bool:
 
 
 def _secreto() -> str:
-    if len(config.JWT_SECRETO) < 32:
+    secreto = config.jwt_secreto()
+    if len(secreto) < 32:
         raise RuntimeError("JWT_SECRETO no está configurado o es muy corto (mínimo 32 caracteres)")
-    return config.JWT_SECRETO
+    return secreto
 
 
 def crear_token_sesion(usuario_id: int, horas: float = config.HORAS_TOKEN_SESION) -> str:
     """El token solo dice quién es el usuario. Los roles se leen de la base en
     cada pedido, así un cambio de rol o una baja aplica al instante."""
-    ahora = datetime.now(timezone.utc)
+    ahora = datetime.now(UTC)
     datos = {"sub": str(usuario_id), "iat": ahora, "exp": ahora + timedelta(hours=horas)}
     return jwt.encode(datos, _secreto(), algorithm="HS256")
 
