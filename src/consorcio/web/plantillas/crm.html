@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+
+{# Sin `style` en línea, que la CSP bloquea: las barras son <progress> y los gráficos, SVG con atributos. #}
+{% macro barras(valores) %}
+  {% if valores %}
+    {% set maximo = valores.values()|max %}
+    <dl class="crm-barras">
+      {% for nombre, cantidad in valores.items() %}
+        <dt>{{ nombre|string|replace("_", " ") }}</dt>
+        <dd><progress max="{{ maximo or 1 }}" value="{{ cantidad }}">{{ cantidad }}</progress><span>{{ cantidad }}</span></dd>
+      {% endfor %}
+    </dl>
+  {% else %}
+    <p class="crm-nota">sin datos</p>
+  {% endif %}
+{% endmacro %}
+
+{% macro porcentaje(valor) %}{% if valor is none %}sin datos{% else %}{{ "%.1f"|format(valor * 100) }} %{% endif %}{% endmacro %}
+
+{% macro dato(rotulo, valor) %}
+  <div class="crm-dato"><strong>{{ valor }}</strong><span>{{ rotulo }}</span></div>
+{% endmacro %}
+
+{% macro duracion(segundos) %}
+  {%- if segundos is none %}sin datos
+  {%- elif segundos < 3600 %}{{ "%.0f"|format(segundos / 60) }} min
+  {%- else %}{{ "%.1f"|format(segundos / 3600) }} h
+  {%- endif %}
+{%- endmacro %}
+
+{# `malo_si_sube`: más derivaciones no es una buena noticia, aunque la flecha suba #}
+{% macro variacion(actual, anterior, malo_si_sube=false) %}
+  {% if not anterior %}
+    <p class="crm-variacion">sin período previo</p>
+  {% else %}
+    {% set cambio = (actual - anterior) / anterior * 100 %}
+    {% set bien = (cambio <= 0) if malo_si_sube else (cambio >= 0) %}
+    <p class="crm-variacion {{ 'sube-bien' if bien else 'sube-mal' }}">{{ i.icono("arriba" if cambio >= 0 else "abajo") }}{{ "%.0f"|format(cambio|abs) }} %<span> contra el período previo</span></p>
+  {% endif %}
+{% endmacro %}
+
+{% macro kpi(valor, rotulo, icono, tono) %}
+  <article class="crm-kpi">
+    <p class="crm-kpi-valor">{{ valor }}</p>
+    <p class="crm-kpi-rotulo">{{ rotulo }}</p>
+    <div class="crm-kpi-pie">
+      <div>{{ caller() }}</div>
+      <span class="crm-cuadro {{ tono }}">{{ i.icono(icono) }}</span>
+    </div>
+  </article>
+{% endmacro %}
+
+{# Las alturas salen de atributos SVG. Sin texto adentro: `preserveAspectRatio="none"` lo deformaría #}
+{% macro actividad(serie, clase, con_derivadas=true) %}
+  {% set maximo = serie|map(attribute="turnos")|max %}
+  <svg class="{{ clase }}" viewBox="0 0 {{ serie|length * 10 }} 100" preserveAspectRatio="none" role="img" aria-label="Turnos y derivaciones por día">
+    {% for d in serie %}
+      {% set alto = (d.turnos / maximo * 98) if maximo else 0 %}
+      {% set alto_derivadas = (d.derivadas / maximo * 98) if maximo else 0 %}
+      <rect class="serie-turnos" x="{{ loop.index0 * 10 + 1 }}" y="{{ '%.2f'|format(100 - alto) }}" width="{{ 4 if con_derivadas else 8 }}" height="{{ '%.2f'|format(alto) }}"><title>{{ d.dia }}: {{ d.turnos }} turnos</title></rect>
+      {% if con_derivadas %}
+      <rect class="serie-derivadas" x="{{ loop.index0 * 10 + 5 }}" y="{{ '%.2f'|format(100 - alto_derivadas) }}" width="4" height="{{ '%.2f'|format(alto_derivadas) }}"><title>{{ d.dia }}: {{ d.derivadas }} derivadas</title></rect>
+      {% endif %}
+    {% endfor %}
+  </svg>
+{% endmacro %}
+
+{# `pathLength` deja medir el arco en porcentaje, sin geometría #}
+{% macro anillo(valor, titulo, nota) %}
+  <div class="crm-anillo">
+    <div class="crm-anillo-dibujo">
+      <svg viewBox="0 0 120 120" role="img" aria-label="{{ titulo }}">
+        <circle class="pista" cx="60" cy="60" r="50" pathLength="100"/>
+        {% if valor is not none %}<circle class="avance" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="{{ '%.1f'|format(valor * 100) }} 100" transform="rotate(-90 60 60)"/>{% endif %}
+      </svg>
+      <p class="crm-anillo-valor">{{ porcentaje(valor) }}</p>
+    </div>
+    <h3>{{ titulo }}</h3>
+    {{ nota }}
+  </div>
+{% endmacro %}
+
+{% macro hoy_fila(titulo, detalle, icono, tono) %}
+  <li><span class="crm-cuadro claro {{ tono }}">{{ i.icono(icono) }}</span><div><strong>{{ titulo }}</strong><span>{{ detalle }}</span></div></li>
+{% endmacro %}
+
+{% block titulo %}CRM · Consorcio{% endblock %}
+
+{% block cabeza %}<link rel="stylesheet" href="/estaticos/crm.css">{% endblock %}
+
+{% set SECCIONES = {"resumen": "Resumen", "calidad": "Calidad", "uso": "Uso", "agente": "Agente", "elevaciones": "Elevaciones", "contenido": "Contenido", "costos": "Costos"} %}
+
+{% block sub_crm %}
+<div class="sub">
+  {% for ancla, rotulo in SECCIONES.items() %}
+  <a href="#{{ ancla }}" class="sub-item">{{ i.icono("hoja", "tono-" ~ (loop.index0 % 3)) }}<span>{{ rotulo }}</span></a>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block clase_main %}pagina-crm{% endblock %}
+
+{% block contenido %}
+{% set tope = panel.costos.tope %}
+{% set acertadas = panel.acertadas %}
+{% set usuarios = panel.usuarios %}
+{% set anterior = panel.periodo_anterior %}
+<div class="crm">
+  <header class="crm-cabecera">
+    <div>
+      <h1>CRM</h1>
+      <p class="crm-nota">Uso y control de la plataforma, en paralelo a MLflow.</p>
+    </div>
+    <form method="get" action="/crm">
+      <label>Período
+        <select name="dias">
+          {% for opcion in ("7", "30", "90") %}
+            <option value="{{ opcion }}"{% if opcion == dias %} selected{% endif %}>{{ opcion }} días</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Consorcio
+        <select name="consorcio">
+          <option value="">Todos</option>
+          {% for id in consorcios %}
+            <option value="{{ id }}"{% if id == filtro %} selected{% endif %}>{{ id }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Aplicar</button>
+    </form>
+  </header>
+
+  <nav class="crm-saltos" aria-label="Secciones del CRM">
+    {% for ancla, rotulo in SECCIONES.items() %}<a href="#{{ ancla }}">{{ rotulo }}</a>{% endfor %}
+  </nav>
+
+  <div class="crm-kpis" id="resumen">
+    {% call kpi(usuarios.conectados, "Usuarios conectados", "usuarios", "amarillo") %}
+      <p class="crm-variacion">{{ usuarios.activos_semana }} activos en 7 días</p>
+    {% endcall %}
+    {% call kpi(panel.elevaciones.total, "Elevaciones a humano", "elevacion", "cian") %}
+      {{ variacion(panel.elevaciones.total, anterior.elevaciones, true) }}
+    {% endcall %}
+    {% call kpi(panel.documentos.activos, "Documentos activos", "documentos", "verde") %}
+      <p class="crm-variacion">{{ panel.contextos.secciones_indexadas }} secciones</p>
+    {% endcall %}
+    <article class="crm-kpi">
+      <p class="crm-kpi-valor">{{ panel.preguntas.total }}</p>
+      <p class="crm-kpi-rotulo">Preguntas</p>
+      {{ variacion(panel.preguntas.total, anterior.preguntas) }}
+      {{ actividad(panel.actividad, "crm-mini", false) }}
+    </article>
+  </div>
+
+  <div class="crm-tablero">
+    <div class="crm-principal">
+      <article class="crm-actividad">
+        <header class="crm-titulo">
+          <h2>Actividad del agente</h2>
+          <ul class="crm-leyenda"><li class="turnos">Turnos</li><li class="derivadas">Derivados a humano</li></ul>
+        </header>
+        {% if panel.preguntas.total %}
+          {{ actividad(panel.actividad, "crm-columnas") }}
+          <div class="crm-eje">
+            {% set serie = panel.actividad %}
+            <span>{{ serie[0].dia[8:] }}/{{ serie[0].dia[5:7] }}</span>
+            <span>{{ serie[serie|length // 2].dia[8:] }}/{{ serie[serie|length // 2].dia[5:7] }}</span>
+            <span>{{ serie[-1].dia[8:] }}/{{ serie[-1].dia[5:7] }}</span>
+          </div>
+          <p class="crm-nota">Por día UTC; la barra más alta es {{ panel.actividad|map(attribute="turnos")|max }} turnos.</p>
+        {% else %}
+          <p class="crm-nota crm-vacio">Sin turnos en este período.</p>
+        {% endif %}
+      </article>
+
+      <section id="calidad">
+        <article>
+          <h2>Acertadas</h2>
+          <p class="crm-nota">Tres indicadores que miden cosas distintas: no se promedian.</p>
+          <div class="crm-anillos">
+            {% set nota %}<p class="crm-nota">{{ acertadas.cita_verificada.aciertos }} de {{ acertadas.cita_verificada.n }} turnos de reglamento; las derivadas cuentan.</p>{% endset %}
+            {{ anillo(acertadas.cita_verificada.valor, "Cita verificada", nota) }}
+            {% set nota %}<p class="crm-nota">{{ acertadas.feedback_positivo.positivos }} de {{ acertadas.feedback_positivo.n }}; cobertura: {{ porcentaje(acertadas.feedback_positivo.cobertura) }} de los turnos.</p>{% endset %}
+            {{ anillo(acertadas.feedback_positivo.valor, "Feedback positivo", nota) }}
+            {% set exactitud = acertadas.exactitud_evaluacion %}
+            {% set nota %}
+              {% if exactitud.valor is none %}<p class="crm-nota">sin corrida</p>
+              {% else %}<p class="crm-nota">{{ exactitud.n }} preguntas de test, corrida del {{ exactitud.fecha }} ({{ exactitud.fuente }}).</p>{% endif %}
+              <p class="crm-nota">Mide <code>preguntar</code>, no el router. No depende del período ni del consorcio.</p>
+            {% endset %}
+            {{ anillo(exactitud.valor, "Exactitud en evaluación", nota) }}
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <aside class="crm-hoy" aria-label="Estado de hoy">
+      <h2>Hoy, {{ hoy }}</h2>
+      <ul>
+        {% set hay_elevaciones = panel.elevaciones.pendientes > 0 %}
+        {% set hay_reclamos = panel.acciones.pendientes > 0 %}
+        {{ hoy_fila("Activos en 1 día", usuarios.activos_dia ~ " usuarios", "usuarios", "acento") }}
+        {{ hoy_fila("Elevaciones pendientes", panel.elevaciones.pendientes ~ " sin resolver", "abajo" if hay_elevaciones else "listo", "alerta" if hay_elevaciones else "bien") }}
+        {{ hoy_fila("Reclamos pendientes", panel.acciones.pendientes ~ " sin decidir", "abajo" if hay_reclamos else "listo", "alerta" if hay_reclamos else "bien") }}
+        {{ hoy_fila("Gasto del mes", "%.2f"|format(tope.gastado_usd) ~ " USD", "moneda", "alerta" if tope.excedido else "acento") }}
+        {{ hoy_fila("Respuestas con contexto", panel.contextos.respuestas_con_contexto ~ " en el período", "secciones", "acento") }}
+      </ul>
+    </aside>
+  </div>
+
+  <section id="uso">
+    <h2>Usuarios</h2>
+    <p class="crm-nota">Ventanas móviles desde ahora: no dependen del período.</p>
+    <article>
+      <div class="crm-datos">
+        {{ dato("conectados (5 min)", usuarios.conectados) }}
+        {{ dato("activos en 1 día", usuarios.activos_dia) }}
+        {{ dato("activos en 7 días", usuarios.activos_semana) }}
+        {{ dato("activos en 30 días", usuarios.activos_mes) }}
+      </div>
+    </article>
+  </section>
+
+  <section class="crm-grilla">
+    <article>
+      <h2>Uso por consorcio</h2>
+      {{ barras(panel.uso.por_consorcio) }}
+    </article>
+    <article>
+      <h2>Uso por rol</h2>
+      {{ barras(panel.uso.por_rol) }}
+    </article>
+    <article>
+      <h2>Uso por usuario</h2>
+      <p class="crm-nota">Los 20 con más turnos, por id.</p>
+      {% if panel.uso.por_usuario %}
+        <table>
+          <thead><tr><th scope="col">Usuario</th><th scope="col">Turnos</th></tr></thead>
+          <tbody>
+            {% for fila in panel.uso.por_usuario %}
+              <tr><td>{{ fila.usuario_id }}</td><td>{{ fila.turnos }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="crm-nota">sin datos</p>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="crm-grilla" id="agente">
+    <article>
+      <h2>Preguntas</h2>
+      {{ dato("turnos en el período", panel.preguntas.total) }}
+      {{ barras(panel.preguntas.por_resultado) }}
+    </article>
+    <article>
+      <h2>Funcionalidades</h2>
+      {{ barras(panel.funcionalidades) }}
+    </article>
+    <article>
+      <h2>Intenciones</h2>
+      {{ barras(panel.intenciones) }}
+    </article>
+  </section>
+
+  <section class="crm-grilla" id="elevaciones">
+    <article>
+      <h2>Elevaciones</h2>
+      <div class="crm-datos">
+        {{ dato("total", panel.elevaciones.total) }}
+        {{ dato("resueltas", panel.elevaciones.resueltas) }}
+        {{ dato("pendientes", panel.elevaciones.pendientes) }}
+      </div>
+      <p>Mediana hasta la resolución: {{ duracion(panel.elevaciones.tiempo_hasta_resolucion_mediana_s) }}</p>
+      <p class="crm-nota">Es espera, no esfuerzo humano.</p>
+      {{ barras(panel.elevaciones.por_motivo) }}
+    </article>
+    <article>
+      <h2>Acciones</h2>
+      <p class="crm-nota">Reclamos creados en el período, según lo que decidió la administración.</p>
+      {{ barras({"aprobadas": panel.acciones.aprobadas, "editadas": panel.acciones.editadas, "rechazadas": panel.acciones.rechazadas, "pendientes": panel.acciones.pendientes}) }}
+    </article>
+    <article>
+      <h2>Contextos</h2>
+      <div class="crm-datos">
+        {{ dato("secciones indexadas", panel.contextos.secciones_indexadas) }}
+        {{ dato("respuestas con contexto", panel.contextos.respuestas_con_contexto) }}
+        {% set promedio = panel.contextos.secciones_por_respuesta.promedio %}
+        {{ dato("secciones por respuesta", "sin datos" if promedio is none else "%.2f"|format(promedio)) }}
+      </div>
+      <p class="crm-nota">Secciones enviadas al modelo por turno de reglamento:</p>
+      {{ barras(panel.contextos.secciones_por_respuesta.distribucion) }}
+    </article>
+  </section>
+
+  <section class="crm-grilla" id="contenido">
+    <article>
+      <h2>Documentos</h2>
+      <p class="crm-nota">Estado de hoy; los duplicados son del período.</p>
+      <div class="crm-datos">
+        {{ dato("activos", panel.documentos.activos) }}
+        {{ dato("inactivos", panel.documentos.inactivos) }}
+        {{ dato("duplicados evitados", panel.documentos.duplicados_evitados) }}
+      </div>
+      <h3>Por tipo</h3>
+      {{ barras(panel.documentos.por_tipo) }}
+      <h3>Por estado</h3>
+      {{ barras(panel.documentos.por_estado) }}
+    </article>
+    <article id="costos">
+      <h2>Costos</h2>
+      <table>
+        <thead><tr><th scope="col">Funcionalidad</th><th scope="col">Turnos</th><th scope="col">USD</th></tr></thead>
+        <tbody>
+          {% for nombre, fila in panel.costos.por_funcionalidad.items() %}
+            <tr><td>{{ nombre|replace("_", " ") }}</td><td>{{ fila.turnos }}</td><td>{{ "%.4f"|format(fila.costo_usd) }}</td></tr>
+          {% endfor %}
+          <tr><td>ingesta y otros</td><td></td><td>{{ "%.4f"|format(panel.costos.ingesta_y_otros) }}</td></tr>
+        </tbody>
+      </table>
+      <p class="crm-nota">"Ingesta y otros" es lo que el libro de gastos tiene fuera de los turnos: ingesta, Telegram, CLI y evaluaciones.</p>
+    </article>
+    <article>
+      <h2>Tope mensual <small>(global)</small></h2>
+      <p class="crm-nota">Global, de toda la plataforma: no cambia con el filtro de consorcio ni con el período. Mes {{ tope.mes }}.</p>
+      {% if tope.tope_usd %}
+        <p><progress max="{{ tope.tope_usd }}" value="{{ tope.gastado_usd }}">{{ "%.4f"|format(tope.gastado_usd) }}</progress></p>
+        <p>{{ "%.4f"|format(tope.gastado_usd) }} de {{ "%.2f"|format(tope.tope_usd) }} USD; disponibles {{ "%.4f"|format(tope.disponible_usd) }}.</p>
+      {% else %}
+        <p>{{ "%.4f"|format(tope.gastado_usd) }} USD, sin tope configurado.</p>
+      {% endif %}
+      {% if tope.excedido %}<p class="crm-aviso">Tope alcanzado: el agente y la ingesta no llaman al modelo.</p>{% endif %}
+      {% if tope.modelos_sin_precio %}
+        <p class="crm-aviso">Hay modelos sin precio: el gasto está subestimado.</p>
+        <table>
+          <thead><tr><th scope="col">Modelo</th><th scope="col">Llamadas</th><th scope="col">Tokens</th></tr></thead>
+          <tbody>
+            {% for fila in tope.modelos_sin_precio %}
+              <tr><td>{{ fila.modelo }}</td><td>{{ fila.llamadas }}</td><td>{{ fila.tokens }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </article>
+  </section>
+
+  <footer class="crm-nota">
+    <p>Telegram no pasa por el router, así que sus preguntas no aparecen acá; su gasto sí entra en el tope.</p>
+    <p>Solo agregados: es la única pantalla que cruza consorcios y no muestra textos ni nombres. Las evaluaciones no cuentan.</p>
+  </footer>
+</div>
+{% endblock %}

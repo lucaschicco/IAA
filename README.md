@@ -38,6 +38,8 @@ flowchart TD
 - **Consultas** (reglamento, expensas): el sistema busca en los documentos o en las tablas y responde citando la fuente. Si no puede verificar la respuesta, deriva a la administración.
 - **Acciones** (guardar una factura, registrar un reclamo, contactar a un proveedor): el sistema las propone y la administración las aprueba, edita o rechaza antes de que se ejecuten.
 
+El diagrama es el diseño completo. Hoy funcionan por la web el router, reglamento, expensas, listado de documentos, derivación a una persona y reclamos con aprobación. Facturas y proveedores no entran en esta etapa, y Telegram queda congelado hasta terminar la web: sigue contestando como antes, sin pasar por el router. Lo único nuevo que puede ver es el aviso de tope alcanzado al cargar un PDF.
+
 ## Próximos pasos
 
 **1. Datos**
@@ -53,6 +55,8 @@ flowchart TD
 - [x] Comparar contra una búsqueda por palabras clave → `consorcio evaluar-consultas` (26/10)
 - [x] Canal de Telegram (`make bot`): PDF → ingesta, texto → `preguntar`, `/expensas` → SQL, lista blanca de chats
 - [x] Una base por consorcio y por chat de Telegram (`consorcio_id` en documentos y consultas; `make consorcios`, `make asignar`); falta la UI de administración de consorcios
+- [x] Crudos en un bucket S3 y control de duplicados por hash y por período (01/11)
+- [x] Migraciones con Alembic y usuarios con membresía por consorcio (01/11); falta el login
 - [ ] WhatsApp: queda para después (la API de Meta pide número de negocio, verificación y webhook público; ver bitácora 26/10)
 - [ ] Probar embeddings (pgvector) o pesos por título: en test el baseline de palabras clave le ganó a tsvector (0,917 vs 0,583 de recall@3; ver `docs/evaluaciones/2026-10-26-consultas-y-expensas.md` §3)
 
@@ -62,12 +66,19 @@ flowchart TD
 
 **4. Herramientas sobre las tablas**
 - [x] Consultar expensas por SQL (26/10)
-- [ ] Buscar proveedores, registrar reclamos
-- [ ] Router que decide qué herramienta usar
+- [x] Registrar reclamos como solicitudes pendientes de aprobación (01/11)
+- [ ] Buscar proveedores: fuera de esta etapa
+- [x] Router que decide qué herramienta usar → `agente/` (01/11); hoy atiende a la web, Telegram sigue congelado
 
 **5. Carga de facturas y bandeja de aprobación**
-- [ ] Leer una factura y extraer sus datos
-- [ ] Bandeja donde la administración aprueba, edita o rechaza
+- [ ] Leer una factura y extraer sus datos: fuera de esta etapa
+- [x] Bandeja donde la administración aprueba, edita o rechaza → `/bandeja` (01/11)
+
+**6. Web y seguimiento**
+- [x] Web de pruebas: chat, documentos, solicitudes y bandeja (01/11)
+- [x] CRM para el equipo de plataforma → `/crm` (01/11)
+- [x] Tope de gasto mensual en la aplicación (01/11); falta contrastarlo con una factura real
+- [ ] Login real: reemplaza `ProveedorIdentidad` en `web/autenticacion.py`
 
 **Cierre**
 - [ ] Correr la evaluación sobre el set de test
@@ -84,20 +95,20 @@ flowchart TD
 - `docs/consigna.md` y `docs/propuesta/`: consigna, propuesta presentada, devolución de la cátedra, entrevista e ideas de módulos.
 - `datos/`: normativa, documentos, expensas, facturas y comunicados reales del consorcio, más proveedores y preguntas de prueba.
 - `src/`: el código (ver `src/LEEME.md`).
-- `skills/`: instrucciones versionadas que recibe el modelo (`ingesta`: transcribir, clasificar, estructurar, liquidación; `consulta`: responder con cita).
+- `skills/`: instrucciones versionadas que recibe el modelo (`ingesta`: transcribir, clasificar, estructurar, liquidación; `consulta`: responder con cita; `agente`: router).
 - `tests/`: pruebas; corren con el proveedor `fake` sin gastar tokens.
 - `docs/evaluaciones/`: resultados de cada evaluación corrida (OCR, extracción), con fecha.
 - `docs/practicas/`: consignas de las prácticas de la materia en las que se basa el diseño (LangGraph, HIL, MLflow).
 
 ## Cómo correrlo
 
-Todo corre en Docker (app con Python 3.12 + Tesseract, Postgres, Neo4j y MLflow).
+Todo corre en Docker (app con Python 3.12 + Tesseract, Postgres, SeaweedFS y MLflow).
 
 ```bash
 cp .env.example .env        # completar LLM_PROVIDER y la clave del proveedor; con "fake" corre sin clave
 docker compose build
 docker compose up -d
-make test                   # tests sin modelo real (proveedor fake)
+make test                   # tests sin modelo real, en la base consorcio_test y un bucket de prueba
 
 # Tool 1: ingestar un PDF (clasifica calidad → extrae → estructura → guarda)
 make ingestar PDF="datos/documentos/REGLAMENTO COCHERAS MERCEDES_12-05-2026_18_59_13 (1).pdf"
@@ -109,6 +120,10 @@ docker compose exec app consorcio ingestar "datos/documentos/REGLAMENTO DE COPRO
 # Volver a estructurar sin pagar de nuevo la transcripción (reutiliza las páginas OCR/visión guardadas)
 docker compose exec app consorcio ingestar "datos/documentos/REGLAMENTO DE COPROPIEDAD_10-04-2025_16_24_47 (1).pdf" --reusar-texto
 
+# Un PDF ya cargado en ese consorcio devuelve estado "duplicado" sin gastar OCR ni modelo. --forzar lo reprocesa
+# y, si es una liquidación, reemplaza a otro PDF del mismo período (--reusar-texto reprocesa, pero no reemplaza)
+docker compose exec app consorcio ingestar "datos/expensas/2026-08-09-171843-MERCEDES_274.pdf" --forzar
+
 # Solo ver la decisión del clasificador (no usa el modelo)
 docker compose exec app consorcio clasificar "datos/documentos/ACTA_MERCEDES_25-7-2024.pdf"
 
@@ -119,8 +134,9 @@ docker compose exec app consorcio evaluar-ocr "datos/documentos/contrato edifici
 # Sacar un documento del buscador sin borrarlo
 docker compose exec app consorcio documentos --desactivar "ACTA_MERCEDES_25-7-2024"
 
-# Bases por consorcio: ingestar, preguntar, expensas, evaluar-consultas y documentos aceptan --consorcio
-# (por defecto CONSORCIO_POR_DEFECTO=mercedes-274). El contrato Cabrera vive en el consorcio "cabrera".
+# Bases por consorcio: ingestar, preguntar, expensas y evaluar-consultas aceptan --consorcio (por defecto
+# CONSORCIO_POR_DEFECTO=mercedes-274). documentos y consultas sin --consorcio listan todos; --activar y
+# --desactivar usan el consorcio por defecto. El contrato Cabrera vive en el consorcio "cabrera".
 docker compose exec app consorcio preguntar "¿Qué dice sobre el fondo de reserva?" --consorcio cabrera
 make consorcios
 
@@ -136,13 +152,97 @@ make expensas QUE=gastos TEXTO=limpieza
 
 # Evaluación de consultas: recall@3 del buscador (tsvector vs. palabras clave) y, con CON_MODELO=1, calidad de las respuestas
 make evaluar-consultas PARTICION=dev
+# Con un modelo real y el consorcio por defecto, deja docs/evaluaciones/<fecha>-consultas-test.json: es lo que muestra el CRM
 make evaluar-consultas PARTICION=test CON_MODELO=1
 
-make psql      # consola de Postgres        http://localhost:7474  Neo4j (neo4j / consorcio123)
-make cypher    # consola de Neo4j           http://localhost:5000  MLflow
+make psql      # consola de Postgres        http://localhost:5000  MLflow
 ```
 
+### Si ya tenías el entorno levantado
+
+**Base existente.** Desde el 01/11 el esquema se maneja con Alembic: hasta migrarla, la app y el bot frenan
+con un error que indica los comandos. Primero hay que agregar las variables `S3_*` de `.env.example` al
+`.env` (sin `S3_ENDPOINT_URL` la ingesta sigue solo en local, con un warning) y levantar el servicio nuevo;
+el bucket se crea en la primera ingesta.
+
+```bash
+docker compose build && docker compose up -d   # imagen con las dependencias nuevas y SeaweedFS
+make respaldar
+make migrar                                    # solo si la base es anterior al 26/10
+make db-actualizar                             # marca la revisión si hace falta y aplica las migraciones; no toca datos
+```
+
+La revisión `0007_agente` también pasa por acá. Hasta correrla, `crear_tablas` frena con este código a la app, a la web
+y al bot: el contenedor monta el repo, así que el bot toma el código nuevo al reiniciarse. La web necesita además
+la imagen reconstruida, porque suma FastAPI y sus dependencias.
+
+**Contenedor y volumen viejos.** Neo4j se quitó el 01/11 (ver `docs/bitacora.md`). Un entorno anterior
+conserva el contenedor `consorcio-neo4j`, ahora huérfano, y el volumen `neo4jdata`: Compose ya no los administra y no los borra
+solo. Estos comandos los retiran; lo que haya en el volumen no se puede recuperar. Las entidades siguen
+en Postgres, así que no se pierde nada que use el agente.
+
+```bash
+docker compose build                           # reconstruye la imagen sin la dependencia
+docker rm -f consorcio-neo4j
+docker volume ls --filter name=neo4jdata       # confirma el nombre: <proyecto>_neo4jdata
+docker volume rm <proyecto>_neo4jdata
+```
+
+### Probarlo por la web
+
+La web es otro cliente de las tools y lo que corre detrás del chat es el agente con router: se le habla en
+lenguaje natural, sin comandos. Para probarla sin clave ni datos reales, agregar al `.env`:
+
+```bash
+LLM_PROVIDER=fake
+FAKE_GUIONADO=true           # el fake contesta con guion (agente/guion_fake.py): sin esto, casi todo se deriva
+WEB_SELECTOR_USUARIOS=true   # pantalla para elegir un usuario demo; solo desarrollo, nunca expuesta a una red
+```
+
+```bash
+docker compose build         # la imagen necesita las dependencias de la web
+make db-actualizar           # con una base existente, después de make respaldar
+make sembrar-demo            # idempotente: sin modelo, sin bucket y sin datos/
+make web                     # http://127.0.0.1:8000
+make web-logs
+make web-down
+make gasto                   # gasto del mes contra el tope
+```
+
+**Selección de usuario.** Sin login real, `/entrar` lista solo los usuarios `demo-*`. Los crea `sembrar-demo`,
+inventados, con dos consorcios (`demo-palmeras` y `demo-robles`), cada uno con reglamento, acta y dos
+liquidaciones:
+
+| Usuario | Qué ve |
+|---|---|
+| `demo-admin-palmeras` | Administrador de Palmeras: chat, carga de PDF y bandeja |
+| `demo-prop-palmeras` | Propietario de la UF 3 de Palmeras: chat, documentos y sus solicitudes |
+| `demo-prop-robles` | Propietario de la UF 1 de Robles: lo mismo, en otro consorcio |
+| `demo-multi` | Propietario en Palmeras y administrador en Robles: elige consorcio al entrar |
+| `demo-plataforma` | Equipo de plataforma, sin membresías: va directo a `/crm` |
+
+Para probar: preguntar por el reglamento o las expensas, pedir un listado de documentos, cargar un reclamo
+y aprobarlo desde la bandeja con el administrador; la respuesta aparece en "Mis solicitudes". Con
+`WEB_SELECTOR_USUARIOS=false` no hay selector ni usuario que entre, y la web exige `WEB_SECRETO` (con valor, siempre
+aleatorio y de al menos 32 caracteres; si no, no arranca): hasta que esté el login, responde 401 salvo en `/salud` y los estáticos. Con el selector apagado las cookies llevan `Secure`, así que el login va a necesitar HTTPS.
+
+**Tope de gasto.** `TOPE_USD_MENSUAL` (USD por mes calendario UTC, para todo el sistema; 0 = sin tope) corta el
+chat web y toda carga de PDF, venga del canal que venga, antes de llamar al modelo. Las preguntas por Telegram,
+la CLI y las evaluaciones cuentan en el gasto pero no se frenan. `make gasto` y el CRM muestran el estado.
+
+**Hay que configurar también el tope del proveedor, en su consola.** El de la aplicación es una segunda
+barrera, no la principal: se chequea antes de cada corrida, así que se puede pasar por las llamadas en curso o
+por una ingesta entera; los modelos sin precio en `config.py` no suman; y no ve lo que se gaste con esa
+clave fuera de este sistema. Todavía no se contrastó con una factura real.
+
+**CRM.** `/crm` es solo para quien tiene `usuarios.plataforma=true`; cualquier otro recibe 404. Muestra uso,
+documentos, contextos, preguntas, elevaciones, acciones, costos y aciertos, por 7, 30 o 90 días y por consorcio.
+Son agregados, sin textos ni nombres. Telegram no pasa por el router, así que sus preguntas no aparecen ahí,
+aunque su gasto sí entra en el tope.
+
 ### Probarlo por Telegram
+
+Telegram está congelado hasta terminar la web: no usa el router, y lo que sigue describe lo de siempre.
 
 El bot (`src/consorcio/canales/telegram.py`) es un cliente de las mismas tools: un PDF adjunto dispara
 la ingesta, un texto va a `preguntar` y `/expensas` consulta las liquidaciones por SQL. Corre con
@@ -163,6 +263,10 @@ En el chat: mandar un PDF (lo clasifica, lo ingesta y avisa; un escaneado por vi
 escribir una pregunta (responde con cita verificada o deriva), `/expensas rubros 2026-07`,
 `/expensas 2026-07 5-D`, `/expensas gastos limpieza`, `/documentos`. Los pedidos se atienden de a uno
 (Ollama gratuito admite una llamada a la vez) y las consultas quedan en `consultas` con `origen=telegram`.
+
+Un PDF repetido en esa base no se reprocesa: el bot nombra el documento que ya estaba. Si otro PDF ya tiene
+la liquidación del período, avisa y no guarda nada; reemplazarla requiere `--forzar` desde la consola. Dos
+archivos con el mismo nombre no se pisan: cada uno queda en `datos/entrada/<file_unique_id>/`.
 
 **Cada número o grupo tiene su propia base.** La primera vez que un chat le habla al bot se le crea un
 consorcio vacío (`chat-<id>` o `grupo-<id>`): arranca sin documentos, deriva todo, y responde solo con
@@ -193,8 +297,9 @@ Para probarlo sin reingestar nada (la ingesta completa con la cuota gratuita de 
 ```bash
 cp .env.example .env            # con LLM_PROVIDER=fake corre sin clave
 docker compose build && docker compose up -d
-make restaurar                  # carga datos/respaldo/postgres-<fecha>.sql: 17 documentos, 8 liquidaciones, ya migrado a consorcios
-make test && make lint          # 25 tests, proveedor fake
+make restaurar                  # sobre una base vacía: carga datos/respaldo/postgres-<fecha>.sql (17 documentos, 8 liquidaciones)
+make db-actualizar              # sirve para cualquier volcado, tenga o no versión de Alembic
+make test && make lint          # proveedor fake, en la base consorcio_test; no tocan estos datos
 make expensas QUE=rubros PERIODO=2026-07
 make evaluar-consultas PARTICION=dev      # recall@3 del buscador, sin modelo
 ```
@@ -208,13 +313,22 @@ PDF chico con capa de texto (el reglamento de cocheras, 2 páginas). `make respa
 Sin `make` (Windows sin Git Bash): reemplazar `make X` por el comando equivalente del `Makefile`, p. ej.
 `docker compose exec app consorcio ingestar "ruta.pdf" --metodo auto`.
 
-Qué deja cada ingesta:
-- `datos/procesados/<archivo>-<hash>/texto.md`: transcripción página por página con el método usado.
-- `datos/procesados/<archivo>-<hash>/extraccion.json`: metadatos, entidades, clasificación, llamadas y costo.
-- Postgres: tablas `documentos`, `paginas`, `personas`, `organizaciones`, `direcciones`, `eventos`, `unidades`, `montos`, `secciones`, `datos_sensibles` (con marca `sensible`), `llamadas_modelo`; para liquidaciones, además `liquidaciones`, `liquidacion_rubros`, `liquidacion_gastos`, `liquidacion_unidades`.
-- Neo4j: grafo `Documento → Persona / Organizacion / Direccion / Evento / Unidad / Seccion → Tema` (sin datos sensibles).
+`make restaurar` no reinicia `alembic_version`: un volcado viejo cargado sobre una base ya migrada la deja
+marcada en head con el esquema anterior. Por eso va sobre una base vacía.
 
-Qué deja cada consulta (`preguntar`): una fila en `consultas` (pregunta, respuesta, cita, si se verificó, si se derivó, tokens, costo, segundos) y un run `consulta` en MLflow.
+Qué deja cada ingesta (la carpeta es `<archivo>-<hash>-<consorcio>[-pags-N-M]-<proveedor>-<modelo>`):
+- `datos/procesados/<carpeta>/texto.md`: transcripción página por página con el método usado.
+- `datos/procesados/<carpeta>/extraccion.json`: metadatos, entidades, clasificación, llamadas y costo.
+- Bucket S3: el PDF original, con clave `<consorcio>/<sha256>.pdf`.
+- Postgres: tablas `documentos` (con `sha256` y `crudo_clave`), `paginas`, `personas`, `organizaciones`, `direcciones`, `eventos`, `unidades`, `montos`, `secciones`, `datos_sensibles` (con marca `sensible`), `llamadas_modelo`; para liquidaciones, además `liquidaciones`, `liquidacion_rubros`, `liquidacion_gastos`, `liquidacion_unidades`.
+
+`consorcio ingestar` informa cómo terminó en `estado`: `procesado`, `solo_disco` (`--sin-persistir` o `--paginas`: no toca Postgres ni el bucket), `duplicado` (ya estaba en ese consorcio), `en_proceso` (otra carga del mismo PDF en curso), `periodo_duplicado` (otro PDF del consorcio tiene esa liquidación) o `tope_excedido` (se alcanzó el tope mensual, no se llamó al modelo). Sale con código 1 en `en_proceso`, `periodo_duplicado` y `tope_excedido`.
+
+Qué deja cada consulta (`preguntar`): una fila en `consultas` (pregunta, respuesta, cita, si se verificó, si se derivó, tokens, costo, segundos, y `usuario_id` si se indicó) y un run `consulta` en MLflow.
+
+Qué deja cada mensaje de la web: una fila en `turnos` (solo métricas, sin texto), los textos en `mensajes`, y una fila en `solicitudes` si se derivó o es un reclamo. Toda llamada al modelo, de cualquier canal y salvo las del proveedor `fake`, deja una fila en `gastos_modelo`, y cada carga que toca Postgres deja una en `cargas`.
+
+Usuarios: `usuarios`, `membresias` (rol por consorcio) y `membresia_unidades`. `identidad.resolver_identidad(sujeto_externo, consorcio_id)` devuelve la identidad o falla si no hay membresía; el login queda afuera y solo entrega `sujeto_externo`, y su lugar en la web es `ProveedorIdentidad` (`web/autenticacion.py`). Dentro del consorcio los propietarios ven las expensas por unidad, como en la liquidación; nada cruza entre consorcios.
 
 ## Integrantes
 

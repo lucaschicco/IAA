@@ -1,0 +1,18 @@
+<div class="mensaje usuario"><div class="texto">{{ pregunta }}</div></div>
+<div class="mensaje asistente">
+  <div class="texto">{{ turno.mensaje }}</div>
+  {% if turno.solicitud_id %}<a href="/mis-solicitudes" class="pie">Ver en Mis solicitudes</a>{% endif %}
+  {% if con_voto %}
+  <form class="voto" hx-post="/chat/feedback" hx-swap="outerHTML">
+    {% include "_csrf.html" %}
+    <input type="hidden" name="turno_id" value="{{ turno.turno_id }}">
+    <button type="submit" name="valor" value="1" class="enlace">Me sirvió</button>
+    <button type="submit" name="valor" value="-1" class="enlace">No me sirvió</button>
+  </form>
+  {% endif %}
+</div>
+{% with conversacion_id = turno.conversacion_id or "", oob = true %}
+{% include "_conversacion.html" %}
+{% include "_caja_mensaje.html" %}
+{% include "_lista_conversaciones.html" %}
+{% endwith %}

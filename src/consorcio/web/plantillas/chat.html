@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% block titulo %}Chat{% endblock %}
+{% block sub_chat %}{% include "_lista_conversaciones.html" %}{% endblock %}
+{% block clase_main %}pagina-chat{% endblock %}
+{% block contenido %}
+<div class="chat">
+  <header class="chat-cabecera">
+    <span class="chat-icono">{{ i.icono("chat") }}</span>
+    <div>
+      <h1>Asistente del consorcio</h1>
+      <p>Responde citando la fuente. Lo que no puede resolver pasa a la administración.</p>
+    </div>
+  </header>
+  <div id="mensajes" class="mensajes">
+    {% for m in mensajes %}
+    <div class="mensaje {{ m.rol }}"><div class="texto">{{ m.texto }}</div></div>
+    {% else %}
+    <p class="nota chat-vacio">Preguntá por el reglamento, las expensas o los documentos, o dejá un reclamo.</p>
+    {% endfor %}
+  </div>
+  <form hx-post="/chat/mensaje" hx-target="#mensajes" hx-swap="beforeend scroll:bottom" hx-indicator="#pensando" hx-disabled-elt="find button" class="envio">
+    {% include "_csrf.html" %}
+    {% include "_conversacion.html" %}
+    <span id="pensando" class="htmx-indicator">Pensando…</span>
+    <div class="envio-fila">
+      {% include "_caja_mensaje.html" %}
+      <button type="submit">{{ i.icono("enviar") }}<span>Enviar</span></button>
+    </div>
+  </form>
+</div>
+{% endblock %}

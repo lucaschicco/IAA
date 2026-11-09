@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titulo %}Documentos{% endblock %}
+{% block contenido %}
+<h1>Documentos</h1>
+<p class="nota">Lo que el asistente puede consultar en este consorcio.</p>
+{% if identidad.rol == "administrador" %}
+<form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="tarjeta carga">
+  {% include "_csrf.html" %}
+  <label class="archivo">PDF, hasta {{ max_mb }} MB <input type="file" name="archivo" accept="application/pdf,.pdf" required></label>
+  <button type="submit">Cargar</button>
+  <span id="cargando" class="htmx-indicator">Procesando; un escaneado puede tardar varios minutos…</span>
+</form>
+<div id="resultado-carga"></div>
+{% endif %}
+{% include "_documentos.html" %}
+{% endblock %}

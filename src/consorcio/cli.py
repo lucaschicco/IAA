@@ -1,19 +1,23 @@
 """Línea de comandos: `consorcio <subcomando>`.
 
-  consorcio ingestar <pdf> [--metodo auto|texto|tesseract|vision] [--paginas 1-3] [--sin-persistir] [--reusar-texto]
+  consorcio ingestar <pdf> [--metodo auto|texto|tesseract|vision] [--paginas 1-3] [--sin-persistir] [--reusar-texto] [--forzar]
                            [--proveedor google_genai --modelo gemini-2.5-flash --modelo-vision ...]
   consorcio clasificar <pdf>            # solo la decisión del clasificador, sin modelo
   consorcio evaluar-ocr <pdf> <ref.md>  # compara la transcripción contra una referencia
   consorcio preguntar "¿...?" [--k 3] [--busqueda tsvector|palabras] [--sin-persistir] [--json]
   consorcio expensas [resumen|rubros|gastos|unidades] [--periodo 2026-07] [--unidad 5-D] [--texto limpieza]
   consorcio evaluar-consultas <preguntas.csv> [--particion dev|test|todas] [--k 3] [--con-modelo]
+                           (con modelo real sobre test, guarda docs/evaluaciones/<fecha>-consultas-test.json para el CRM)
   consorcio documentos [--desactivar X | --activar X]   # lista lo que hay en Postgres; X: id o parte del nombre
   consorcio consorcios [--asignar-chat ID --a CONSORCIO] [--crear ID --nombre "..."]   # bases y chats
-  consorcio consultas [--consorcio ID] [--origen telegram|cli|evaluacion] [--ultimas 20]   # qué se preguntó y qué se contestó
+  consorcio consultas [--consorcio ID] [--origen telegram|cli|evaluacion|web] [--ultimas 20]   # qué se preguntó y qué se contestó
+  consorcio gasto                       # gasto del mes en modelos contra TOPE_USD_MENSUAL
+  consorcio sembrar-demo                # consorcios y usuarios inventados para probar la web; sin modelo ni bucket
   consorcio migrar                      # migra una base anterior al 26/10 (ids sin consorcio)
-  (ingestar, preguntar, expensas, evaluar-consultas y documentos aceptan --consorcio ID; por defecto CONSORCIO_POR_DEFECTO)
-  consorcio grafo                       # conteo de nodos en Neo4j
-  consorcio dibujar-grafo [ingesta|consulta]   # imprime el grafo de LangGraph en Mermaid
+  consorcio actualizar-base             # lleva la base a la última revisión de Alembic, venga de donde venga
+  (ingestar, preguntar, expensas y evaluar-consultas aceptan --consorcio ID; por defecto CONSORCIO_POR_DEFECTO.
+   documentos y consultas sin --consorcio listan todos; --activar/--desactivar usan CONSORCIO_POR_DEFECTO)
+  consorcio dibujar-grafo [ingesta|consulta|agente]   # imprime el grafo de LangGraph en Mermaid
   consorcio bot                         # bot de Telegram (long polling); necesita TELEGRAM_BOT_TOKEN
 """
 from __future__ import annotations
@@ -35,9 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("pdf")
     p.add_argument("--metodo", choices=["auto", "texto", "tesseract", "vision"], default="auto")
     p.add_argument("--paginas", help="rango de páginas a procesar, p. ej. 1-3,7 (por defecto todas)")
-    p.add_argument("--sin-persistir", action="store_true", help="no escribe en Postgres ni Neo4j")
+    p.add_argument("--sin-persistir", action="store_true", help="no escribe en Postgres")
     p.add_argument("--reusar-texto", action="store_true",
                    help="reutiliza las páginas OCR/visión guardadas de una corrida anterior del mismo archivo")
+    p.add_argument("--forzar", action="store_true",
+                   help="reprocesa un PDF ya cargado y reemplaza la liquidación del mismo período en otro PDF")
     _arg_consorcio(p)
     _args_modelo(p)
 
@@ -80,34 +86,37 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("documentos", help="lista los documentos guardados en Postgres")
     p.add_argument("--desactivar", metavar="ID_O_NOMBRE", help="el buscador deja de usar ese documento (no se borra)")
     p.add_argument("--activar", metavar="ID_O_NOMBRE", help="vuelve a incluirlo en el buscador")
-    p.add_argument("--consorcio", help="solo ese consorcio (por defecto, todos)")
+    p.add_argument("--consorcio", help="solo ese consorcio; al listar, por defecto todos; con --activar/--desactivar, por defecto CONSORCIO_POR_DEFECTO")
     p = sub.add_parser("consorcios", help="lista las bases (consorcios) y qué chats usa cada una")
     p.add_argument("--asignar-chat", type=int, metavar="CHAT_ID", help="hace que ese chat de Telegram use --a")
     p.add_argument("--a", metavar="CONSORCIO", help="consorcio destino de --asignar-chat")
     p.add_argument("--crear", metavar="CONSORCIO", help="crea un consorcio (slug: letras, números y guiones)")
     p.add_argument("--nombre", help="nombre legible para --crear o --a")
     sub.add_parser("migrar", help="migra una base anterior al 26/10/2026 al esquema con consorcios")
+    sub.add_parser("actualizar-base", help="lleva la base a la última revisión de Alembic (respaldar antes)")
     p = sub.add_parser("consultas", help="últimas consultas registradas (pregunta, respuesta, cita, canal)")
-    p.add_argument("--consorcio", help="solo esa base")
-    p.add_argument("--origen", choices=["telegram", "cli", "evaluacion"])
+    p.add_argument("--consorcio", help="solo esa base (por defecto, todas)")
+    p.add_argument("--origen", choices=["telegram", "cli", "evaluacion", "web"])
     p.add_argument("--ultimas", type=int, default=20)
-    sub.add_parser("grafo", help="conteo de nodos por etiqueta en Neo4j")
+    sub.add_parser("gasto", help="gasto del mes en modelos contra el tope")
+    sub.add_parser("sembrar-demo", help="carga consorcios y usuarios inventados para probar la web")
     p = sub.add_parser("dibujar-grafo", help="grafo de LangGraph en Mermaid")
-    p.add_argument("cual", nargs="?", choices=["ingesta", "consulta"], default="ingesta")
+    p.add_argument("cual", nargs="?", choices=["ingesta", "consulta", "agente"], default="ingesta")
     p = sub.add_parser("bot", help="bot de Telegram: recibe PDFs y preguntas por chat")
     _args_modelo(p)
 
     args = parser.parse_args(argv)
     _aplicar_modelo(args)
+    _resolver_consorcio(args)
 
     if args.cmd == "ingestar":
         from .ingesta.grafo import ingestar_pdf
 
         metodo = None if args.metodo == "auto" else args.metodo
         final = ingestar_pdf(args.pdf, metodo=metodo, sin_persistir=args.sin_persistir, paginas=args.paginas,
-                             reusar_texto=args.reusar_texto, consorcio_id=args.consorcio)
+                             reusar_texto=args.reusar_texto, consorcio_id=args.consorcio, forzar=args.forzar)
         _imprimir_resumen(final)
-        return 1 if final.get("errores") else 0
+        return 1 if final.get("errores") or final.get("estado") in ("en_proceso", "periodo_duplicado", "tope_excedido") else 0
 
     if args.cmd == "clasificar":
         from .ingesta.clasificador import clasificar_pdf, herramientas_disponibles
@@ -149,9 +158,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "evaluar-consultas":
-        from .consulta.evaluar import evaluar_consultas
+        from .consulta.evaluar import evaluar_consultas, guardar_evaluacion
 
         res = evaluar_consultas(args.csv, args.particion, args.k, args.con_modelo, consorcio_id=args.consorcio)
+        ruta = guardar_evaluacion(res)
+        if ruta:
+            print(f"guardada para el CRM: {ruta}", file=sys.stderr)  # stdout queda como JSON puro
         if args.sin_detalle:
             res["retrieval"].pop("detalle", None)
             if "generacion" in res:
@@ -160,14 +172,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "documentos":
-        from .almacen.postgres import activar_documento, listar_documentos
+        from .almacen.postgres import (
+            activar_documento,
+            listar_documentos,
+            listar_documentos_de_todos_los_consorcios,
+        )
 
         if args.desactivar or args.activar:
             cambiados = activar_documento(args.desactivar or args.activar, activo=bool(args.activar),
                                           consorcio_id=args.consorcio)
             print(f"{'activados' if args.activar else 'desactivados'}: {cambiados}")
             return 0 if cambiados else 1
-        for d in listar_documentos(args.consorcio):
+        filas = listar_documentos(args.consorcio) if args.consorcio else listar_documentos_de_todos_los_consorcios()
+        for d in filas:
             print(json.dumps(d, ensure_ascii=False))
         return 0
 
@@ -185,25 +202,41 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "consultas":
-        from .almacen.postgres import listar_consultas
+        from .almacen.postgres import listar_consultas, listar_consultas_de_todos_los_consorcios
 
-        for c in reversed(listar_consultas(args.consorcio, args.origen, args.ultimas)):
+        if args.consorcio:
+            filas = listar_consultas(args.consorcio, args.origen, args.ultimas)
+        else:
+            filas = listar_consultas_de_todos_los_consorcios(args.origen, args.ultimas)
+        for c in reversed(filas):
             print(json.dumps(c, ensure_ascii=False))
         return 0
 
-    if args.cmd == "migrar":
-        from .almacen import grafo_neo4j, postgres
+    if args.cmd == "gasto":
+        from .tope import estado_tope
 
-        cambios = postgres.migrar_consorcios()
-        n = grafo_neo4j.migrar_consorcios(cambios)
-        print(json.dumps({"documentos_migrados": len(cambios), "nodos_neo4j": n, "cambios": cambios},
+        print(json.dumps(estado_tope(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "sembrar-demo":
+        from .agente.semilla import sembrar_demo
+
+        print(json.dumps(sembrar_demo(), ensure_ascii=False))
+        return 0
+
+    if args.cmd == "migrar":
+        from .almacen import postgres
+
+        cambios = postgres.migrar_consorcios(_cfg().consorcio_por_defecto)
+        print(json.dumps({"documentos_migrados": len(cambios), "cambios": cambios},
                          ensure_ascii=False, indent=2))
         return 0
 
-    if args.cmd == "grafo":
-        from .almacen.grafo_neo4j import resumen_grafo
+    if args.cmd == "actualizar-base":
+        from .almacen import postgres
 
-        print(json.dumps(resumen_grafo(), ensure_ascii=False, indent=2))
+        marca = postgres.actualizar_esquema()
+        print(json.dumps({"marcada_en": marca, "revision": postgres._revision_head()}, ensure_ascii=False))
         return 0
 
     if args.cmd == "bot":
@@ -214,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "dibujar-grafo":
         if args.cual == "consulta":
             from .consulta.grafo import construir_grafo
+        elif args.cual == "agente":
+            from .agente.grafo import construir_grafo
         else:
             from .ingesta.grafo import construir_grafo
 
@@ -226,6 +261,16 @@ def main(argv: list[str] | None = None) -> int:
 
 def _arg_consorcio(p) -> None:
     p.add_argument("--consorcio", metavar="ID", help="base (consorcio) sobre la que opera; por defecto CONSORCIO_POR_DEFECTO")
+
+
+def _resolver_consorcio(args) -> None:
+    """El único lugar de la CLI que aplica `CONSORCIO_POR_DEFECTO`. Listar documentos o consultas sin
+    --consorcio no pasa por acá: usa las funciones que listan todos los consorcios."""
+    from .config import config
+
+    cambia_documento = args.cmd == "documentos" and (args.desactivar or args.activar)
+    if args.cmd in ("ingestar", "preguntar", "expensas", "evaluar-consultas") or cambia_documento:
+        args.consorcio = args.consorcio or config.consorcio_por_defecto
 
 
 def _args_modelo(p) -> None:
@@ -253,6 +298,8 @@ def _imprimir_resumen(final: dict) -> None:
     meta = ext.get("metadatos", {})
     liq = final.get("liquidacion")
     resumen = {
+        "estado": final.get("estado"),
+        "documento_existente": final.get("documento_existente"),
         "documento_id": final.get("documento_id"),
         "archivo": final.get("nombre_archivo"),
         "clasificacion": {k: v for k, v in final.get("clasificacion", {}).items() if k != "paginas"},

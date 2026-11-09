@@ -1,13 +1,15 @@
 # Atajos para trabajar con Docker. Requiere .env (copiar de .env.example).
 COMPOSE = docker compose
 RUN = $(COMPOSE) exec app
+# Base propia de los tests: varios la borran, y solo corren sobre esta (BASES_DESCARTABLES)
+TEST_POSTGRES_URL = postgresql+psycopg://consorcio:consorcio@postgres:5432/consorcio_test
 
-.PHONY: build up down logs shell ingestar preguntar expensas evaluar-consultas test lint evaluar-ocr psql cypher bot bot-logs bot-down respaldar restaurar consorcios asignar migrar consultas
+.PHONY: build up down logs shell ingestar preguntar expensas evaluar-consultas test lint evaluar-ocr psql bot bot-logs bot-down respaldar restaurar consorcios asignar migrar consultas
 
 build:        ## Construye la imagen de la app
 	$(COMPOSE) build
 
-up:           ## Levanta app, postgres, neo4j y mlflow
+up:           ## Levanta app, postgres, seaweedfs y mlflow
 	$(COMPOSE) up -d
 
 down:         ## Baja todo (los datos quedan en los volúmenes)
@@ -35,7 +37,8 @@ evaluar-consultas:  ## make evaluar-consultas [PARTICION=dev|test|todas] [CON_MO
 	$(RUN) consorcio evaluar-consultas datos/evaluacion/preguntas.csv --particion $(or $(PARTICION),dev) $(if $(CON_MODELO),--con-modelo) --sin-detalle
 
 test:
-	$(RUN) pytest -q
+	$(COMPOSE) exec postgres sh -c 'createdb -U "$$POSTGRES_USER" consorcio_test 2>/dev/null || true'
+	$(COMPOSE) exec -e POSTGRES_URL=$(TEST_POSTGRES_URL) app pytest -q
 
 lint:
 	$(RUN) ruff check src tests
@@ -48,6 +51,23 @@ bot-logs:
 
 bot-down:
 	$(COMPOSE) --profile bot stop bot
+
+.PHONY: web web-logs web-down sembrar-demo gasto
+
+web:          ## Levanta la web de pruebas en http://127.0.0.1:8000 (ver WEB_* en .env)
+	$(COMPOSE) --profile web up -d web
+
+web-logs:
+	$(COMPOSE) logs -f --tail=100 web
+
+web-down:
+	$(COMPOSE) --profile web stop web
+
+sembrar-demo: ## Crea los consorcios y usuarios inventados de la web (idempotente)
+	$(RUN) consorcio sembrar-demo
+
+gasto:        ## Gasto en modelos del mes contra el tope
+	$(RUN) consorcio gasto
 
 respaldar:    ## Vuelca Postgres a datos/respaldo/postgres-<fecha>.sql (para pasar la base ya cargada)
 	$(COMPOSE) exec -T postgres pg_dump -U consorcio -d consorcio --clean --if-exists --no-owner > datos/respaldo/postgres-$$(date +%Y-%m-%d).sql
@@ -67,8 +87,10 @@ asignar:      ## make asignar CHAT=<id de chat> A=<consorcio>: ese número/grupo
 migrar:       ## Migra una base anterior al 26/10/2026 al esquema con consorcios (idempotente)
 	$(RUN) consorcio migrar
 
+.PHONY: db-actualizar
+
+db-actualizar:   ## Lleva la base a head, con o sin versión de Alembic, sin tocar datos. Respaldar antes
+	$(RUN) consorcio actualizar-base
+
 psql:         ## Consola de Postgres
 	$(COMPOSE) exec postgres psql -U consorcio -d consorcio
-
-cypher:       ## Consola de Neo4j
-	$(COMPOSE) exec neo4j cypher-shell -u neo4j -p consorcio123

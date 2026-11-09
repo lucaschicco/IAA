@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block titulo %}Mis solicitudes{% endblock %}
+{% block contenido %}
+<h1>Mis solicitudes</h1>
+<p class="nota">Reclamos y consultas que pasaron a la administración.</p>
+{% for s in solicitudes %}
+<article class="tarjeta">
+  <header>
+    <strong>{{ s.titulo_final or s.titulo }}</strong>
+    {% include "_estado.html" %}
+  </header>
+  <p class="texto">{{ s.detalle_final or s.detalle }}</p>
+  {% if s.respuesta %}<p class="texto respuesta">{{ s.respuesta }}</p>{% endif %}
+  <p class="pie">{{ s.creado_en.strftime("%d/%m/%Y %H:%M") }}</p>
+</article>
+{% else %}
+<p class="nota">Todavía no tenés solicitudes. Las que hagas desde el chat aparecen acá.</p>
+{% endfor %}
+{% endblock %}

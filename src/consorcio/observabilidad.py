@@ -4,21 +4,61 @@ vacío, todo es no-op y el sistema corre igual.
 Por corrida se abre un run con etiquetas (nodo raíz, archivo, versión del skill,
 decisión del clasificador) y se registran métricas: llamadas, tokens, costo,
 segundos, y el conteo de entidades extraídas.
+
+MLflow es opcional y nunca debe demorar a quien espera una respuesta: con sus valores
+por defecto (120 s y 7 reintentos por pedido), un servidor caído frenó un turno del chat
+más de 9 minutos. Por eso se sondea el puerto antes y, si no contesta, no se lo vuelve a
+intentar durante `_PAUSA_TRAS_FALLO`.
 """
 from __future__ import annotations
 
 import contextlib
 import logging
+import os
+import socket
+import time
 from typing import Any
+from urllib.parse import urlsplit
 
 from .config import config
 
 log = logging.getLogger("consorcio")
 
+_ESPERA_SONDEO = 1.0  # segundos
+_PAUSA_TRAS_FALLO = 60.0  # segundos
+_mlflow_caido_hasta = 0.0
+
+# Si MLflow se cae con la corrida abierta, cada pedido pendiente espera esto y no los valores por defecto
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "10")
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "1")
+
+
+@contextlib.contextmanager
+def _sin_frenar_la_corrida():
+    """MLflow que cae con la corrida abierta: si la excepción llegara al agente, un turno correcto se
+    informaría como error y el vecino repetiría un reclamo ya creado."""
+    try:
+        yield
+    except Exception as e:
+        _marcar_caido()
+        log.warning("MLflow dejó de responder (%s); la corrida sigue sin trazas", e)
+
 
 class _Traza:
     def __init__(self, activo: bool):
         self.activo = activo
+
+    def traza_id(self) -> str | None:
+        """Id de la última traza GenAI de la corrida; None sin MLflow."""
+        if not self.activo:
+            return None
+        try:
+            import mlflow
+
+            return mlflow.get_last_active_trace_id()
+        except Exception as e:
+            log.debug("no se pudo leer el id de la traza: %s", e)
+            return None
 
     def registrar_metricas(self, etiquetas: dict[str, str], metricas: dict[str, float]) -> None:
         """Para corridas que no son ingestas (consultas, evaluaciones)."""
@@ -26,10 +66,11 @@ class _Traza:
             return
         import mlflow
 
-        if etiquetas:
-            mlflow.set_tags({k: str(v) for k, v in etiquetas.items()})
-        if metricas:
-            mlflow.log_metrics({k: float(v) for k, v in metricas.items() if v is not None})
+        with _sin_frenar_la_corrida():
+            if etiquetas:
+                mlflow.set_tags({k: str(v) for k, v in etiquetas.items()})
+            if metricas:
+                mlflow.log_metrics({k: float(v) for k, v in metricas.items() if v is not None})
 
     def registrar(self, estado_final: dict) -> None:
         if not self.activo:
@@ -39,13 +80,14 @@ class _Traza:
         clasif = estado_final.get("clasificacion", {})
         costo = estado_final.get("costo", {})
         extraccion = estado_final.get("extraccion", {})
-        mlflow.set_tags(
-            {
-                "metodo": clasif.get("metodo", ""),
-                "tipo_documento": extraccion.get("metadatos", {}).get("tipo_documento", ""),
-                "documento_id": estado_final.get("documento_id", ""),
-            }
-        )
+        with _sin_frenar_la_corrida():
+            mlflow.set_tags(
+                {
+                    "metodo": clasif.get("metodo", ""),
+                    "tipo_documento": extraccion.get("metadatos", {}).get("tipo_documento", ""),
+                    "documento_id": estado_final.get("documento_id", ""),
+                }
+            )
         metricas: dict[str, float] = {
             "confianza_clasificador": float(clasif.get("confianza", 0)),
             "paginas": float(clasif.get("total_paginas", 0)),
@@ -57,7 +99,8 @@ class _Traza:
                 metricas[k] = float(costo[k])
         for coleccion in ("personas", "organizaciones", "direcciones", "eventos", "unidades", "montos", "secciones"):
             metricas[f"n_{coleccion}"] = float(len(extraccion.get(coleccion, [])))
-        mlflow.log_metrics(metricas)
+        with _sin_frenar_la_corrida():
+            mlflow.log_metrics(metricas)
         carpeta = estado_final.get("persistido", {}).get("carpeta")
         if carpeta:
             with contextlib.suppress(Exception):
@@ -81,11 +124,32 @@ def _prender_autolog(mlflow) -> None:
         log.warning("autolog de LangChain en MLflow no disponible (%s); quedan los runs, sin trazas", e)
 
 
+def _marcar_caido() -> None:
+    global _mlflow_caido_hasta
+    _mlflow_caido_hasta = time.monotonic() + _PAUSA_TRAS_FALLO
+
+
+def _alcanzable(uri: str) -> bool:
+    """Un URI local (`sqlite:`, una carpeta) no tiene puerto que sondear."""
+    if time.monotonic() < _mlflow_caido_hasta:
+        return False
+    try:
+        destino = urlsplit(uri)
+        if destino.hostname:
+            puerto = destino.port or (443 if destino.scheme == "https" else 80)
+            socket.create_connection((destino.hostname, puerto), timeout=_ESPERA_SONDEO).close()
+        return True
+    except (OSError, ValueError) as e:
+        _marcar_caido()
+        log.warning("MLflow no disponible (%s); se sigue sin trazas por %.0f s", type(e).__name__, _PAUSA_TRAS_FALLO)
+        return False
+
+
 @contextlib.contextmanager
 def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
     """Abre un run de MLflow si está configurado; si MLflow no responde, sigue sin trazas.
     Las excepciones de la corrida se propagan tal cual (no se tragan)."""
-    if not config.mlflow_tracking_uri:
+    if not config.mlflow_tracking_uri or not _alcanzable(config.mlflow_tracking_uri):
         yield _Traza(False)
         return
     try:
@@ -96,7 +160,8 @@ def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
         _prender_autolog(mlflow)
         from .ingesta.skill import version_skill
 
-        mlflow.start_run(run_name=nombre)
+        # Anidado: la consulta corre dentro del turno del agente, y un segundo run suelto lanza excepción
+        mlflow.start_run(run_name=nombre, nested=mlflow.active_run() is not None)
         mlflow.set_tags(
             {
                 **{k: str(v) for k, v in etiquetas.items()},
@@ -106,6 +171,7 @@ def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
             }
         )
     except Exception as e:  # MLflow caído no debe frenar la ingesta
+        _marcar_caido()  # el puerto contestó pero el servidor no: no repetir la espera en cada turno
         log.warning("MLflow no disponible (%s); se sigue sin trazas", e)
         yield _Traza(False)
         return
@@ -119,15 +185,20 @@ def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
         yield _Traza(True)
     except Exception:
         _etiquetar_traza(mlflow, etiquetas_traza)
-        mlflow.end_run(status="FAILED")
+        with _sin_frenar_la_corrida():
+            mlflow.end_run(status="FAILED")
         raise
     else:
         _etiquetar_traza(mlflow, etiquetas_traza)
-        mlflow.end_run()
+        with _sin_frenar_la_corrida():
+            mlflow.end_run()
 
 
 def _skill_de(nombre_corrida: str) -> str:
-    """Skill cuya versión se registra: `consulta` para preguntas y su evaluación, `ingesta` para el resto."""
+    """Skill cuya versión se registra: `agente` para los turnos, `consulta` para preguntas y su evaluación,
+    `ingesta` para el resto."""
+    if nombre_corrida.startswith("agente"):
+        return "agente"
     return "consulta" if nombre_corrida.startswith(("consulta", "evaluacion-consultas")) else "ingesta"
 
 

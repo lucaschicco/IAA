@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -20,6 +21,8 @@ from PIL import Image
 from pydantic import BaseModel
 
 from .config import PRECIOS_USD_POR_MILLON, config
+
+log = logging.getLogger("consorcio.llm")
 
 
 class PresupuestoExcedido(RuntimeError):
@@ -38,9 +41,11 @@ class Llamada:
 
 @dataclass
 class Contador:
-    """Acumula el costo de una corrida. Viaja en el estado del grafo."""
+    """Acumula el costo de una corrida. Viaja en el estado del grafo. `consorcio_id` solo etiqueta el
+    gasto; None en lo que no pertenece a ningún consorcio (evaluar-ocr)."""
 
     llamadas: list[Llamada] = field(default_factory=list)
+    consorcio_id: str | None = None
 
     def verificar_presupuesto(self) -> None:
         if len(self.llamadas) >= config.presupuesto_llamadas:
@@ -54,16 +59,36 @@ class Contador:
         sal = int(uso.get("output_tokens", 0) or 0)
         llamada = Llamada(nodo, modelo, ent, sal, round(segundos, 3), costo(modelo, ent, sal))
         self.llamadas.append(llamada)
+        self._asentar_gasto(llamada)
         return llamada
 
-    def resumen(self) -> dict:
+    def _asentar_gasto(self, llamada: Llamada) -> None:
+        """Libro de gastos del tope mensual (ver tope.py). Sin tokens informados no se sabe cuánto costó:
+        va NULL, no 0. Un fallo acá avisa pero no frena la respuesta: lo que ya se pagó, se pagó."""
+        if llamada.modelo == "fake":
+            return
+        informado = llamada.tokens_entrada or llamada.tokens_salida
+        try:
+            from .almacen.postgres import registrar_gasto
+
+            registrar_gasto(self.consorcio_id, llamada.nodo, llamada.modelo, llamada.tokens_entrada,
+                            llamada.tokens_salida, llamada.costo_usd if informado else None)
+        except Exception as e:
+            log.warning("no se pudo asentar el gasto de %s (%s)", llamada.nodo, type(e).__name__)
+
+    def costo_total(self) -> float | None:
+        """Sin redondear. None si ninguna llamada tiene precio."""
         costos = [c.costo_usd for c in self.llamadas if c.costo_usd is not None]
+        return sum(costos) if costos else None
+
+    def resumen(self) -> dict:
+        total = self.costo_total()
         return {
             "llamadas": len(self.llamadas),
             "tokens_entrada": sum(c.tokens_entrada for c in self.llamadas),
             "tokens_salida": sum(c.tokens_salida for c in self.llamadas),
             "segundos_modelo": round(sum(c.segundos for c in self.llamadas), 2),
-            "costo_usd": round(sum(costos), 4) if costos else None,
+            "costo_usd": None if total is None else round(total, 4),
         }
 
     def detalle(self) -> list[dict]:
@@ -111,12 +136,21 @@ class _FakeEstructurado:
     def __init__(self, schema: type[BaseModel]):
         self.schema = schema
 
-    def invoke(self, _entrada, **_kwargs):
+    def invoke(self, entrada, **_kwargs):
         return {
             "raw": AIMessage(content="", usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}),
-            "parsed": _instancia_vacia(self.schema),
+            "parsed": self._guionado(entrada) or _instancia_vacia(self.schema),
             "parsing_error": None,
         }
+
+    def _guionado(self, entrada) -> BaseModel | None:
+        """Con FAKE_GUIONADO, los esquemas que tienen guion contestan según el último mensaje."""
+        if not config.fake_guionado:
+            return None
+        from .agente.guion_fake import GUIONES
+
+        guion = GUIONES.get(self.schema.__name__)
+        return guion(_texto_de(entrada[-1].content)) if guion else None
 
 
 def _instancia_vacia(schema: type[BaseModel]) -> BaseModel:

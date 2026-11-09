@@ -1,7 +1,9 @@
-"""Tests de persistencia: necesitan Postgres y Neo4j (docker compose up)."""
+"""Tests de persistencia: necesitan Postgres (docker compose up)."""
 from __future__ import annotations
 
+import json
 import os
+import uuid
 
 import pytest
 
@@ -16,16 +18,6 @@ def _hay_postgres() -> bool:
 
         with engine().connect():
             return True
-    except Exception:
-        return False
-
-
-def _hay_neo4j() -> bool:
-    try:
-        from consorcio.almacen.grafo_neo4j import driver
-
-        driver().verify_connectivity()
-        return True
     except Exception:
         return False
 
@@ -75,13 +67,86 @@ def test_postgres_guarda_y_marca_sensibles():
         s.commit()
 
 
-@pytest.mark.skipif(not _hay_neo4j(), reason="sin Neo4j")
-def test_neo4j_no_guarda_sensibles():
-    from consorcio.almacen import grafo_neo4j
+def test_migrar_consorcios_exige_el_consorcio_por_defecto():
+    from consorcio.almacen import postgres
 
-    res = grafo_neo4j.guardar_documento(ID_PRUEBA, _doc())
-    assert res["aristas"].get("MENCIONA") == 1
-    with grafo_neo4j.driver().session() as s:
-        n = s.run("MATCH (n) WHERE any(k IN keys(n) WHERE toString(n[k]) CONTAINS '12.345.678') RETURN count(n) AS n").single()["n"]
-        assert n == 0
-        s.run("MATCH (d:Documento {id:'prueba:test0000000000ab'}) OPTIONAL MATCH (d)-[:TIENE_SECCION]->(x) DETACH DELETE x, d")
+    with pytest.raises(TypeError):
+        postgres.migrar_consorcios()
+
+
+def test_cli_migrar_resuelve_el_por_defecto_y_solo_informa_postgres(monkeypatch, capsys):
+    from consorcio import cli
+    from consorcio.almacen import postgres
+    from consorcio.config import config
+
+    pedidos = []
+    cambios = [{"viejo": "abc", "nuevo": "x:abc", "consorcio": "x"}]
+    monkeypatch.setattr(postgres, "migrar_consorcios", lambda por_defecto: pedidos.append(por_defecto) or cambios)
+    assert cli.main(["migrar"]) == 0
+    assert pedidos == [config.consorcio_por_defecto]
+    assert json.loads(capsys.readouterr().out) == {"documentos_migrados": 1, "cambios": cambios}
+
+
+def test_cli_ya_no_tiene_el_subcomando_grafo(capsys):
+    from consorcio import cli
+
+    with pytest.raises(SystemExit) as e:
+        cli.main(["grafo"])
+    assert e.value.code == 2
+    assert "grafo" in capsys.readouterr().err
+
+
+def test_cli_dibujar_grafo_de_langgraph_sigue(capsys):
+    from consorcio import cli
+
+    assert cli.main(["dibujar-grafo", "ingesta"]) == 0
+    assert "persistir" in capsys.readouterr().out
+
+
+def _pdf_inventado() -> bytes:
+    """PDF mínimo con capa de texto y contenido propio, para no depender de datos/."""
+    texto = f"Reglamento inventado de prueba {uuid.uuid4().hex}. Texto suficiente para la capa de texto. " * 2
+    flujo = f"BT /F1 9 Tf 20 700 Td ({texto}) Tj ET".encode("ascii")
+    objetos = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        b"/Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(flujo), flujo),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    pdf = b"%PDF-1.4\n"
+    posiciones = []
+    for i, obj in enumerate(objetos, 1):
+        posiciones.append(len(pdf))
+        pdf += b"%d 0 obj\n%s\nendobj\n" % (i, obj)
+    inicio = len(pdf)
+    pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objetos) + 1)
+    pdf += b"".join(b"%010d 00000 n \n" % p for p in posiciones)
+    pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objetos) + 1, inicio)
+    return pdf
+
+
+@pytest.mark.skipif(not _hay_postgres(), reason="sin Postgres")
+def test_ingesta_persiste_el_documento_en_postgres(tmp_path, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    from consorcio.almacen import postgres
+    from consorcio.config import config
+    from consorcio.ingesta.grafo import ingestar_pdf
+
+    monkeypatch.setattr(config, "dir_procesados", tmp_path / "procesados")
+    consorcio = f"prueba-{uuid.uuid4().hex[:8]}"
+    pdf = tmp_path / "inventado.pdf"
+    pdf.write_bytes(_pdf_inventado())
+
+    final = ingestar_pdf(str(pdf), consorcio_id=consorcio)
+    try:
+        assert final["persistido"]["postgres"]["filas"]
+        with Session(postgres.engine()) as s:
+            assert s.get(postgres.Documento, final["documento_id"]).consorcio_id == consorcio
+    finally:
+        with Session(postgres.engine()) as s:
+            s.delete(s.get(postgres.Documento, final["documento_id"]))
+            s.delete(s.get(postgres.Consorcio, consorcio))
+            s.commit()

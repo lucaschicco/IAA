@@ -14,7 +14,7 @@ PALABRAS_VACIAS = {
 
 
 def id_documento(consorcio_id: str, hash_archivo: str) -> str:
-    """Id de un documento en Postgres/Neo4j: `<consorcio>:<hash>`. El mismo PDF en dos consorcios
+    """Id de un documento en Postgres: `<consorcio>:<hash>`. El mismo PDF en dos consorcios
     son dos documentos (cada consorcio tiene su base); dentro de uno, la hash lo hace idempotente."""
     return f"{consorcio_id}:{hash_archivo}"
 

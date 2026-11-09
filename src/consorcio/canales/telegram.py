@@ -3,7 +3,7 @@
 Corre con *long polling* (`consorcio bot`), así que no necesita IP pública ni HTTPS.
 Lo que hace con cada mensaje:
 
-- PDF adjunto   → lo guarda en `datos/entrada/` y corre la ingesta (tool 1); avisa al terminar.
+- PDF adjunto   → lo guarda en `datos/entrada/<file_unique_id>/` y corre la ingesta (tool 1); avisa al terminar.
 - texto         → `preguntar` (tool 2): respuesta con cita verificada o derivación.
 - /expensas     → `consultar_expensas` por SQL (nunca inventa importes).
 - /start /ayuda → instrucciones y el id del chat (para la lista blanca).
@@ -30,10 +30,18 @@ import re
 from pathlib import Path
 
 from ..config import config
+from .formato import (  # noqa: F401  (reexportados: test_telegram los importa de acá)
+    LIMITE_MENSAJE,
+    _pesos,
+    _recortar,
+    formatear_documentos,
+    formatear_expensas,
+    formatear_ingesta,
+    formatear_respuesta,
+)
 
 log = logging.getLogger("consorcio.telegram")
 
-LIMITE_MENSAJE = 4000  # Telegram corta en 4096
 MAX_MB_PDF = 20  # tope de descarga de la Bot API
 
 AYUDA = (
@@ -79,112 +87,17 @@ def parsear_expensas(args: list[str]) -> dict:
     return res
 
 
-def _recortar(texto: str, limite: int = LIMITE_MENSAJE) -> str:
-    return texto if len(texto) <= limite else texto[: limite - 20].rstrip() + "\n[… recortado]"
-
-
-def _pesos(v) -> str:
-    return "—" if v is None else f"$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def formatear_ingesta(final: dict) -> str:
-    """Resumen corto del estado final de `ingestar_pdf` para mandar por chat."""
-    ext = final.get("extraccion", {}) or {}
-    meta = ext.get("metadatos", {}) or {}
-    clas = final.get("clasificacion", {}) or {}
-    costo = final.get("costo", {}) or {}
-    lineas = [f"Listo: {final.get('nombre_archivo', 'documento')}"]
-    if meta.get("titulo"):
-        lineas.append(f"Título: {meta['titulo']}")
-    if meta.get("tipo_documento"):
-        lineas.append(f"Tipo: {meta['tipo_documento']}" + (f" · fecha {meta['fecha_documento']}" if meta.get("fecha_documento") else ""))
-    if clas.get("metodo"):
-        lineas.append(f"Método: {clas['metodo']} ({clas.get('motivo', '')})".rstrip("( )"))
-    n = {k: len(ext.get(k, []) or []) for k in ("secciones", "personas", "eventos", "montos")}
-    lineas.append(f"Secciones: {n['secciones']} · personas: {n['personas']} · eventos: {n['eventos']} · montos: {n['montos']}")
-    liq = final.get("liquidacion")
-    if liq:
-        lineas.append(
-            f"Liquidación {liq.get('periodo')}: {len(liq.get('rubros', []))} rubros, {len(liq.get('gastos', []))} gastos, "
-            f"{liq.get('filas_prorrateo')} unidades ({liq.get('filas_no_parseadas', 0)} filas sin parsear)"
-        )
-    usd = costo.get("costo_usd")
-    lineas.append(
-        f"{costo.get('llamadas', 0)} llamadas · {costo.get('tokens_entrada', 0)} + {costo.get('tokens_salida', 0)} tokens"
-        + (f" · {usd:.4f} USD" if usd is not None else " · costo sin precio")
-        + f" · {final.get('segundos_total', 0)} s"
-    )
-    if final.get("persistido"):
-        lineas.append("Guardado en Postgres y Neo4j; ya se puede preguntar sobre esto.")
-    for e in final.get("errores", []) or []:
-        lineas.append(f"⚠ {e}")
-    return _recortar("\n".join(lineas))
-
-
-def formatear_respuesta(final: dict) -> str:
-    """Respuesta de `preguntar` tal como la ve el vecino: texto, cita y fuente, o derivación.
-
-    No reutiliza `mensaje` (que ya trae fuente y cita en formato de consola): arma el texto desde
-    los campos estructurados para que el chat muestre siempre lo mismo.
-    """
-    if final.get("derivada") or not final.get("respuesta"):
-        return _recortar(final.get("mensaje") or "")
-    r = final.get("respuesta", {}) or {}
-    fuente = final.get("fuente") or {}
-    partes = [r.get("respuesta") or final.get("mensaje") or ""]
-    if r.get("cita"):
-        partes.append(f"\n«{r['cita']}»")
-    pie = [str(x) for x in (fuente.get("nombre_archivo"), fuente.get("titulo")) if x]
-    if r.get("pagina"):
-        pie.append(f"pág. {r['pagina']}")
-    if pie:
-        partes.append("Fuente: " + " · ".join(pie))
-    if final.get("verificada"):
-        partes.append("(cita verificada contra el documento original)")
-    return _recortar("\n".join(partes))
-
-
-def formatear_expensas(que: str, filas: list[dict]) -> str:
-    if not filas:
-        return "No hay datos para esa consulta. Probá /expensas resumen para ver los períodos cargados."
-    out: list[str] = []
-    if que == "resumen":
-        out.append("Liquidaciones cargadas:")
-        for f in filas:
-            out.append(f"• {f['periodo']}: total {_pesos(f['total_gastos'])} · {f['rubros']} rubros · {f['unidades']} unidades · vence {f['primer_vencimiento']}")
-    elif que == "rubros":
-        periodo = None
-        for f in filas:
-            if f["periodo"] != periodo:
-                periodo = f["periodo"]
-                out.append(f"\nRubros {periodo}:")
-            pct = f" ({f['porcentaje']:.1f} %)" if f.get("porcentaje") is not None else ""
-            out.append(f"• {f['rubro']}: {_pesos(f['total'])}{pct}")
-    elif que == "gastos":
-        for f in filas[:40]:
-            quien = " · ".join(x for x in (f.get("proveedor"), f.get("concepto")) if x)
-            out.append(f"• {f['periodo']} {f['rubro']}: {quien} {_pesos(f['importe'])}")
-        if len(filas) > 40:
-            out.append(f"… y {len(filas) - 40} gastos más; filtrá con un período o un texto.")
-    elif que == "unidades":
-        for f in filas[:30]:
-            out.append(
-                f"• {f['periodo']} UF {f['uf']} ({f['piso_depto']}, {f['porcentual']} %): expensas {_pesos(f['expensas_ordinarias'])}"
-                f" · total {_pesos(f['total_expensa'])} · a pagar {_pesos(f['a_pagar'])}"
-            )
-        if len(filas) > 30:
-            out.append(f"… y {len(filas) - 30} unidades más; indicá la unidad (5-D) o el período.")
-    return _recortar("\n".join(out).strip())
-
-
-def formatear_documentos(docs: list[dict]) -> str:
-    if not docs:
-        return "No hay documentos cargados todavía. Mandame un PDF."
-    out = [f"{len(docs)} documentos:"]
-    for d in docs:
-        marca = "" if d.get("activo", True) else " (fuera del buscador)"
-        out.append(f"• {d.get('archivo')} · {d.get('tipo') or '?'} · {d.get('paginas') or '?'} pág.{marca}")
-    return _recortar("\n".join(out))
+def ruta_entrada(dir_entrada: Path, file_unique_id: str, nombre: str) -> Path:
+    """Dónde guardar un PDF recibido: `<dir>/<file_unique_id>/<nombre>`. Cada archivo tiene su carpeta,
+    así dos PDF homónimos (de un mismo chat o de otros) no se pisan mientras esperan su turno, y se
+    conserva el nombre original, que es el `nombre_archivo` del documento."""
+    carpeta = re.sub(r"[^A-Za-z0-9_-]", "_", file_unique_id) or "archivo"
+    limpio = Path(nombre.replace("\\", "/")).name
+    if limpio in ("", ".", ".."):
+        limpio = f"{carpeta}.pdf"
+    ruta = Path(dir_entrada) / carpeta / limpio
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    return ruta
 
 
 # ------------------------------------------------------------------ trabajo sincrónico (en hilo)
@@ -299,7 +212,7 @@ def correr_bot() -> int:
         if doc.file_size and doc.file_size > MAX_MB_PDF * 1024 * 1024:
             await update.effective_message.reply_text(f"El archivo supera los {MAX_MB_PDF} MB que acepta Telegram para bots.")
             return
-        ruta = dir_entrada / Path(nombre).name
+        ruta = ruta_entrada(dir_entrada, doc.file_unique_id, nombre)
         archivo = await doc.get_file()
         await archivo.download_to_drive(ruta)
         kb = (doc.file_size or 0) // 1024

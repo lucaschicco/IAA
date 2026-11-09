@@ -1,0 +1,20 @@
+<div id="lista-documentos" class="tabla-marco"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if documentos %}
+  <table>
+    <thead><tr><th>Título</th><th>Archivo</th><th>Tipo</th><th>Páginas</th><th>Buscador</th></tr></thead>
+    <tbody>
+      {% for d in documentos %}
+      <tr>
+        <td>{{ d.titulo or "Sin título" }}</td>
+        <td>{{ d.archivo }}</td>
+        <td>{{ (d.tipo or "—")|replace("_", " ") }}</td>
+        <td>{{ d.paginas or "—" }}</td>
+        <td>{{ "Sí" if d.activo else "No" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="nota">Todavía no hay documentos en este consorcio.</p>
+  {% endif %}
+</div>

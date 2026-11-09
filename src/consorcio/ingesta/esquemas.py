@@ -2,8 +2,7 @@
 
 Son el contrato entre el modelo y la base: el modelo devuelve exactamente esto
 (salida estructurada) y `almacen/` lo persiste. Los datos de tipo sensible se
-guardan completos en Postgres con la marca `sensible=true` y NO se replican en
-el grafo de Neo4j.
+guardan completos en Postgres con la marca `sensible=true`.
 """
 from __future__ import annotations
 

@@ -8,6 +8,8 @@
 - `verificar` comprueba en código que la cita exista textualmente en las páginas
   originales de la fuente. Si no existe, o el modelo dijo que no puede responder,
   la consulta se deriva a la administración: el sistema no responde sin respaldo.
+  Con `validar_respuesta` también revisa el texto libre y calcula la página: lo piden
+  el agente y la evaluación. Telegram está congelado y sigue sin esa revisión.
 """
 from __future__ import annotations
 
@@ -19,7 +21,14 @@ from langgraph.graph import END, START, StateGraph
 from ..config import config
 from ..ingesta.skill import cargar_skill, version_skill
 from ..llm import Contador, invocar_estructurado
-from .buscador import armar_contexto, buscar_secciones, verificar_cita
+from .buscador import (
+    armar_contexto,
+    buscar_secciones,
+    pagina_de_cita,
+    texto_de_fuentes,
+    verificar_cita,
+    verificar_respuesta,
+)
 from .esquemas import RespuestaConCita
 
 MENSAJE_DERIVACION = (
@@ -33,6 +42,7 @@ class EstadoConsulta(TypedDict, total=False):
     consorcio_id: str  # base en la que se busca
     k: int
     metodo_busqueda: str
+    validar_respuesta: bool
     resultados: list[dict]
     contexto: str
     respuesta: dict  # RespuestaConCita.model_dump()
@@ -43,6 +53,7 @@ class EstadoConsulta(TypedDict, total=False):
     fuente: dict | None  # la sección citada
     costo: dict
     segundos: float
+    _costo_usd: float | None  # `costo` lo trae redondeado a 4 decimales, para mostrar
     _contador: Contador
     _paginas_por_fuente: dict
     _t0: float
@@ -50,12 +61,12 @@ class EstadoConsulta(TypedDict, total=False):
 
 def nodo_buscar(estado: EstadoConsulta) -> dict:
     resultados = buscar_secciones(
-        estado["pregunta"], estado.get("k", 3), estado.get("metodo_busqueda", "tsvector"), estado.get("consorcio_id")
+        estado["pregunta"], estado.get("k", 3), estado.get("metodo_busqueda", "tsvector"), estado["consorcio_id"]
     )
-    contexto, paginas = armar_contexto(resultados)
+    contexto, paginas = armar_contexto(resultados, estado["consorcio_id"])
     return {
         "resultados": resultados, "contexto": contexto, "_paginas_por_fuente": paginas,
-        "_contador": Contador(), "_t0": time.perf_counter(),
+        "_contador": Contador(consorcio_id=estado["consorcio_id"]), "_t0": time.perf_counter(),
     }
 
 
@@ -80,6 +91,12 @@ def nodo_verificar(estado: EstadoConsulta) -> dict:
     ok, motivo = verificar_cita(r.get("cita"), paginas)
     if not ok:
         return _derivar(estado, f"cita no verificada: {motivo}")
+    if estado.get("validar_respuesta"):
+        fuentes = texto_de_fuentes(estado["resultados"], estado["_paginas_por_fuente"])
+        ok, motivo = verificar_respuesta(r["respuesta"], r["cita"], fuentes)
+        if not ok:
+            return _derivar(estado, motivo)
+        r = {**r, "pagina": pagina_de_cita(r["cita"], paginas, r.get("pagina"))}
     fuente = estado["resultados"][fuente_n - 1]
     pagina = r.get("pagina")
     mensaje = (
@@ -88,7 +105,8 @@ def nodo_verificar(estado: EstadoConsulta) -> dict:
         f"{f', página {pagina}' if pagina else ''}.\n"
         f"Cita: «{r['cita']}»"
     )
-    return {**_cierre(estado), "verificada": True, "derivada": False, "motivo": motivo, "mensaje": mensaje, "fuente": fuente}
+    return {**_cierre(estado), "respuesta": r, "verificada": True, "derivada": False, "motivo": motivo,
+            "mensaje": mensaje, "fuente": fuente}
 
 
 def nodo_derivar(estado: EstadoConsulta) -> dict:
@@ -103,7 +121,7 @@ def _derivar(estado: EstadoConsulta, motivo: str) -> dict:
 def _cierre(estado: EstadoConsulta) -> dict:
     contador: Contador = estado.get("_contador") or Contador()
     t0 = estado.get("_t0") or time.perf_counter()
-    return {"costo": contador.resumen(), "segundos": round(time.perf_counter() - t0, 2)}
+    return {"costo": contador.resumen(), "_costo_usd": contador.costo_total(), "segundos": round(time.perf_counter() - t0, 2)}
 
 
 def construir_grafo():
@@ -122,18 +140,19 @@ def construir_grafo():
 
 def preguntar(
     pregunta: str, k: int = 3, metodo_busqueda: str = "tsvector", sin_persistir: bool = False, origen: str = "cli",
-    consorcio_id: str | None = None,
+    consorcio_id: str | None = None, usuario_id: int | None = None, validar_respuesta: bool = False,
 ) -> EstadoConsulta:
-    """Punto de entrada: responde una pregunta con los documentos del consorcio, la traza en MLflow y la
-    guarda en `consultas`."""
+    """Punto de entrada: responde una pregunta con los documentos del consorcio (obligatorio), la traza en
+    MLflow y la guarda en `consultas`, con el usuario si se conoce."""
+    from ..almacen.postgres import exigir_consorcio
     from ..observabilidad import trazar_corrida
 
+    consorcio_id = exigir_consorcio(consorcio_id)
     grafo = construir_grafo()
-    consorcio_id = consorcio_id or config.consorcio_por_defecto
     etiquetas = {"metodo_busqueda": metodo_busqueda, "k": k, "origen": origen, "consorcio": consorcio_id}
     with trazar_corrida("consulta", etiquetas) as traza:
         final = grafo.invoke({"pregunta": pregunta, "k": k, "metodo_busqueda": metodo_busqueda,
-                              "consorcio_id": consorcio_id})
+                              "consorcio_id": consorcio_id, "validar_respuesta": validar_respuesta})
         costo = final.get("costo", {})
         traza.registrar_metricas(
             {"derivada": str(final.get("derivada")), "verificada": str(final.get("verificada"))},
@@ -161,6 +180,7 @@ def preguntar(
                 "modelo": config.modelo, "skill_version": version_skill("consulta"),
                 "tokens_entrada": costo.get("tokens_entrada", 0), "tokens_salida": costo.get("tokens_salida", 0),
                 "costo_usd": costo.get("costo_usd"), "segundos": final.get("segundos", 0.0), "origen": origen,
+                "usuario_id": usuario_id,
             }
         )
     return final

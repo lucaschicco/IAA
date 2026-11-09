@@ -1,5 +1,5 @@
 """Tests del pipeline de ingesta. Corren sin claves (LLM_PROVIDER=fake) y sin bases
-de datos (sin_persistir=True). Los que necesitan Postgres/Neo4j se saltean si no
+de datos (sin_persistir=True). Los que necesitan Postgres se saltean si no
 hay conexión."""
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def test_ingesta_completa_con_modelo_fake(tmp_path, monkeypatch):
     from consorcio import config as cfg
 
     monkeypatch.setattr(cfg.config, "dir_procesados", tmp_path)
-    final = ingestar_pdf(str(PDF_TEXTO), sin_persistir=True)
+    final = ingestar_pdf(str(PDF_TEXTO), sin_persistir=True, consorcio_id="prueba")
     assert final["clasificacion"]["metodo"] == "texto"
     assert len(final["paginas"]) == final["clasificacion"]["total_paginas"]
     assert final["costo"]["llamadas"] >= 1

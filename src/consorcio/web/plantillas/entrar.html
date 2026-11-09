@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar{% endblock %}
+{% block contenido %}
+<h1>Entrar</h1>
+<p class="nota">Modo desarrollo: solo usuarios de demostración.</p>
+{% if usuarios %}
+<form method="post" action="/entrar" class="pila elecciones">
+  {% include "_csrf.html" %}
+  {% for usuario in usuarios %}
+  <button type="submit" name="sujeto" value="{{ usuario.sujeto_externo }}">{{ usuario.nombre }}</button>
+  {% endfor %}
+</form>
+{% else %}
+<p class="aviso">No hay usuarios de demostración. Correr <code>consorcio sembrar-demo</code>.</p>
+{% endif %}
+{% endblock %}

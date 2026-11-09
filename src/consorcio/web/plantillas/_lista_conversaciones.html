@@ -1,0 +1,7 @@
+{% import "_iconos.html" as i %}
+<div id="lista-conversaciones" class="sub"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <a href="/chat" class="sub-item sub-nuevo"{% if not conversacion_id %} aria-current="true"{% endif %}>{{ i.icono("nuevo") }}<span>Nueva conversación</span></a>
+  {% for c in conversaciones %}
+  <a href="/chat?conversacion={{ c.id }}" class="sub-item"{% if c.id == conversacion_id %} aria-current="true"{% endif %}>{{ i.icono("hoja", "tono-" ~ (loop.index0 % 3)) }}<span>{{ c.actualizada_en.strftime("%d/%m %H:%M") }}</span></a>
+  {% endfor %}
+</div>

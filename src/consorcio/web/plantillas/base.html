@@ -1,0 +1,60 @@
+{% import "_iconos.html" as i %}
+{% macro item(ruta, rotulo, icono, actual, aviso=0) %}
+<a href="{{ ruta }}" class="item" title="{{ rotulo }}"{% if actual == ruta %} aria-current="page"{% endif %}>{{ i.icono(icono) }}<span class="rotulo">{{ rotulo }}</span>{% if aviso %}<span class="aviso-numero">{{ aviso }}</span>{% endif %}</a>
+{% endmacro %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Los errores también se muestran; sin esto htmx los descarta en silencio #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":true}]}'>
+  <title>{% block titulo %}Consorcio{% endblock %}</title>
+  <link rel="stylesheet" href="/estaticos/web.css">
+  <script src="/estaticos/htmx.min.js" defer></script>
+  {% block cabeza %}{% endblock %}
+</head>
+<body>
+  {% if sesion %}
+  {% set actual = request.url.path %}
+  {# Sin scripts propios: esta casilla abre y cierra el menú desde el CSS. Escritorio: lo reduce a íconos. Celular: lo despliega. #}
+  <input type="checkbox" id="menu" class="menu-alternar" aria-label="Mostrar u ocultar el menú">
+  <aside class="lateral" aria-label="Menú principal">
+    <a href="/consorcios" class="marca">{{ i.icono("marca") }}<span class="rotulo">Consorcio</span></a>
+    <nav class="menu-principal">
+      {% if identidad %}
+      {{ item("/chat", "Chat", "chat", actual) }}
+      {% block sub_chat %}{% endblock %}
+      {{ item("/documentos", "Documentos", "documentos", actual) }}
+      {{ item("/mis-solicitudes", "Mis solicitudes", "solicitudes", actual) }}
+      {% if identidad.rol == "administrador" %}{{ item("/bandeja", "Bandeja", "bandeja", actual, por_atender) }}{% endif %}
+      {% endif %}
+      {{ item("/consorcios", "Consorcios", "consorcios", actual) }}
+      {% if plataforma %}{{ item("/crm", "CRM", "crm", actual) }}{% endif %}
+      {% block sub_crm %}{% endblock %}
+    </nav>
+    <form method="post" action="/salir" class="menu-pie">
+      {% include "_csrf.html" %}
+      <button type="submit" class="item" title="Salir">{{ i.icono("salir") }}<span class="rotulo">Salir</span></button>
+    </form>
+  </aside>
+  <label for="menu" class="velo" aria-hidden="true"></label>
+  <div class="area">
+    <header class="barra">
+      <label for="menu" class="boton-menu" aria-hidden="true">{{ i.icono("menu") }}<span>Menú</span></label>
+      <div class="quien">
+        {% if consorcio %}<span class="contexto">{{ consorcio }} · {{ identidad.rol }}</span>
+        {% elif plataforma %}<span class="contexto-plataforma">Equipo de plataforma</span>{% endif %}
+        <span class="avatar">{{ i.icono("usuario") }}</span>
+      </div>
+    </header>
+    <main class="{% block clase_main %}pagina{% endblock %}">{% block contenido %}{% endblock %}</main>
+  </div>
+  {% else %}
+  <main class="suelta">
+    <div class="suelta-marca">{{ i.icono("marca") }}<span>Consorcio</span></div>
+    <div class="tarjeta suelta-tarjeta">{{ self.contenido() }}</div>
+  </main>
+  {% endif %}
+</body>
+</html>

@@ -6,18 +6,27 @@ así `enmascarado()` puede servir para generar la muestra sanitizada del repo.
 """
 from __future__ import annotations
 
+import hashlib
+import logging
+import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
+    SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     select,
     text,
@@ -28,13 +37,17 @@ from ..config import config
 from ..ingesta.esquemas import DocumentoExtraido
 from ..texto import consorcio_de_chat_id, id_documento
 
+log = logging.getLogger("consorcio.postgres")
+
 _engine = None
 
 
 def engine():
+    """Con tope de conexión: el default de psycopg son 130 s, y el libro de gastos y el tope no pueden
+    colgar una respuesta o una corrida solo de disco si Postgres no está."""
     global _engine
     if _engine is None:
-        _engine = create_engine(config.postgres_url, pool_pre_ping=True)
+        _engine = create_engine(config.postgres_url, pool_pre_ping=True, connect_args={"connect_timeout": 5})
     return _engine
 
 
@@ -44,6 +57,14 @@ class Base(DeclarativeBase):
 
 def _ahora() -> datetime:
     return datetime.now(UTC)
+
+
+def exigir_consorcio(consorcio_id: str | None) -> str:
+    """Toda operación sobre datos de un consorcio lo recibe explícito: acá no hay valor por defecto.
+    Solo la CLI y la evaluación resuelven `CONSORCIO_POR_DEFECTO`, y lo hacen a la vista."""
+    if not consorcio_id:
+        raise ValueError("falta consorcio_id: hay que indicar sobre qué consorcio se opera")
+    return consorcio_id
 
 
 class Consorcio(Base):
@@ -75,7 +96,7 @@ class Documento(Base):
     ruta: Mapped[str] = mapped_column(Text)
     tipo_documento: Mapped[str] = mapped_column(String(50))
     titulo: Mapped[str] = mapped_column(Text)
-    fecha_documento: Mapped[str | None] = mapped_column(String(40))
+    fecha_documento: Mapped[str | None] = mapped_column(Text)  # tal como la devolvió el modelo
     consorcio: Mapped[str | None] = mapped_column(Text)  # nombre del consorcio tal como lo leyó el modelo
     resumen: Mapped[str] = mapped_column(Text)
     total_paginas: Mapped[int] = mapped_column(Integer)
@@ -89,6 +110,8 @@ class Documento(Base):
     # False: el documento queda guardado pero el buscador de consultas no lo usa
     # (p. ej. el contrato Cabrera, que es de otro edificio y se ingestó para evaluar OCR)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    sha256: Mapped[str | None] = mapped_column(String(64))  # del archivo; NULL en documentos históricos
+    crudo_clave: Mapped[str | None] = mapped_column(Text)  # clave del PDF en el bucket; NULL si no se subió
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
 
     paginas: Mapped[list[Pagina]] = relationship(cascade="all, delete-orphan")
@@ -237,9 +260,9 @@ class LlamadaModelo(Base):
 class Liquidacion(Base):
     __tablename__ = "liquidaciones"
     documento_id: Mapped[str] = mapped_column(ForeignKey("documentos.id"), primary_key=True)
-    periodo: Mapped[str] = mapped_column(String(7))  # AAAA-MM
-    primer_vencimiento: Mapped[str | None] = mapped_column(String(20))
-    segundo_vencimiento: Mapped[str | None] = mapped_column(String(20))
+    periodo: Mapped[str] = mapped_column(Text)  # AAAA-MM; si el modelo no lo normalizó, lo que devolvió
+    primer_vencimiento: Mapped[str | None] = mapped_column(Text)
+    segundo_vencimiento: Mapped[str | None] = mapped_column(Text)
     consorcio: Mapped[str | None] = mapped_column(Text)
     administracion: Mapped[str | None] = mapped_column(Text)
     total_gastos: Mapped[float | None] = mapped_column(Float)
@@ -319,15 +342,285 @@ class Consulta(Base):
     tokens_salida: Mapped[int] = mapped_column(Integer, default=0)
     costo_usd: Mapped[float | None] = mapped_column(Float)
     segundos: Mapped[float] = mapped_column(Float)
-    origen: Mapped[str] = mapped_column(String(20), default="cli")  # cli | evaluacion | telegram
+    origen: Mapped[str] = mapped_column(String(20), default="cli")  # cli | evaluacion | telegram | web
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))  # None: sin identidad (CLI, Telegram)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
+# ---- Usuarios (ver identidad.py). El login queda afuera: solo entrega `sujeto_externo`.
+
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    __table_args__ = (UniqueConstraint("sujeto_externo", name="uq_usuarios_sujeto_externo"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sujeto_externo: Mapped[str] = mapped_column(Text)  # identificador que entrega el login
+    nombre: Mapped[str | None] = mapped_column(Text)
+    plataforma: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))  # equipo: ve el CRM
+    ultima_actividad: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Membresia(Base):
+    """Qué rol tiene un usuario en un consorcio. Sin membresía no hay acceso a ese consorcio."""
+
+    __tablename__ = "membresias"
+    __table_args__ = (
+        UniqueConstraint("usuario_id", "consorcio_id", name="uq_membresias_usuario_consorcio"),
+        CheckConstraint("rol IN ('administrador', 'propietario')", name="ck_membresias_rol"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    rol: Mapped[str] = mapped_column(String(20))  # administrador | propietario
+    unidades: Mapped[list[MembresiaUnidad]] = relationship(cascade="all, delete-orphan", passive_deletes=True)
+
+
+class MembresiaUnidad(Base):
+    __tablename__ = "membresia_unidades"
+    __table_args__ = (UniqueConstraint("membresia_id", "uf", name="uq_membresia_unidades_membresia_uf"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    membresia_id: Mapped[int] = mapped_column(ForeignKey("membresias.id", ondelete="CASCADE"))
+    uf: Mapped[int] = mapped_column(Integer)
+
+
+# ---- Agente (ver agente/). `turnos` no guarda texto: es lo que lee el CRM. El texto vive en `mensajes`,
+# que solo usan la memoria y la pantalla del chat, y en `solicitudes`, que lee la administración.
+
+
+class Conversacion(Base):
+    __tablename__ = "conversaciones"
+    __table_args__ = (Index("ix_conversaciones_usuario_consorcio", "usuario_id", "consorcio_id"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # uuid4 hex
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+    actualizada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
+class Mensaje(Base):
+    __tablename__ = "mensajes"
+    __table_args__ = (
+        CheckConstraint("rol IN ('usuario', 'asistente')", name="ck_mensajes_rol"),
+        Index("ix_mensajes_conversacion_id", "conversacion_id", "id"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversacion_id: Mapped[str] = mapped_column(ForeignKey("conversaciones.id", ondelete="CASCADE"))
+    rol: Mapped[str] = mapped_column(String(20))
+    texto: Mapped[str] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
+class Solicitud(Base):
+    """Lo que espera a un humano: derivaciones y reclamos. `titulo` y `detalle` quedan como los propuso
+    el modelo; lo que escribe la administración va a `*_final`, para medir el efecto de editar."""
+
+    __tablename__ = "solicitudes"
+    __table_args__ = (
+        CheckConstraint("tipo IN ('derivacion', 'reclamo')", name="ck_solicitudes_tipo"),
+        CheckConstraint(
+            "(tipo = 'derivacion' AND estado IN ('pendiente', 'resuelta')) OR "
+            "(tipo = 'reclamo' AND estado IN ('pendiente', 'aprobada', 'editada', 'rechazada'))",
+            name="ck_solicitudes_tipo_estado",
+        ),
+        CheckConstraint(
+            "motivo IN ('pedido_usuario', 'sin_respaldo', 'cita_no_verificada', 'router_invalido', "
+            "'error_funcionalidad', 'reclamo')",
+            name="ck_solicitudes_motivo",
+        ),
+        Index("ix_solicitudes_consorcio_estado", "consorcio_id", "estado"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tipo: Mapped[str] = mapped_column(String(20))
+    estado: Mapped[str] = mapped_column(String(20), default="pendiente", server_default="pendiente")
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    autor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    motivo: Mapped[str] = mapped_column(String(30))
+    mensaje: Mapped[str] = mapped_column(Text)  # original del usuario
+    titulo: Mapped[str] = mapped_column(Text)
+    detalle: Mapped[str] = mapped_column(Text)
+    unidad: Mapped[str | None] = mapped_column(String(20))
+    titulo_final: Mapped[str | None] = mapped_column(Text)
+    detalle_final: Mapped[str | None] = mapped_column(Text)
+    respuesta: Mapped[str | None] = mapped_column(Text)
+    resuelta_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+    resuelta_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Turno(Base):
+    """Una salida de `atender`. Sin columnas de texto libre: `error` es solo el nombre de la excepción."""
+
+    __tablename__ = "turnos"
+    __table_args__ = (
+        CheckConstraint(
+            "resultado IN ('respondida', 'sin_datos', 'derivada', 'reclamo_pendiente', 'fuera_de_alcance', "
+            "'tope_excedido', 'mensaje_invalido', 'conversacion_invalida', 'error')",
+            name="ck_turnos_resultado",
+        ),
+        CheckConstraint("feedback IN (-1, 1)", name="ck_turnos_feedback"),
+        Index("ix_turnos_consorcio_creado", "consorcio_id", "creado_en"),
+        Index("ix_turnos_creado_en", "creado_en"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    rol: Mapped[str] = mapped_column(String(20))
+    canal: Mapped[str] = mapped_column(String(20))  # web | cli | telegram
+    origen: Mapped[str] = mapped_column(String(20))  # usuario | evaluacion
+    conversacion_id: Mapped[str | None] = mapped_column(ForeignKey("conversaciones.id"))
+    intencion: Mapped[str | None] = mapped_column(String(30))  # NULL: el router falló
+    funcionalidad: Mapped[str | None] = mapped_column(String(30))
+    resultado: Mapped[str] = mapped_column(String(30))
+    # Ids de las secciones enviadas al modelo. Sin FK: la reingesta las recrea
+    secciones_usadas: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'"))
+    seccion_citada: Mapped[int | None] = mapped_column(Integer)
+    consulta_id: Mapped[int | None] = mapped_column(ForeignKey("consultas.id"))
+    solicitud_id: Mapped[int | None] = mapped_column(ForeignKey("solicitudes.id"))
+    tokens_entrada: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    tokens_salida: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    costo_usd: Mapped[float | None] = mapped_column(Float)
+    segundos: Mapped[float] = mapped_column(Float)
+    modelo: Mapped[str] = mapped_column(String(80))
+    skill_version: Mapped[str] = mapped_column(String(20))
+    feedback: Mapped[int | None] = mapped_column(SmallInteger)
+    error: Mapped[str | None] = mapped_column(String(60))
+    mlflow_traza_id: Mapped[str | None] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
+class GastoModelo(Base):
+    """Libro de gastos, solo-inserción: es lo que suma el tope mensual (ver tope.py). No cuelga de
+    `documentos` porque `--forzar` y el reemplazo de período borrarían lo ya pagado.
+    `costo_usd` NULL: sin precio o sin uso informado."""
+
+    __tablename__ = "gastos_modelo"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consorcio_id: Mapped[str | None] = mapped_column(String(60))  # sin FK: es un registro, no una relación
+    nodo: Mapped[str] = mapped_column(String(40))
+    modelo: Mapped[str] = mapped_column(String(80))
+    tokens_entrada: Mapped[int] = mapped_column(Integer)
+    tokens_salida: Mapped[int] = mapped_column(Integer)
+    costo_usd: Mapped[float | None] = mapped_column(Float)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, index=True)
+
+
+class Carga(Base):
+    """Cómo terminó cada `ingestar_pdf` que tocó la base, solo-inserción: de acá salen los duplicados evitados."""
+
+    __tablename__ = "cargas"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consorcio_id: Mapped[str] = mapped_column(String(60))
+    usuario_id: Mapped[int | None] = mapped_column(Integer)
+    estado: Mapped[str] = mapped_column(String(30))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, index=True)
 
 
 # ------------------------------------------------------------------ operaciones
 
 
+_COMANDO_ACTUALIZAR = "`consorcio actualizar-base` (`make db-actualizar`)"
+
+
 def crear_tablas() -> None:
-    Base.metadata.create_all(engine())
+    """Deja el esquema listo o frena: una base vacía sube a head; una con tablas se migra a mano.
+
+    Nunca usa `create_all`: en una base existente crearía `usuarios` y rompería el `upgrade` posterior.
+    Sin caché: mira la base en cada llamada. El candado evita que dos procesos migren una base vacía
+    a la vez."""
+    with engine().connect() as con:
+        version = _version_del_esquema(con)
+        if version is None:
+            if con.scalar(text("SELECT to_regclass('documentos') IS NOT NULL")):
+                raise RuntimeError(
+                    "La base tiene tablas pero no está marcada para Alembic. "
+                    f"Respaldarla y correr: {_COMANDO_ACTUALIZAR}."
+                )
+            con.execute(text("SELECT pg_advisory_xact_lock(hashtext('consorcio:migraciones'))"))
+            if _version_del_esquema(con) is None:  # otro proceso pudo migrar mientras se esperaba
+                _subir_a_head()
+            return
+    if version != _revision_head():
+        raise RuntimeError(
+            f"La base está en la revisión {version} y el código espera {_revision_head()}. "
+            f"Respaldarla y correr: {_COMANDO_ACTUALIZAR}."
+        )
+
+
+def actualizar_esquema() -> str | None:
+    """Lleva la base a head desde cualquier punto de partida: es lo que corre `make db-actualizar`.
+
+    Decide la marca mirando las tablas, porque el paso correcto depende de la base: un volcado reciente ya
+    trae `alembic_version` y marcarlo en `0001_base` lo haría fallar con `DuplicateTable`. Devuelve la
+    revisión que tuvo que marcar, o None. Nunca baja la versión de una base sana."""
+    from alembic import command
+
+    with engine().connect() as con:
+        con.execute(text("SELECT pg_advisory_xact_lock(hashtext('consorcio:migraciones'))"))
+        marca = _marca_necesaria(con)
+        if marca:
+            log.warning("la base se marca en la revisión %s", marca)
+            command.stamp(_config_alembic(), marca)
+        _subir_a_head()
+    return marca
+
+
+def _marca_necesaria(con) -> str | None:
+    """Revisión que demuestran las tablas, si la base no tiene versión o quedó marcada en `0001_base` por
+    un stamp de más. En cualquier otra versión manda lo que dice `alembic_version`."""
+    if _version_del_esquema(con) not in (None, "0001_base"):
+        return None
+    if not con.scalar(text("SELECT to_regclass('documentos') IS NOT NULL")):
+        return None  # base vacía: el upgrade la crea de cero
+    if not _tiene_columna(con, "documentos", "consorcio_id"):
+        raise RuntimeError("La base es anterior al 26/10/2026. Respaldarla, correr `consorcio migrar` y repetir.")
+    if _tiene_columna(con, "documentos", "sha256"):
+        return "0003_crudos"
+    if con.scalar(text("SELECT to_regclass('usuarios') IS NOT NULL")):
+        return "0002_usuarios"
+    return "0001_base"
+
+
+def _tiene_columna(con, tabla: str, columna: str) -> bool:
+    return bool(con.scalar(
+        text("SELECT count(*) FROM information_schema.columns WHERE table_name = :t AND column_name = :c"),
+        {"t": tabla, "c": columna},
+    ))
+
+
+def _version_del_esquema(con) -> str | None:
+    if not con.scalar(text("SELECT to_regclass('alembic_version') IS NOT NULL")):
+        return None
+    return con.scalar(text("SELECT version_num FROM alembic_version"))
+
+
+def _config_alembic():
+    from alembic.config import Config as ConfigAlembic
+
+    from ..config import RAIZ_REPO
+
+    cfg = ConfigAlembic(str(RAIZ_REPO / "alembic.ini"))
+    cfg.set_main_option("script_location", str(RAIZ_REPO / "migraciones").replace("%", "%%"))
+    cfg.attributes["en_proceso"] = True  # env.py no toca el logging de la app
+    return cfg
+
+
+_head = None
+
+
+def _revision_head() -> str:
+    """La revisión que espera el código. Sale de los archivos, no de la base: no cambia en el proceso."""
+    global _head
+    if _head is None:
+        from alembic.script import ScriptDirectory
+
+        _head = ScriptDirectory.from_config(_config_alembic()).get_current_head()
+    return _head
+
+
+def _subir_a_head() -> None:
+    from alembic import command
+
+    command.upgrade(_config_alembic(), "head")
 
 
 def guardar_documento(
@@ -343,16 +636,27 @@ def guardar_documento(
     segundos_total: float,
     liquidacion: dict | None = None,
     consorcio_id: str | None = None,
+    sha256: str | None = None,
+    crudo_clave: str | None = None,
+    reemplazar_periodo: bool = False,
 ) -> dict:
-    """Inserta (o reemplaza) el documento y todo lo extraído. Idempotente por consorcio + hash."""
+    """Inserta (o reemplaza) el documento y todo lo extraído. Idempotente por consorcio + hash.
+
+    Una sola liquidación por consorcio y período: este es el control autoritativo (el de la ingesta
+    evita gastar de más, pero no cubre dos PDF distintos en paralelo). Si otro documento ya tiene el
+    período, lanza `PeriodoDuplicado`; con `reemplazar_periodo` lo borra en la misma transacción y lo
+    informa en `reemplazado`, para que quien llama borre su crudo."""
     crear_tablas()
     consorcio_id = consorcio_id or documento_id.split(":", 1)[0]
-    asegurar_consorcio(consorcio_id)
+    _asegurar_consorcio_en_paralelo(consorcio_id)
     m = doc.metadatos
     with Session(engine()) as s:
+        reemplazado = _resolver_periodo(s, consorcio_id, documento_id, liquidacion, reemplazar_periodo)
         previo = s.get(Documento, documento_id)
         # Reingestar no debe reactivar un documento sacado del buscador (p. ej. Cabrera, 26/10)
         activo = previo.activo if previo else True
+        # La clave depende solo del archivo: una reingesta sin bucket no pierde el crudo ya subido
+        crudo_clave = crudo_clave or (previo.crudo_clave if previo else None)
         if previo:
             s.delete(previo)
             s.flush()
@@ -374,6 +678,8 @@ def guardar_documento(
             costo=costo,
             segundos_total=segundos_total,
             activo=activo,
+            sha256=sha256,
+            crudo_clave=crudo_clave,
         )
         for p in paginas:
             d.paginas.append(
@@ -423,6 +729,7 @@ def guardar_documento(
         return {
             "liquidacion": filas_liq,
             "documento_id": documento_id,
+            "reemplazado": reemplazado,
             "filas": {
                 "paginas": len(d.paginas), "personas": len(d.personas),
                 "organizaciones": len(d.organizaciones), "direcciones": len(d.direcciones),
@@ -441,39 +748,156 @@ def func_count():
     return func.count()
 
 
-def paginas_guardadas(documento_id: str) -> list[dict]:
-    """Páginas de la última corrida de un documento (por hash), como las produce la ingesta."""
+def _asegurar_consorcio_en_paralelo(consorcio_id: str) -> None:
+    """Dos ingestas de PDF distintos pueden crear el mismo consorcio a la vez: si otra lo creó entre el
+    chequeo y el insert de `asegurar_consorcio`, el consorcio ya está y no hay nada que hacer."""
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        asegurar_consorcio(consorcio_id)
+    except IntegrityError:
+        log.debug("el consorcio %s lo creó otra ingesta en paralelo", consorcio_id)
+
+
+class PeriodoDuplicado(Exception):
+    """Otro documento del consorcio ya tiene la liquidación de ese período."""
+
+    def __init__(self, existente: dict):
+        super().__init__(f"el período {existente.get('periodo')} ya está en {existente.get('id')}")
+        self.existente = existente
+
+
+def periodo_valido(periodo: str | None) -> bool:
+    """Solo un período AAAA-MM entra al control de duplicados: lo que el modelo no normalizó no bloquea."""
+    return bool(periodo) and re.fullmatch(r"\d{4}-\d{2}", periodo) is not None
+
+
+def _clave_candado(texto: str) -> int:
+    """Clave bigint de un advisory lock de Postgres."""
+    return int.from_bytes(hashlib.sha256(texto.encode()).digest()[:8], "big", signed=True)
+
+
+@contextmanager
+def candado_ingesta(consorcio_id: str, sha256: str) -> Iterator[bool]:
+    """Candado de una ingesta: rinde True si se obtuvo y False si otra carga del mismo PDF en el mismo
+    consorcio está en curso. La clave incluye el consorcio: si no, `en_proceso` revelaría una carga
+    en otro consorcio. Va en una conexión propia y ociosa, porque un advisory lock de sesión vive con
+    ella, y se libera antes de devolverla al pool: el pool no resetea estos candados."""
+    clave = _clave_candado(f"ingesta:{consorcio_id}:{sha256}")
+    con = engine().connect().execution_options(isolation_level="AUTOCOMMIT")
+    try:
+        obtenido = bool(con.scalar(text("SELECT pg_try_advisory_lock(CAST(:k AS bigint))"), {"k": clave}))
+        try:
+            yield obtenido
+        finally:
+            if obtenido:
+                try:
+                    con.scalar(text("SELECT pg_advisory_unlock(CAST(:k AS bigint))"), {"k": clave})
+                except Exception as e:  # conexión caída: al descartarla, Postgres suelta el candado
+                    log.warning("no se pudo liberar el candado de ingesta (%s); se descarta la conexión", e)
+                    con.invalidate()
+    finally:
+        con.close()
+
+
+def _ficha_documento(d: Documento, **extra) -> dict:
+    """Lo que se le informa a quien carga un duplicado. Sirve para JSON: `creado_en` va como texto."""
+    return {"id": d.id, "nombre_archivo": d.nombre_archivo, "titulo": d.titulo,
+            "creado_en": d.creado_en.isoformat(timespec="seconds") if d.creado_en else None, **extra}
+
+
+def buscar_documento(documento_id: str, consorcio_id: str | None = None) -> dict | None:
+    """Ficha de un documento del consorcio por id (`<consorcio>:<hash16>`): vale también para las filas
+    históricas, con `sha256` NULL. Un id de otro consorcio se trata como inexistente."""
+    cid = exigir_consorcio(consorcio_id)
+    crear_tablas()
     with Session(engine()) as s:
-        filas = s.query(Pagina).filter(Pagina.documento_id == documento_id).order_by(Pagina.numero).all()
+        d = s.get(Documento, documento_id)
+        return _ficha_documento(d) if d and d.consorcio_id == cid else None
+
+
+def _documentos_del_periodo(s: Session, consorcio_id: str, periodo: str, excluir_id: str) -> list[Documento]:
+    return list(s.scalars(
+        select(Documento).join(Liquidacion)
+        .where(Documento.consorcio_id == consorcio_id, Liquidacion.periodo == periodo, Documento.id != excluir_id)
+        .order_by(Documento.creado_en.desc())
+    ).all())
+
+
+def documento_del_periodo(consorcio_id: str, periodo: str, excluir_id: str) -> dict | None:
+    """Otro documento del consorcio con la liquidación de ese período, si lo hay."""
+    crear_tablas()
+    with Session(engine()) as s:
+        otros = _documentos_del_periodo(s, consorcio_id, periodo, excluir_id)
+        return _ficha_documento(otros[0], periodo=periodo) if otros else None
+
+
+def _resolver_periodo(
+    s: Session, consorcio_id: str, documento_id: str, liquidacion: dict | None, reemplazar: bool
+) -> dict | None:
+    """Dentro de la transacción del guardado: serializa por consorcio + período y aplica la regla de una
+    liquidación por período. El candado se libera solo al terminar la transacción. `reemplazado` lleva
+    `otros` por si una base anterior a esta regla ya tenía más de un documento del período."""
+    periodo = (liquidacion or {}).get("periodo")
+    if not periodo_valido(periodo):
+        return None
+    clave = _clave_candado(f"periodo:{consorcio_id}:{periodo}")
+    s.execute(text("SELECT pg_advisory_xact_lock(CAST(:k AS bigint))"), {"k": clave})
+    otros = _documentos_del_periodo(s, consorcio_id, periodo, documento_id)
+    if not otros:
+        return None
+    if not reemplazar:
+        raise PeriodoDuplicado(_ficha_documento(otros[0], periodo=periodo))
+    fichas = [{"id": d.id, "crudo_clave": d.crudo_clave} for d in otros]
+    for d in otros:
+        s.delete(d)
+    s.flush()
+    return {**fichas[0], "otros": fichas[1:]}
+
+
+def paginas_guardadas(documento_id: str, consorcio_id: str | None = None) -> list[dict]:
+    """Páginas de la última corrida de un documento del consorcio, como las produce la ingesta."""
+    cid = exigir_consorcio(consorcio_id)
+    with Session(engine()) as s:
+        filas = s.scalars(
+            select(Pagina).join(Documento, Documento.id == Pagina.documento_id)
+            .where(Pagina.documento_id == documento_id, Documento.consorcio_id == cid).order_by(Pagina.numero)
+        ).all()
         return [{"numero": p.numero, "texto": p.texto, "metodo": p.metodo, "confianza": p.confianza} for p in filas]
 
 
 def listar_documentos(consorcio_id: str | None = None) -> list[dict]:
-    """Documentos de un consorcio (None = todos, con su consorcio en cada fila)."""
+    """Documentos de un consorcio."""
+    cid = exigir_consorcio(consorcio_id)
     crear_tablas()
     with Session(engine()) as s:
-        q = select(Documento).order_by(Documento.creado_en.desc())
-        if consorcio_id:
-            q = q.where(Documento.consorcio_id == consorcio_id)
-        filas = s.scalars(q).all()
-        return [
-            {
-                "id": d.id, "consorcio": d.consorcio_id, "archivo": d.nombre_archivo, "tipo": d.tipo_documento, "titulo": d.titulo,
-                "fecha": d.fecha_documento, "paginas": d.total_paginas, "metodo": d.metodo_extraccion,
-                "estado": d.estado, "activo": d.activo, "costo_usd": (d.costo or {}).get("costo_usd"),
-            }
-            for d in filas
-        ]
+        q = select(Documento).where(Documento.consorcio_id == cid).order_by(Documento.creado_en.desc())
+        return [_fila_documento(d) for d in s.scalars(q).all()]
+
+
+def listar_documentos_de_todos_los_consorcios() -> list[dict]:
+    """Cruza consorcios a propósito (con el suyo en cada fila): solo para la CLI de administración."""
+    crear_tablas()
+    with Session(engine()) as s:
+        return [_fila_documento(d) for d in s.scalars(select(Documento).order_by(Documento.creado_en.desc())).all()]
+
+
+def _fila_documento(d: Documento) -> dict:
+    return {
+        "id": d.id, "consorcio": d.consorcio_id, "archivo": d.nombre_archivo, "tipo": d.tipo_documento, "titulo": d.titulo,
+        "fecha": d.fecha_documento, "paginas": d.total_paginas, "metodo": d.metodo_extraccion,
+        "estado": d.estado, "activo": d.activo, "costo_usd": (d.costo or {}).get("costo_usd"),
+    }
 
 
 def activar_documento(id_o_nombre: str, activo: bool, consorcio_id: str | None = None) -> list[str]:
-    """Activa o desactiva para el buscador los documentos cuyo id o nombre contenga el texto."""
+    """Activa o desactiva para el buscador los documentos del consorcio cuyo id o nombre contenga el texto."""
+    cid = exigir_consorcio(consorcio_id)
     with Session(engine()) as s:
         q = select(Documento).where(
-            (Documento.id == id_o_nombre) | Documento.nombre_archivo.ilike(f"%{id_o_nombre}%")
+            (Documento.id == id_o_nombre) | Documento.nombre_archivo.ilike(f"%{id_o_nombre}%"),
+            Documento.consorcio_id == cid,
         )
-        if consorcio_id:
-            q = q.where(Documento.consorcio_id == consorcio_id)
         docs = s.scalars(q).all()
         for d in docs:
             d.activo = activo
@@ -518,8 +942,8 @@ def consultar_expensas(
     que: resumen | rubros | gastos | unidades.  periodo: AAAA-MM.
     unidad: piso-depto ("5-D", "COCH-16") o número de UF.  texto: filtra gastos por rubro/proveedor/concepto.
     """
+    cid = exigir_consorcio(consorcio_id)
     crear_tablas()
-    cid = consorcio_id or config.consorcio_por_defecto
     with Session(engine()) as s:
         if que == "resumen":
             filas = s.scalars(
@@ -627,12 +1051,11 @@ def listar_consorcios() -> list[dict]:
         return filas
 
 
-def migrar_consorcios(por_defecto: str | None = None) -> list[dict]:
+def migrar_consorcios(por_defecto: str) -> list[dict]:
     """Migración 26/10/2026: los documentos existentes (id = hash) pasan a `<consorcio>:<hash>`.
     Idempotente. Cabrera va a su propio consorcio y vuelve a estar activo ahí; el resto, al consorcio
-    por defecto. Devuelve [{viejo, nuevo, consorcio}] para replicar el cambio de id en Neo4j."""
-    por_defecto = por_defecto or config.consorcio_por_defecto
-    crear_tablas()  # crea consorcios y chats si faltan
+    por defecto. Devuelve [{viejo, nuevo, consorcio}]."""
+    Base.metadata.create_all(engine(), tables=[Consorcio.__table__, Chat.__table__])
     hijas = ["paginas", "personas", "organizaciones", "direcciones", "eventos", "unidades", "montos",
              "secciones", "llamadas_modelo", "datos_sensibles", "liquidaciones",
              # cuelgan de liquidaciones.documento_id
@@ -670,6 +1093,13 @@ def migrar_consorcios(por_defecto: str | None = None) -> list[dict]:
         con.execute(text("UPDATE consultas SET consorcio_id = :c WHERE consorcio_id IS NULL"), {"c": por_defecto})
     # Los chequeos diferidos corren al commit; el DDL que sigue no puede ir en la misma transacción
     with engine().begin() as con:
+        # Diferirlos solo hacía falta para la transacción de arriba: los modelos y las migraciones no lo son
+        for nombre, tabla in con.execute(text(
+            "SELECT conname, conrelid::regclass FROM pg_constraint "
+            "WHERE confrelid IN ('documentos'::regclass, 'liquidaciones'::regclass) AND condeferrable"
+        )).all():
+            con.execute(text(f"ALTER TABLE {tabla} ALTER CONSTRAINT {nombre} NOT DEFERRABLE"))
+        con.execute(text("CREATE INDEX IF NOT EXISTS ix_consultas_consorcio_id ON consultas (consorcio_id)"))
         existe = con.execute(text(
             "SELECT 1 FROM pg_constraint WHERE conname = 'documentos_consorcio_id_fkey'"
         )).first()
@@ -682,12 +1112,22 @@ def migrar_consorcios(por_defecto: str | None = None) -> list[dict]:
 
 
 def listar_consultas(consorcio_id: str | None = None, origen: str | None = None, ultimas: int = 20) -> list[dict]:
-    """Últimas consultas registradas (de cualquier canal), para revisar qué se preguntó y qué se contestó."""
+    """Últimas consultas de un consorcio (de cualquier canal), para revisar qué se preguntó y qué se contestó."""
+    cid = exigir_consorcio(consorcio_id)
+    return _ultimas_consultas(Consulta.consorcio_id == cid, origen, ultimas)
+
+
+def listar_consultas_de_todos_los_consorcios(origen: str | None = None, ultimas: int = 20) -> list[dict]:
+    """Cruza consorcios a propósito (con el suyo en cada fila): solo para la CLI de administración."""
+    return _ultimas_consultas(None, origen, ultimas)
+
+
+def _ultimas_consultas(filtro, origen: str | None, ultimas: int) -> list[dict]:
     crear_tablas()
     with Session(engine()) as s:
         q = select(Consulta).order_by(Consulta.creado_en.desc()).limit(ultimas)
-        if consorcio_id:
-            q = q.where(Consulta.consorcio_id == consorcio_id)
+        if filtro is not None:
+            q = q.where(filtro)
         if origen:
             q = q.where(Consulta.origen == origen)
         return [
@@ -706,3 +1146,21 @@ def guardar_consulta(datos: dict) -> int:
         s.add(c)
         s.commit()
         return c.id
+
+
+def registrar_gasto(
+    consorcio_id: str | None, nodo: str, modelo: str, tokens_entrada: int, tokens_salida: int, costo_usd: float | None
+) -> None:
+    """Una fila del libro de gastos. Lo llama `Contador.registrar`, que decide qué hacer si falla."""
+    crear_tablas()
+    with Session(engine()) as s:
+        s.add(GastoModelo(consorcio_id=consorcio_id, nodo=nodo[:40], modelo=modelo[:80], tokens_entrada=tokens_entrada,
+                          tokens_salida=tokens_salida, costo_usd=costo_usd))
+        s.commit()
+
+
+def registrar_carga(consorcio_id: str, usuario_id: int | None, estado: str) -> None:
+    crear_tablas()
+    with Session(engine()) as s:
+        s.add(Carga(consorcio_id=consorcio_id, usuario_id=usuario_id, estado=estado))
+        s.commit()

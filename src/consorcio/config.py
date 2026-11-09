@@ -67,12 +67,23 @@ class Config(BaseSettings):
     # una página transcripta, ~1.000. Sin tope, un modelo en bucle llegó a 261.000 (26/10/2026).
     max_tokens_salida: int = 16000
     max_tokens_vision: int = 4000
+    # Tope de gasto en modelos por mes calendario UTC, en USD; 0 = sin tope (ver tope.py)
+    tope_usd_mensual: float = 20.0
+    # True: el proveedor fake contesta con guion (agente/guion_fake.py) en vez de con esquemas vacíos
+    fake_guionado: bool = False
+
+    # Agente
+    memoria_mensajes: int = 6  # cuántos mensajes de la conversación ve el router
+    agente_max_mensaje: int = 2000  # caracteres
+
+    # Web. Con el selector prendido cualquiera entra como usuario demo: es el modo desarrollo.
+    web_selector_usuarios: bool = False
+    web_secreto: str = ""  # firma las cookies de sesión; obligatorio con el selector apagado
+    web_max_mb_pdf: int = 20
+    web_sesion_horas: int = 8
 
     # Bases de datos
     postgres_url: str = "postgresql+psycopg://consorcio:consorcio@localhost:5432/consorcio"
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "consorcio123"
 
     # Trazabilidad
     mlflow_tracking_uri: str = ""
@@ -81,6 +92,13 @@ class Config(BaseSettings):
     # Consorcio (base) que usan la CLI y la evaluación cuando no se indica --consorcio.
     # Cada consorcio tiene su propia base: documentos, secciones, liquidaciones y consultas.
     consorcio_por_defecto: str = "mercedes-274"
+
+    # Crudos: PDF originales en un bucket S3 (ver almacen/crudos.py). Sin S3_ENDPOINT_URL la ingesta
+    # sigue solo en local, con un warning; con endpoint, un fallo del bucket la frena.
+    s3_endpoint_url: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket: str = "consorcio-crudos"
 
     # Canales
     telegram_bot_token: str = ""

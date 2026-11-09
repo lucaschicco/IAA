@@ -3,23 +3,33 @@
 Columnas del CSV: id, particion (dev|test), pregunta, documento (fragmento del nombre
 del archivo esperado), seccion_clave (palabra o frase que tiene que aparecer en el título
 o resumen de la sección esperada), debe_derivar (si|no: preguntas que el sistema NO debe
-responder, p. ej. deuda de otra unidad), respuesta_esperada (texto libre, para revisión).
+responder, p. ej. el DNI de un vecino), respuesta_esperada (texto libre, para revisión).
 
 Mide dos cosas por separado, como pide la consigna:
 1. Retrieval: para cada método de búsqueda (tsvector = sistema, palabras = baseline),
    si la sección esperada está entre las k recuperadas (recall@k) y en qué posición (MRR).
 2. Generación (opcional, gasta tokens): cuántas preguntas se respondieron, cuántas citas
-   se verificaron y cuánto costó.
+   se verificaron y cuánto costó. Revisa la respuesta igual que el agente (`validar_respuesta`),
+   así que mide lo que ve el vecino en la web; las corridas anteriores al 02/11 no la revisaban.
+
+La corrida con modelo sobre test se guarda sola en `docs/evaluaciones/`: es lo que lee el CRM.
 """
 from __future__ import annotations
 
 import csv
+import json
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
+from ..config import RAIZ_REPO, config
 from ..texto import normalizar
 from .buscador import buscar_secciones
 
+log = logging.getLogger("consorcio.evaluar")
+
 METODOS = ("tsvector", "palabras")
+DIR_EVALUACIONES = RAIZ_REPO / "docs" / "evaluaciones"
 
 
 def leer_preguntas(ruta_csv: str, particion: str = "dev") -> list[dict]:
@@ -71,7 +81,8 @@ def evaluar_generacion(
 
     filas = []
     for q in preguntas:
-        final = preguntar(q["pregunta"], k=k, metodo_busqueda=metodo, origen="evaluacion", consorcio_id=consorcio_id)
+        final = preguntar(q["pregunta"], k=k, metodo_busqueda=metodo, origen="evaluacion", consorcio_id=consorcio_id,
+                          validar_respuesta=True)
         fuente = final.get("fuente") or {}
         filas.append(
             {
@@ -107,7 +118,6 @@ def evaluar_consultas(
     ruta_csv: str, particion: str = "dev", k: int = 3, con_modelo: bool = False, consorcio_id: str | None = None
 ) -> dict:
     """Evalúa sobre la base de un consorcio (el set de `datos/evaluacion/` es de Mercedes 274)."""
-    from ..config import config
     from ..observabilidad import trazar_corrida
 
     consorcio_id = consorcio_id or config.consorcio_por_defecto
@@ -128,3 +138,23 @@ def evaluar_consultas(
             }
         traza.registrar_metricas({"n_preguntas": str(len(preguntas))}, metricas)
     return salida
+
+
+def guardar_evaluacion(salida: dict) -> Path | None:
+    """Guarda `<fecha>-consultas-test.json` si la corrida vale para el CRM: con modelo real, sobre test y
+    sobre el consorcio del set. Una del fake o de otro consorcio mostraría como exactitud del sistema algo
+    que no lo es, y de un mismo día queda la última. Sin `detalle`, que trae preguntas y respuestas: el
+    repo es público."""
+    if salida["particion"] != "test" or "generacion" not in salida:
+        return None
+    if config.llm_provider == "fake" or salida["consorcio"] != config.consorcio_por_defecto:
+        log.warning("corrida no guardada: el CRM solo muestra las de un modelo real sobre %s", config.consorcio_por_defecto)
+        return None
+    sin_detalle = {
+        **salida, "proveedor": config.llm_provider, "modelo": config.modelo,
+        "retrieval": {k: v for k, v in salida["retrieval"].items() if k != "detalle"},
+        "generacion": {k: v for k, v in salida["generacion"].items() if k != "detalle"},
+    }
+    ruta = DIR_EVALUACIONES / f"{datetime.now(UTC).date().isoformat()}-consultas-test.json"
+    ruta.write_text(json.dumps(sin_detalle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return ruta

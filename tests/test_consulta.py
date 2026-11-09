@@ -9,7 +9,10 @@ import pytest
 os.environ["LLM_PROVIDER"] = "fake"
 os.environ["MLFLOW_TRACKING_URI"] = ""
 
-from consorcio.consulta.buscador import verificar_cita
+from consorcio.consulta import buscador
+from consorcio.consulta import grafo as grafo_consulta
+from consorcio.consulta.buscador import pagina_de_cita, verificar_cita, verificar_respuesta
+from consorcio.consulta.evaluar import evaluar_generacion
 from consorcio.consulta.grafo import construir_grafo
 from consorcio.ingesta.liquidacion import (
     GastoLiquidacion,
@@ -34,7 +37,7 @@ FILA_SIN_REDONDEO = (
 
 def test_skill_consulta_existe_y_tiene_version():
     assert "cita" in cargar_skill("responder", "consulta").lower()
-    assert version_skill("consulta") == "0.1.0"
+    assert version_skill("consulta") == "0.2.0"
     assert len(cargar_skill("liquidacion")) > 100
 
 
@@ -57,6 +60,78 @@ def test_verificar_cita_exige_texto_literal():
     ok, motivo = verificar_cita("animales", paginas)
     assert not ok and "corta" in motivo
     assert verificar_cita(None, paginas) == (False, "sin cita")
+
+
+FUENTE = "Artículo 4. La multa es de $ 1.500,00 y el pago vence a los 10 días de la asamblea de propietarios."
+
+
+@pytest.mark.parametrize("respuesta", [
+    "La multa es de $ 1.500,00.", "La multa es de $ 1.500.", "Es de 1500 pesos.", "Vence a los 10 días.",
+    "Según el artículo 4, la multa vence a los 10 días de la asamblea.",
+])
+def test_respuesta_con_respaldo_pasa(respuesta):
+    assert verificar_respuesta(respuesta, "La multa es de $ 1.500,00", FUENTE)[0]
+
+
+@pytest.mark.parametrize("respuesta", [
+    "La multa es de $ 2.500,00.", "La multa es de $ 1.000.", "La multa es de 15.", "Vence a los 11 días.",
+    "Podés tener un tigre: el reglamento lo autoriza.",
+])
+def test_respuesta_sin_respaldo_no_pasa(respuesta):
+    ok, motivo = verificar_respuesta(respuesta, "La multa es de $ 1.500,00", FUENTE)
+    assert not ok and motivo.startswith("respuesta sin respaldo")
+
+
+def test_la_evaluacion_mide_lo_mismo_que_ve_el_vecino(monkeypatch):
+    pedidos: list[dict] = []
+
+    def preguntar(_pregunta, **opciones):
+        pedidos.append(opciones)
+        return {"derivada": True}
+
+    monkeypatch.setattr(grafo_consulta, "preguntar", preguntar)
+    evaluar_generacion([{"id": "1", "pregunta": "¿Se puede?", "documento": "x", "seccion_clave": ""}], consorcio_id="c")
+    assert pedidos[0]["validar_respuesta"] is True
+
+
+def test_un_miles_no_se_confunde_con_centavos():
+    assert not verificar_respuesta("Son $ 2.000.", "Son $ 2,00 por unidad", "Son $ 2,00 por unidad")[0]
+
+
+CITA_MULTA = "La multa es de $ 1.500,00"
+
+
+@pytest.mark.parametrize("respuesta", [
+    "Son $ 150.050.", "Son $ 15,05.", "Son 15 M.", "Son 15k.", "Son 15 mil pesos.", "Son USD 1.500.",
+    "La multa es de dos millones de pesos.", "La multa es de 10 pesos.",
+])
+def test_monto_que_no_esta_en_la_cita_no_pasa(respuesta):
+    assert not verificar_respuesta(respuesta, CITA_MULTA, FUENTE + " Hay 15 pesos de sello y 15,5 de otra cosa.")[0]
+
+
+def test_monto_en_letras_dentro_de_una_respuesta_larga_no_pasa():
+    fuente = "Se permite la tenencia de mascotas pequeñas en las unidades, siempre que no molesten a los vecinos."
+    respuesta = f"{fuente} La multa es de dos millones de pesos."
+    assert not verificar_respuesta(respuesta, fuente, fuente)[0]
+
+
+def test_escala_y_letras_respaldadas_pasan():
+    cita = "La cuota es de $ 15.000 o quince mil pesos, por dos cocheras."
+    for respuesta in ("La cuota es de 15 mil pesos.", "La cuota es de quince mil pesos.", "Son 2 cocheras.", "Son dos cocheras."):
+        assert verificar_respuesta(respuesta, cita, cita)[0], respuesta
+
+
+@pytest.mark.parametrize("a, b", [("150.050", "1.500,50"), ("12,5", "125"), ("15,05", "1505"), ("15,0", "150"), ("1,500", "1.500")])
+def test_numeros_distintos_no_colisionan(a, b):
+    assert buscador._numeros(a) != buscador._numeros(b)
+
+
+def test_pagina_de_cita_sale_del_texto():
+    paginas = [{"numero": 7, "texto": "Primer texto de la página."}, {"numero": 8, "texto": "La cita buscada está acá."}]
+    assert pagina_de_cita("la cita buscada", paginas, 777) == 8
+    assert pagina_de_cita("texto de la pagina. La cita", paginas, 7) == 7  # cruza páginas: vale la declarada
+    assert pagina_de_cita("texto de la pagina. La cita", paginas, 777) is None
+    assert pagina_de_cita("texto de la pagina. La cita", paginas, None) is None
 
 
 def test_parsear_prorrateo_fila_completa_y_sin_redondeo():
@@ -121,7 +196,7 @@ def test_buscador_palabras_y_tsvector_devuelven_la_misma_forma():
     from consorcio.consulta.buscador import buscar_secciones
 
     for metodo in ("tsvector", "palabras"):
-        res = buscar_secciones("cocheras", 2, metodo)
+        res = buscar_secciones("cocheras", 2, metodo, consorcio_id="prueba")
         for r in res:
             assert {"seccion_id", "documento_id", "nombre_archivo", "titulo", "resumen", "puntaje", "metodo"} <= set(r)
             assert r["metodo"] == metodo

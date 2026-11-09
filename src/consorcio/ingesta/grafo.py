@@ -1,7 +1,7 @@
 """Grafo de LangGraph de la ingesta de un PDF.
 
     START → clasificar ─┬→ extraer_texto ─────┐
-                        ├→ extraer_tesseract ─┼→ estructurar → persistir → END
+                        ├→ extraer_tesseract ─┼→ estructurar → guardar_disco → preparar_guardado → persistir → END
                         └→ extraer_vision ────┘
 
 - `clasificar` decide en código (sin modelo) y la arista condicional rutea.
@@ -9,9 +9,10 @@
   siempre se lee de la capa de texto aunque el documento sea "escaneado".
 - `extraer_tesseract` puede escalar a visión las páginas con baja confianza
   (OCR_ESCALAR_A_VISION), que es el gasto de tokens "sólo cuando hace falta".
-- `persistir` guarda la transcripción en datos/procesados/, los datos en Postgres
-  y el contexto en Neo4j. Todavía no hay revisión humana: el documento queda en
-  estado `extraido`; la bandeja de aprobación (interrupt) se agrega después.
+- `guardar_disco` escribe la transcripción en datos/procesados/ apenas termina el modelo:
+  lo ya pagado sobrevive aunque después falle el bucket o Postgres.
+- `persistir` guarda los datos en Postgres. Todavía no hay revisión humana: el documento
+  queda en estado `extraido`; la bandeja de aprobación (interrupt) se agrega después.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from ..almacen import crudos
 from ..config import config
 from ..llm import Contador
 from ..texto import hash_de, id_documento
@@ -43,8 +45,13 @@ class EstadoIngesta(TypedDict, total=False):
     metodo_forzado: Metodo | None
     paginas_rango: str | None  # p. ej. "1-3": procesar solo esas páginas
     reusar_texto: bool  # reutiliza las páginas OCR/visión ya guardadas en Postgres (misma hash)
+    forzar: bool  # pedido explícito de reprocesar y de reemplazar otro PDF del mismo período
     consorcio_id: str  # base a la que va el documento (cada consorcio tiene la suya)
+    sha256: str  # del archivo completo; se calcula antes de clasificar
     documento_id: str  # <consorcio>:<hash del archivo>
+    crudo_clave: str | None  # clave del PDF en el bucket; None si no hay bucket configurado
+    estado: str  # procesado | solo_disco | duplicado | en_proceso | periodo_duplicado | tope_excedido
+    documento_existente: dict  # el documento del mismo consorcio que provocó un corte
     nombre_archivo: str
     clasificacion: dict
     paginas: list[dict]  # {numero, texto, metodo, confianza}
@@ -66,14 +73,10 @@ class EstadoIngesta(TypedDict, total=False):
 def nodo_clasificar(estado: EstadoIngesta) -> dict:
     ruta = estado["ruta_pdf"]
     clasif = clasificar_pdf(ruta, estado.get("metodo_forzado"), estado.get("paginas_rango"))
-    consorcio_id = estado.get("consorcio_id") or config.consorcio_por_defecto
     return {
-        "consorcio_id": consorcio_id,
-        "documento_id": id_documento(consorcio_id, hash_archivo(ruta)),
-        "nombre_archivo": Path(ruta).name,
         "clasificacion": clasif.como_dict(),
         "_clasificacion_obj": clasif,
-        "_contador": Contador(),
+        "_contador": Contador(consorcio_id=estado.get("consorcio_id")),
         "_t0": time.perf_counter(),
         "errores": [],
     }
@@ -134,7 +137,7 @@ def _paginas_previas(estado: EstadoIngesta) -> dict[int, dict]:
     from ..almacen import postgres
 
     previas = {}
-    for p in postgres.paginas_guardadas(estado["documento_id"]):
+    for p in postgres.paginas_guardadas(estado["documento_id"], estado["consorcio_id"]):
         if p["metodo"] != "texto" and not extractores.texto_degenerado(p["texto"]):
             previas[p["numero"]] = p
     if previas:
@@ -166,7 +169,9 @@ def nodo_estructurar(estado: EstadoIngesta) -> dict:
     return {"extraccion": doc.model_dump(), "liquidacion": liquidacion, "errores": errores}
 
 
-def nodo_persistir(estado: EstadoIngesta) -> dict:
+def nodo_guardar_disco(estado: EstadoIngesta) -> dict:
+    """Transcripción legible y resultado estructurado, siempre, en el repo. Va antes del bucket y de
+    Postgres: si alguno falla, lo que costó OCR y modelo ya quedó guardado."""
     contador: Contador = estado["_contador"]
     doc = DocumentoExtraido.model_validate(estado["extraccion"])
     costo = contador.resumen()
@@ -174,7 +179,6 @@ def nodo_persistir(estado: EstadoIngesta) -> dict:
     carpeta = carpeta_procesados(estado)
     carpeta.mkdir(parents=True, exist_ok=True)
 
-    # 1) Transcripción legible y resultado estructurado, siempre, en el repo
     (carpeta / "texto.md").write_text(transcripcion_markdown(estado), encoding="utf-8")
     resultado = {
         "documento_id": estado["documento_id"],
@@ -196,27 +200,48 @@ def nodo_persistir(estado: EstadoIngesta) -> dict:
     (carpeta / "extraccion.json").write_text(
         json.dumps(resultado, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    return {"persistido": {"carpeta": str(carpeta)}, "costo": costo, "segundos_total": segundos_total}
 
-    persistido: dict = {"carpeta": str(carpeta)}
-    if not estado.get("sin_persistir"):
-        from ..almacen import grafo_neo4j, postgres
 
-        persistido["postgres"] = postgres.guardar_documento(
-            documento_id=estado["documento_id"],
-            nombre_archivo=estado["nombre_archivo"],
-            ruta=estado["ruta_pdf"],
-            clasificacion=estado["clasificacion"],
-            paginas=estado["paginas"],
-            doc=doc,
-            costo=costo,
-            llamadas=contador.detalle(),
-            segundos_total=segundos_total,
-            liquidacion=estado.get("liquidacion"),
-            consorcio_id=estado["consorcio_id"],
-        )
-        persistido["neo4j"] = grafo_neo4j.guardar_documento(estado["documento_id"], doc, estado["consorcio_id"])
+def nodo_preparar_guardado(estado: EstadoIngesta) -> dict:
+    """Último paso antes de guardar. El período recién se conoce al extraer la liquidación, así que este
+    corte llega después de gastar modelo. Si el documento sigue, sube el crudo: un fallo del bucket
+    frena acá, sin fila en Postgres. `forzar` es solo el explícito: `--reusar-texto` no autoriza a
+    reemplazar otro PDF."""
+    if estado.get("sin_persistir"):
+        return {}
+    from ..almacen import postgres
 
-    return {"persistido": persistido, "costo": costo, "segundos_total": segundos_total}
+    periodo = (estado.get("liquidacion") or {}).get("periodo")
+    if postgres.periodo_valido(periodo) and not estado.get("forzar"):
+        otro = postgres.documento_del_periodo(estado["consorcio_id"], periodo, estado["documento_id"])
+        if otro:
+            return {"sin_persistir": True, "estado": "periodo_duplicado", "documento_existente": otro}
+    return {"crudo_clave": crudos.subir_crudo(estado["ruta_pdf"], estado["consorcio_id"], estado["sha256"])}
+
+
+def nodo_persistir(estado: EstadoIngesta) -> dict:
+    if estado.get("sin_persistir"):
+        return {}
+    from ..almacen import postgres
+
+    fila = postgres.guardar_documento(
+        documento_id=estado["documento_id"],
+        sha256=estado.get("sha256"),
+        crudo_clave=estado.get("crudo_clave"),
+        reemplazar_periodo=estado.get("forzar", False),
+        nombre_archivo=estado["nombre_archivo"],
+        ruta=estado["ruta_pdf"],
+        clasificacion=estado["clasificacion"],
+        paginas=estado["paginas"],
+        doc=DocumentoExtraido.model_validate(estado["extraccion"]),
+        costo=estado["costo"],
+        llamadas=estado["_contador"].detalle(),
+        segundos_total=estado["segundos_total"],
+        liquidacion=estado.get("liquidacion"),
+        consorcio_id=estado["consorcio_id"],
+    )
+    return {"persistido": {**estado["persistido"], "postgres": fila}}
 
 
 # ------------------------------------------------------------------ grafo
@@ -229,6 +254,8 @@ def construir_grafo():
     g.add_node("extraer_tesseract", nodo_extraer_tesseract)
     g.add_node("extraer_vision", nodo_extraer_vision)
     g.add_node("estructurar", nodo_estructurar)
+    g.add_node("guardar_disco", nodo_guardar_disco)
+    g.add_node("preparar_guardado", nodo_preparar_guardado)
     g.add_node("persistir", nodo_persistir)
 
     g.add_edge(START, "clasificar")
@@ -237,7 +264,9 @@ def construir_grafo():
     )
     for nodo in ("extraer_texto", "extraer_tesseract", "extraer_vision"):
         g.add_edge(nodo, "estructurar")
-    g.add_edge("estructurar", "persistir")
+    g.add_edge("estructurar", "guardar_disco")
+    g.add_edge("guardar_disco", "preparar_guardado")
+    g.add_edge("preparar_guardado", "persistir")
     g.add_edge("persistir", END)
     return g.compile()
 
@@ -249,34 +278,134 @@ def ingestar_pdf(
     paginas: str | None = None,
     reusar_texto: bool = False,
     consorcio_id: str | None = None,
+    forzar: bool = False,
+    usuario_id: int | None = None,
 ) -> EstadoIngesta:
-    """Punto de entrada: corre el grafo completo sobre un PDF (o un rango de páginas) y lo guarda en la
-    base del consorcio indicado (por defecto, `config.consorcio_por_defecto`)."""
+    """Punto de entrada: corre el grafo sobre un PDF (o un rango de páginas) y lo guarda en la base del
+    consorcio indicado, que es obligatorio.
+
+    `final["estado"]` dice cómo terminó: `procesado`; `solo_disco` (sin_persistir o una corrida parcial,
+    que nunca toca Postgres ni el bucket); `duplicado` (ya estaba en este consorcio: corta sin OCR ni
+    modelo); `en_proceso` (otra carga del mismo PDF y consorcio en curso); `periodo_duplicado` (otro PDF
+    del consorcio tiene esa liquidación); `tope_excedido` (se alcanzó el tope mensual: no se gastó nada).
+    `documento_existente` siempre es del mismo consorcio.
+    `forzar` reprocesa y reemplaza; `reusar_texto` implica reprocesar, pero no reemplaza otro PDF.
+    `usuario_id` solo queda en `cargas`, que registra cómo terminó toda corrida que no sea solo de disco."""
+    if not consorcio_id:
+        raise ValueError("ingestar_pdf exige consorcio_id: no hay consorcio por defecto en la capa de datos")
     from ..observabilidad import trazar_corrida
 
-    grafo = construir_grafo()
-    consorcio_id = consorcio_id or config.consorcio_por_defecto
+    sha256 = sha256_archivo(ruta_pdf)
+    solo_disco = sin_persistir or bool(paginas)  # una corrida parcial no debe pisar el documento completo
     entrada: EstadoIngesta = {
-        "ruta_pdf": ruta_pdf, "metodo_forzado": metodo, "sin_persistir": sin_persistir, "paginas_rango": paginas,
-        "reusar_texto": reusar_texto, "consorcio_id": consorcio_id,
+        "ruta_pdf": ruta_pdf, "metodo_forzado": metodo, "sin_persistir": solo_disco, "paginas_rango": paginas,
+        "reusar_texto": reusar_texto, "forzar": forzar, "consorcio_id": consorcio_id, "sha256": sha256,
+        "documento_id": id_documento(consorcio_id, sha256[:16]), "nombre_archivo": Path(ruta_pdf).name,
     }
     etiquetas = {"archivo": Path(ruta_pdf).name, "metodo_forzado": metodo or "auto", "paginas": paginas or "todas",
                  "consorcio": consorcio_id}
     with trazar_corrida("ingesta", etiquetas) as traza:
-        final = grafo.invoke(entrada)
+        final = _correr_solo_disco(entrada) if solo_disco else _correr_con_candado(entrada)
         traza.registrar(final)
+    if not solo_disco:
+        _registrar_carga(consorcio_id, usuario_id, final["estado"])
     return final
+
+
+def _registrar_carga(consorcio_id: str, usuario_id: int | None, estado: str) -> None:
+    """El documento ya quedó como quedó: si esto falla se pierde una estadística, no la carga."""
+    from ..almacen import postgres
+
+    try:
+        postgres.registrar_carga(consorcio_id, usuario_id, estado)
+    except Exception as e:
+        log.warning("no se pudo registrar la carga (%s)", type(e).__name__)
+
+
+def _tope_excedido_sin_postgres() -> bool:
+    """Una corrida solo de disco tiene que poder andar sin Postgres: si no se puede leer el tope, sigue."""
+    from ..tope import tope_excedido
+
+    try:
+        return tope_excedido()
+    except Exception as e:
+        log.warning("no se pudo leer el tope de gasto (%s); se sigue", type(e).__name__)
+        return False
+
+
+def _correr_solo_disco(entrada: EstadoIngesta) -> EstadoIngesta:
+    if _tope_excedido_sin_postgres():
+        return _corte(entrada, "tope_excedido")
+    return {**construir_grafo().invoke(entrada), "estado": "solo_disco"}
+
+
+def _correr_con_candado(entrada: EstadoIngesta) -> EstadoIngesta:
+    from ..almacen import postgres
+    from ..tope import tope_excedido
+
+    consorcio_id, sha256 = entrada["consorcio_id"], entrada["sha256"]
+    with postgres.candado_ingesta(consorcio_id, sha256) as obtenido:
+        if not obtenido:
+            return _corte(entrada, "en_proceso")
+        # Dentro del candado: si no, una carga que acaba de terminar se vería como documento nuevo
+        if not (entrada["forzar"] or entrada["reusar_texto"]):
+            existente = postgres.buscar_documento(entrada["documento_id"], consorcio_id)
+            if existente:
+                return _corte(entrada, "duplicado", documento_existente=existente)
+        if tope_excedido():  # después de `duplicado`, que no gasta y sigue contestando
+            return _corte(entrada, "tope_excedido")
+        if crudos.configurado():
+            crudos.verificar_bucket()  # antes de gastar OCR o modelo
+        else:
+            log.warning("sin S3_ENDPOINT_URL: el PDF original queda solo en local, no se guarda el crudo")
+        try:
+            final = construir_grafo().invoke(entrada)
+        except postgres.PeriodoDuplicado as e:  # otro PDF del período ganó la carrera
+            _borrar_crudo_descartado(entrada)
+            return _corte(entrada, "periodo_duplicado", documento_existente=e.existente)
+    _borrar_crudos_reemplazados(final)
+    return {**final, "estado": final.get("estado", "procesado")}
+
+
+def _corte(entrada: EstadoIngesta, estado: str, **extra) -> EstadoIngesta:
+    """Salida de una ingesta que no llegó a guardar: lleva lo que leen `traza.registrar`,
+    `_imprimir_resumen` y `formatear_ingesta`."""
+    return {"estado": estado, "consorcio_id": entrada["consorcio_id"], "documento_id": entrada["documento_id"],
+            "nombre_archivo": entrada["nombre_archivo"], "errores": [], "costo": {}, **extra}
+
+
+def _borrar_crudo_descartado(entrada: EstadoIngesta) -> None:
+    """Saca el crudo que subió una ingesta rechazada. Si el documento ya existía (`--reusar-texto`
+    sobre un PDF cargado), esa clave es la de su fila y el objeto no se toca."""
+    from ..almacen import postgres
+
+    if crudos.configurado() and not postgres.buscar_documento(entrada["documento_id"], entrada["consorcio_id"]):
+        crudos.borrar_crudo(crudos.clave_crudo(entrada["consorcio_id"], entrada["sha256"]))
+
+
+def _borrar_crudos_reemplazados(final: EstadoIngesta) -> None:
+    """Después del commit: si falla, queda un objeto huérfano en el bucket, con warning."""
+    reemplazado = ((final.get("persistido") or {}).get("postgres") or {}).get("reemplazado")
+    if not reemplazado:
+        return
+    for ficha in (reemplazado, *reemplazado.get("otros", [])):
+        if ficha["crudo_clave"] and ficha["crudo_clave"] != final.get("crudo_clave"):
+            crudos.borrar_crudo(ficha["crudo_clave"])
 
 
 # ------------------------------------------------------------------ utilidades
 
 
-def hash_archivo(ruta: str) -> str:
+def sha256_archivo(ruta: str) -> str:
     h = hashlib.sha256()
     with open(ruta, "rb") as f:
         for bloque in iter(lambda: f.read(1 << 20), b""):
             h.update(bloque)
-    return h.hexdigest()[:16]
+    return h.hexdigest()
+
+
+def hash_archivo(ruta: str) -> str:
+    return sha256_archivo(ruta)[:16]
 
 
 def slug(nombre: str) -> str:
@@ -287,6 +416,8 @@ def slug(nombre: str) -> str:
 
 def carpeta_procesados(estado: EstadoIngesta) -> Path:
     nombre = f"{slug(estado['nombre_archivo'])}-{hash_de(estado['documento_id'])[:8]}"
+    if estado.get("consorcio_id"):  # evaluar-ocr no lo pasa: no guarda nada en ningún consorcio
+        nombre += "-" + re.sub(r"[^A-Za-z0-9_-]+", "-", estado["consorcio_id"])
     if estado.get("paginas_rango"):
         nombre += "-pags-" + re.sub(r"[^0-9,-]", "", estado["paginas_rango"])
     nombre += f"-{config.llm_provider}-{slug(config.modelo)}"

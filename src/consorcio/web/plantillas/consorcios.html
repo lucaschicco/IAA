@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}Consorcios{% endblock %}
+{% block contenido %}
+<h1>Consorcios</h1>
+{% if membresias %}
+<form method="post" action="/consorcios" class="pila elecciones">
+  {% include "_csrf.html" %}
+  {% for membresia in membresias %}
+  <button type="submit" name="consorcio_id" value="{{ membresia.consorcio_id }}">{{ membresia.nombre }} · {{ membresia.rol }}</button>
+  {% endfor %}
+</form>
+{% else %}
+<p class="aviso">Tu usuario no tiene ningún consorcio asignado. Pedile acceso a la administración.</p>
+{% endif %}
+{% endblock %}
