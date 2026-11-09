@@ -7,7 +7,7 @@ import time
 from dataclasses import replace
 
 import pytest
-from apoyo_web import cliente_como, vaciar_y_sembrar
+from apoyo_web import cliente_como, manda_a_entrar, vaciar_y_sembrar
 from fastapi import Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -52,7 +52,7 @@ def conteos() -> dict[str, int]:
 def test_dos_veces_deja_los_mismos_conteos(base):
     antes = conteos()
     assert antes["consorcios"] == 2 and antes["documentos"] == 8 and antes["usuarios"] == 5
-    assert antes["membresias"] == 5 and antes["membresia_unidades"] == 3 and antes["liquidaciones"] == 4
+    assert antes["membresias"] == 5 and antes["unidades_funcionales"] == 8 and antes["liquidaciones"] == 4
     sembrar_demo()
     assert conteos() == antes
 
@@ -82,11 +82,11 @@ def test_cada_consorcio_tiene_reglamento_acta_y_dos_liquidaciones(base):
 
 
 def test_roles_de_los_usuarios_demo(base):
-    assert resolver_identidad("demo-admin-palmeras", PALMERAS).rol == "administrador"
+    assert resolver_identidad("demo-admin-palmeras", PALMERAS).rol == "administracion"
     assert resolver_identidad("demo-prop-palmeras", PALMERAS).unidades == (3,)
     assert resolver_identidad("demo-prop-robles", ROBLES).unidades == (1,)
     assert resolver_identidad("demo-multi", PALMERAS).rol == "propietario"
-    assert resolver_identidad("demo-multi", ROBLES).rol == "administrador"
+    assert resolver_identidad("demo-multi", ROBLES).rol == "administracion"
     assert identidad.membresias_de("demo-plataforma") == [] and identidad.es_plataforma("demo-plataforma")
 
 
@@ -101,7 +101,7 @@ def test_es_plataforma(base):
 def test_membresias_de(base):
     assert identidad.membresias_de("demo-multi") == [
         {"consorcio_id": PALMERAS, "nombre": "Edificio Las Palmeras (demo)", "rol": "propietario"},
-        {"consorcio_id": ROBLES, "nombre": "Edificio Los Robles (demo)", "rol": "administrador"},
+        {"consorcio_id": ROBLES, "nombre": "Edificio Los Robles (demo)", "rol": "administracion"},
     ]
     assert identidad.membresias_de("no-existe") == []
 
@@ -229,7 +229,7 @@ def test_sin_cookie_401(base):
         return {}
 
     cliente.app.add_api_route("/prueba", ruta)
-    assert cliente.get("/prueba").status_code == 401
+    assert manda_a_entrar(cliente.get("/prueba"))
 
 
 def test_cookie_selector_con_selector_apagado_401(base, monkeypatch):
@@ -240,7 +240,7 @@ def test_cookie_selector_con_selector_apagado_401(base, monkeypatch):
         return {}
 
     cliente.app.add_api_route("/prueba", ruta)
-    assert cliente.get("/prueba").status_code == 401
+    assert manda_a_entrar(cliente.get("/prueba"))
     monkeypatch.setattr(config, "web_selector_usuarios", True)
     assert cliente.get("/prueba").status_code == 200
 

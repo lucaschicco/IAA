@@ -151,7 +151,7 @@ def identidad_actual(sesion: SesionActual) -> Identidad:
 
 
 def exigir_administrador(identidad: Annotated[Identidad, Depends(identidad_actual)]) -> Identidad:
-    if identidad.rol != "administrador":
+    if not identidad.es_administracion:
         raise HTTPException(status_code=403)
     return identidad
 

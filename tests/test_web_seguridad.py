@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 import pytest
-from apoyo_web import cliente_como, vaciar_y_sembrar
+from apoyo_web import cliente_como, manda_a_entrar, vaciar_y_sembrar
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, text
@@ -101,10 +101,15 @@ def test_el_barrido_cubre_las_rutas_que_importan():
             ("POST", "/documentos"), ("POST", "/bandeja/1/aprobar"), ("GET", "/bandeja")} <= set(pares)
 
 
-def test_selector_apagado_toda_ruta_da_401_salvo_salud():
+# Sin sesión solo responden la salud y las pantallas del login: los POST piden el CSRF de la cookie previa
+PUBLICAS = {("GET", "/salud"): 200, ("GET", "/entrar"): 200, ("POST", "/entrar"): 403,
+            ("GET", "/registro"): 400, ("POST", "/registro"): 403}
+
+
+def test_selector_apagado_toda_ruta_manda_a_entrar_salvo_salud_y_login():
     cliente = TestClient(crear_app(), follow_redirects=False)
     for metodo, camino in rutas_de_la_app():
-        esperado = 200 if camino == "/salud" else 401
+        esperado = PUBLICAS.get((metodo, camino), 303)  # 303 a /entrar
         assert cliente.request(metodo, camino).status_code == esperado, (metodo, camino)
 
 
@@ -112,9 +117,9 @@ def test_cookie_selector_valida_no_vale_con_el_selector_apagado():
     cliente = cookie_con(sesion_de(ADMIN, proveedor="selector"))
     cliente.follow_redirects = False
     for metodo, camino in rutas_de_la_app():
-        if camino != "/salud":
+        if (metodo, camino) not in PUBLICAS:
             pedido = {"data": {"csrf": cliente.csrf}} if metodo == "POST" else {}
-            assert cliente.request(metodo, camino, **pedido).status_code == 401, (metodo, camino)
+            assert manda_a_entrar(cliente.request(metodo, camino, **pedido)), (metodo, camino)
 
 
 def test_sin_secreto_y_sin_selector_no_arranca(monkeypatch):
@@ -144,8 +149,9 @@ def test_con_selector_y_sin_secreto_arranca_con_uno_aleatorio(monkeypatch):
     assert crear_app() is not None
 
 
-def test_con_selector_sin_sesion_redirige_a_entrar(monkeypatch):
-    monkeypatch.setattr(config, "web_selector_usuarios", True)
+@pytest.mark.parametrize("selector", [False, True])
+def test_sin_sesion_redirige_a_entrar(monkeypatch, selector):
+    monkeypatch.setattr(config, "web_selector_usuarios", selector)
     cliente = TestClient(crear_app(), follow_redirects=False)
     r = cliente.get("/chat")
     assert r.status_code == 303 and r.headers["location"] == "/entrar"
@@ -164,19 +170,19 @@ def test_cookie_alterada_da_401():
     otra_firma = ("0" if firma[0] != "0" else "1") + firma[1:]
     for alterada in (f"{cuerpo}.{otra_firma}", f"{cuerpo[:-2]}AA.{firma}", cuerpo, "basura", "a.b.c"):
         cliente.cookies.set(NOMBRE_COOKIE, alterada)
-        assert cliente.get("/chat").status_code == 401, alterada
+        assert manda_a_entrar(cliente.get("/chat")), alterada
         cliente.cookies.clear()
 
 
 def test_cookie_firmada_con_otro_secreto_da_401(monkeypatch):
     cliente = cliente_como(ADMIN, PALMERAS)
     monkeypatch.setattr(config, "web_secreto", "otro-secreto")
-    assert cliente.get("/chat").status_code == 401
+    assert manda_a_entrar(cliente.get("/chat"))
 
 
 def test_cookie_vencida_da_401():
     emitida = int(time.time()) - config.web_sesion_horas * 3600 - 5
-    assert cookie_con(sesion_de(ADMIN, emitida=emitida)).get("/chat").status_code == 401
+    assert manda_a_entrar(cookie_con(sesion_de(ADMIN, emitida=emitida)).get("/chat"))
 
 
 @pytest.mark.parametrize("camino", [
@@ -275,7 +281,7 @@ def test_cambiar_el_consorcio_sin_firmar_da_401():
     forjado = base64.urlsafe_b64encode(json.dumps({**datos, "consorcio_id": ROBLES}).encode()).decode()
     cliente.cookies.clear()
     cliente.cookies.set(NOMBRE_COOKIE, f"{forjado}.{firma}")
-    assert cliente.get("/chat").status_code == 401
+    assert manda_a_entrar(cliente.get("/chat"))
 
 
 def test_perder_la_membresia_corta_en_el_pedido_siguiente():
@@ -300,13 +306,13 @@ def test_el_rol_se_lee_de_la_base_y_no_de_la_cookie():
     cliente = cliente_como("demo-multi", ROBLES)
     assert cliente.get("/bandeja").status_code == 200
     with postgres.engine().begin() as con:
-        con.execute(text("UPDATE membresias SET rol='propietario' WHERE consorcio_id=:c AND usuario_id="
+        con.execute(text("UPDATE membresias SET rol='consejo' WHERE consorcio_id=:c AND usuario_id="
                          "(SELECT id FROM usuarios WHERE sujeto_externo='demo-multi')"), {"c": ROBLES})
     try:
         assert cliente.get("/bandeja").status_code == 403
     finally:
         with postgres.engine().begin() as con:
-            con.execute(text("UPDATE membresias SET rol='administrador' WHERE consorcio_id=:c AND usuario_id="
+            con.execute(text("UPDATE membresias SET rol='administracion' WHERE consorcio_id=:c AND usuario_id="
                              "(SELECT id FROM usuarios WHERE sujeto_externo='demo-multi')"), {"c": ROBLES})
 
 
@@ -474,8 +480,8 @@ def test_cabeceras_en_toda_respuesta(camino):
 
 
 def test_cabeceras_tambien_en_error_de_acceso():
-    r = TestClient(crear_app()).get("/chat")
-    assert r.status_code == 401 and r.headers["content-security-policy"] == "default-src 'self'"
+    r = TestClient(crear_app(), follow_redirects=False).get("/chat")
+    assert r.status_code == 303 and r.headers["content-security-policy"] == "default-src 'self'"
 
 
 def test_htmx_vendorizado_es_la_version_pedida():

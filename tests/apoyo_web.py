@@ -37,3 +37,10 @@ def cliente_como(sujeto: str, consorcio: str | None = None) -> TestClient:
     cliente.cookies.set(NOMBRE_COOKIE, firmar_sesion(sesion))
     cliente.csrf = token_csrf(sesion)
     return cliente
+
+
+def manda_a_entrar(respuesta) -> bool:
+    """Sin sesión válida la web redirige a `/entrar` (303). Sirve con o sin `follow_redirects`."""
+    if respuesta.status_code == 303:
+        return respuesta.headers["location"] == "/entrar"
+    return bool(respuesta.history) and respuesta.history[0].status_code == 303 and respuesta.url.path == "/entrar"

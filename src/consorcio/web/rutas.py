@@ -42,7 +42,7 @@ from ..canales.telegram import ruta_entrada
 from ..config import config
 from ..identidad import Identidad, es_plataforma, listar_usuarios_demo, membresias_de
 from ..ingesta.grafo import ingestar_pdf
-from .autenticacion import ProveedorIdentidad, exigir_proveedor
+from .autenticacion import LoginFallido, datos_invitacion, proveedor_para, registrar
 from .sesion import (
     COOKIE_PREVIA,
     NOMBRE_COOKIE,
@@ -137,7 +137,7 @@ def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identida
     consorcio = next((m["nombre"] for m in membresias_de(sesion.sujeto_externo)
                       if identidad and m["consorcio_id"] == identidad.consorcio_id), None)
     por_atender = 0
-    if identidad and identidad.rol == "administrador":
+    if identidad and identidad.es_administracion:
         por_atender = sum(s["estado"] == "pendiente" for s in listar_solicitudes(identidad))
     return plantillas.TemplateResponse(request, plantilla, {
         "sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion),
@@ -162,27 +162,63 @@ def inicio(sesion: SesionActual) -> Response:
     return _ir_a("/consorcios")
 
 
-@router.get("/entrar", dependencies=[Depends(exigir_proveedor)])
-def entrar(request: Request) -> Response:
+def _pantalla_previa(request: Request, plantilla: str, status_code: int = 200, **datos) -> Response:
+    """Pantallas sin sesión (entrar, registro): su CSRF se ata a una cookie previa nueva en cada render."""
     nonce = uuid4().hex
-    respuesta = plantillas.TemplateResponse(request, "entrar.html", {
-        "usuarios": listar_usuarios_demo(), "csrf": token_csrf_previo(nonce),
-    })
+    respuesta = plantillas.TemplateResponse(request, plantilla, {
+        "csrf": token_csrf_previo(nonce), "selector": config.web_selector_usuarios, **datos,
+    }, status_code=status_code)
     poner_cookie_previa(respuesta, nonce)
     return respuesta
 
 
-@router.post("/entrar", dependencies=[Depends(exigir_proveedor), Depends(limitar_formulario), Depends(verificar_csrf_previo)])
-def entrar_post(
-    request: Request, proveedor: Annotated[ProveedorIdentidad, Depends(exigir_proveedor)], datos: Formulario
-) -> Response:
-    sujeto = proveedor.sujeto(request)
-    if sujeto is None:
-        raise HTTPException(status_code=401)
+def _iniciar_sesion(sujeto: str, proveedor: str) -> Response:
     respuesta = _ir_a("/consorcios")
-    poner_cookie_sesion(respuesta, nueva_sesion(sujeto, proveedor.nombre))
+    poner_cookie_sesion(respuesta, nueva_sesion(sujeto, proveedor))
     respuesta.delete_cookie(COOKIE_PREVIA, path="/")
     return respuesta
+
+
+def _usuarios_demo() -> list[dict]:
+    return listar_usuarios_demo() if config.web_selector_usuarios else []
+
+
+@router.get("/entrar")
+def entrar(request: Request) -> Response:
+    return _pantalla_previa(request, "entrar.html", usuarios=_usuarios_demo())
+
+
+@router.post("/entrar", dependencies=[Depends(limitar_formulario), Depends(verificar_csrf_previo)])
+def entrar_post(request: Request, datos: Formulario) -> Response:
+    proveedor = proveedor_para(request)
+    try:
+        sujeto = proveedor.sujeto(request)
+    except LoginFallido as e:
+        return _pantalla_previa(request, "entrar.html", e.status_code, usuarios=_usuarios_demo(), error=e.mensaje,
+                                email=_campo(datos, "email")[:320])
+    if sujeto is None:
+        raise HTTPException(status_code=401)
+    return _iniciar_sesion(sujeto, proveedor.nombre)
+
+
+@router.get("/registro")
+def registro(request: Request, token: str = "") -> Response:
+    """El link de la invitación. Una inválida da la misma pantalla que una vencida."""
+    invitacion = datos_invitacion(token)
+    if invitacion is None:
+        return _pantalla_previa(request, "registro.html", 400, invitacion=None, token="")
+    return _pantalla_previa(request, "registro.html", invitacion=invitacion, token=token)
+
+
+@router.post("/registro", dependencies=[Depends(limitar_formulario), Depends(verificar_csrf_previo)])
+def registro_post(request: Request, datos: Formulario) -> Response:
+    try:
+        sujeto = registrar(request)
+    except LoginFallido as e:
+        token = _campo(datos, "token")
+        return _pantalla_previa(request, "registro.html", e.status_code, invitacion=datos_invitacion(token),
+                                token=token, error=e.mensaje)
+    return _iniciar_sesion(sujeto, "login")
 
 
 @router.post("/salir", dependencies=POST_SESION)

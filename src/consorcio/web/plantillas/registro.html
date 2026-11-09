@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titulo %}Crear cuenta{% endblock %}
+{% block contenido %}
+<h1>Crear cuenta</h1>
+{% if invitacion %}
+<p class="nota">Invitación para <strong>{{ invitacion.email }}</strong> en {{ invitacion.consorcio }} ({{ invitacion.rol }}).
+Si ese mail ya tiene cuenta, escribí tu contraseña actual y se suma este consorcio.</p>
+<form method="post" action="/registro" class="pila acceso">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Nombre <input type="text" name="nombre" autocomplete="name" maxlength="200"></label>
+  <label>Contraseña (al menos 10 caracteres) <input type="password" name="contrasena" autocomplete="new-password" required minlength="10" maxlength="1024"></label>
+  <label>Repetir la contraseña <input type="password" name="repetida" autocomplete="new-password" required maxlength="1024"></label>
+  {% if error %}<p class="aviso" role="alert">{{ error }}</p>{% endif %}
+  <button type="submit">Crear cuenta</button>
+</form>
+{% else %}
+<p class="aviso" role="alert">{{ error or "La invitación no existe, ya se usó o venció. Pedile una nueva a la administración." }}</p>
+<p><a href="/entrar">Ir a entrar</a></p>
+{% endif %}
+{% endblock %}

@@ -3,7 +3,7 @@
 {% block contenido %}
 <h1>Documentos</h1>
 <p class="nota">Lo que el asistente puede consultar en este consorcio.</p>
-{% if identidad.rol == "administrador" %}
+{% if identidad.es_administracion %}
 <form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="tarjeta carga">
   {% include "_csrf.html" %}
   <label class="archivo">PDF, hasta {{ max_mb }} MB <input type="file" name="archivo" accept="application/pdf,.pdf" required></label>

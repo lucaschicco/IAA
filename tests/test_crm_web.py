@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
-from apoyo_web import cliente_como, vaciar_y_sembrar
+from apoyo_web import cliente_como, manda_a_entrar, vaciar_y_sembrar
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -77,15 +77,15 @@ def test_quien_no_es_de_plataforma_recibe_404(sujeto, consorcio):
     assert cliente_como(sujeto, consorcio).get("/crm").status_code == 404
 
 
-def test_sin_sesion_401():
-    assert TestClient(crear_app()).get("/crm").status_code == 401
+def test_sin_sesion_va_a_entrar():
+    assert manda_a_entrar(TestClient(crear_app()).get("/crm"))
 
 
 def test_los_parametros_no_revelan_nada_a_quien_no_es_de_plataforma():
     cliente = cliente_como("demo-admin-palmeras", PALMERAS)
     assert cliente.get("/crm", params={"dias": "5"}).status_code == 404
     assert cliente.get("/crm", params={"consorcio": "no-existe"}).status_code == 404
-    assert TestClient(crear_app()).get("/crm", params={"dias": "5"}).status_code == 401
+    assert manda_a_entrar(TestClient(crear_app()).get("/crm", params={"dias": "5"}))
 
 
 @pytest.mark.parametrize("dias", ["7", "30", "90"])

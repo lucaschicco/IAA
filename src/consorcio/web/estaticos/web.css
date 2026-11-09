@@ -204,7 +204,7 @@ button.enlace {
 .lateral button.item { background: none; color: var(--lateral-texto); font-weight: 400; }
 .lateral button.item:hover { background: var(--lateral-activo); color: var(--lateral-fuerte); }
 
-input[type="text"], textarea, select {
+input[type="text"], input[type="email"], input[type="password"], textarea, select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 10px;
   background: var(--superficie); color: var(--texto); font: inherit;
 }
@@ -219,6 +219,8 @@ summary { min-height: 32px; color: var(--acento); cursor: pointer; }
 
 .pila { display: flex; flex-direction: column; gap: 8px; align-items: stretch; margin: 8px 0; }
 .elecciones { margin-top: 16px; }
+.acceso { max-width: 420px; }
+.acceso label { display: flex; flex-direction: column; gap: 4px; }
 .elecciones button { justify-content: flex-start; text-align: left; }
 .decision { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 

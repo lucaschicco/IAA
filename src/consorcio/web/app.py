@@ -49,10 +49,10 @@ class Cabeceras:
 
 
 def manejar_error(request: Request, exc: HTTPException) -> Response:
-    """Con selector, sin sesión se va a `/entrar`. El resto es una página, o un fragmento si lo pidió htmx,
+    """Sin sesión se va a `/entrar`. El resto es una página, o un fragmento si lo pidió htmx,
     siempre la misma por código: un 404 de una ruta oculta no se distingue del de una que no existe."""
     htmx = "HX-Request" in request.headers
-    if exc.status_code == 401 and config.web_selector_usuarios:
+    if exc.status_code == 401:
         if htmx:
             return Response(status_code=401, headers={"HX-Redirect": "/entrar"})
         return RedirectResponse("/entrar", status_code=303)

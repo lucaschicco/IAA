@@ -304,7 +304,7 @@ def test_chat_usa_la_identidad_resuelta_y_no_los_parametros(monkeypatch):
     cliente = cliente_como(PROP, PALMERAS)
     cliente.post("/chat/mensaje?consorcio_id=demo-robles&usuario_id=1&rol=administrador", data={
         "mensaje": "hola", "csrf": cliente.csrf, "consorcio_id": ROBLES, "consorcio": ROBLES, "usuario_id": "1",
-        "rol": "administrador", "identidad": "x",
+        "rol": "administracion", "identidad": "x",
     })
     assert vistos == [(resolver_identidad(PROP, PALMERAS), "web")]
 

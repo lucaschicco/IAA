@@ -2,7 +2,17 @@
 {% block titulo %}Entrar{% endblock %}
 {% block contenido %}
 <h1>Entrar</h1>
-<p class="nota">Modo desarrollo: solo usuarios de demostración.</p>
+<form method="post" action="/entrar" class="pila acceso">
+  {% include "_csrf.html" %}
+  <label>Mail <input type="email" name="email" value="{{ email or '' }}" autocomplete="username" required maxlength="320"></label>
+  <label>Contraseña <input type="password" name="contrasena" autocomplete="current-password" required maxlength="1024"></label>
+  {% if error %}<p class="aviso" role="alert">{{ error }}</p>{% endif %}
+  <button type="submit">Entrar</button>
+</form>
+<p class="nota">¿Te invitaron? Abrí el link de la invitación para crear tu cuenta.</p>
+{% if selector %}
+<h2>Modo desarrollo</h2>
+<p class="nota">Solo usuarios de demostración.</p>
 {% if usuarios %}
 <form method="post" action="/entrar" class="pila elecciones">
   {% include "_csrf.html" %}
@@ -12,5 +22,6 @@
 </form>
 {% else %}
 <p class="aviso">No hay usuarios de demostración. Correr <code>consorcio sembrar-demo</code>.</p>
+{% endif %}
 {% endif %}
 {% endblock %}
