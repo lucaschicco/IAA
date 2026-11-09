@@ -209,22 +209,28 @@ make web-down
 make gasto                   # gasto del mes contra el tope
 ```
 
-**Selección de usuario.** Sin login real, `/entrar` lista solo los usuarios `demo-*`. Los crea `sembrar-demo`,
-inventados, con dos consorcios (`demo-palmeras` y `demo-robles`), cada uno con reglamento, acta y dos
-liquidaciones:
+**Cómo se entra.** `/entrar` pide mail y contraseña (login de Lucas, `src/consorcio/auth/`). Una cuenta nueva
+se crea desde el link de una invitación, `/registro?token=...`; las invitaciones salen de `make alta-consorcio`
+(la del administrador) o de la API (`make api`, http://127.0.0.1:8001/docs, que necesita `JWT_SECRETO`). Ver
+`src/consorcio/auth/LEEME.md`. Con `WEB_SELECTOR_USUARIOS=true`, `/entrar` ofrece además los usuarios `demo-*`
+sin contraseña. Los crea `sembrar-demo`, inventados, con dos consorcios (`demo-palmeras` y `demo-robles`), cada uno
+con reglamento, acta y dos liquidaciones. Salvo el de plataforma, también entran con `<usuario>@demo.test` y la
+contraseña `demo-consorcio-2026`:
 
 | Usuario | Qué ve |
 |---|---|
-| `demo-admin-palmeras` | Administrador de Palmeras: chat, carga de PDF y bandeja |
+| `demo-admin-palmeras` | Administración de Palmeras: chat, carga de PDF y bandeja |
 | `demo-prop-palmeras` | Propietario de la UF 3 de Palmeras: chat, documentos y sus solicitudes |
 | `demo-prop-robles` | Propietario de la UF 1 de Robles: lo mismo, en otro consorcio |
-| `demo-multi` | Propietario en Palmeras y administrador en Robles: elige consorcio al entrar |
+| `demo-multi` | Propietario en Palmeras y administración en Robles: elige consorcio al entrar |
 | `demo-plataforma` | Equipo de plataforma, sin membresías: va directo a `/crm` |
 
 Para probar: preguntar por el reglamento o las expensas, pedir un listado de documentos, cargar un reclamo
 y aprobarlo desde la bandeja con el administrador; la respuesta aparece en "Mis solicitudes". Con
-`WEB_SELECTOR_USUARIOS=false` no hay selector ni usuario que entre, y la web exige `WEB_SECRETO` (con valor, siempre
-aleatorio y de al menos 32 caracteres; si no, no arranca): hasta que esté el login, responde 401 salvo en `/salud` y los estáticos. Con el selector apagado las cookies llevan `Secure`, así que el login va a necesitar HTTPS.
+`WEB_SELECTOR_USUARIOS=false` solo se entra con mail y contraseña, y la web exige `WEB_SECRETO` (con valor, siempre
+aleatorio y de al menos 32 caracteres; si no, no arranca). Sin sesión, toda pantalla salvo `/salud`, `/entrar`,
+`/registro` y los estáticos manda a `/entrar`. Con el selector apagado las cookies llevan `Secure`: los
+navegadores las aceptan en `http://127.0.0.1`, pero fuera de la máquina local hace falta HTTPS.
 
 **Tope de gasto.** `TOPE_USD_MENSUAL` (USD por mes calendario UTC, para todo el sistema; 0 = sin tope) corta el
 chat web y toda carga de PDF, venga del canal que venga, antes de llamar al modelo. Las preguntas por Telegram,
