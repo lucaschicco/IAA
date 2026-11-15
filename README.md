@@ -47,7 +47,7 @@ El diagrama es el diseño completo. Hoy funcionan por la web el router, reglamen
 - [x] Extraer el texto del reglamento de cocheras y las convocatorias (26/10); falta la normativa
 - [x] Pasar las 8 liquidaciones a una tabla (período, rubro, gasto, unidad) → `consorcio expensas` (26/10)
 - [ ] Extraer los datos de las facturas y compararlos contra el listado de gastos de agosto
-- [ ] Armar la tabla de unidades (el prorrateo de las liquidaciones ya da UF, piso-depto y porcentual)
+- [ ] Cargar la tabla de unidades (`make alta-unidades`; el prorrateo de las liquidaciones ya da UF, piso-depto y porcentual)
 - [x] Escribir las preguntas de prueba con su respuesta correcta, separadas en dev y test → `datos/evaluacion/preguntas.csv` (26/10, 26 preguntas: cocheras, actas, convocatorias, liquidación, reglamento de copropiedad y 2 trampa; ampliar)
 
 **2. Buscador sobre documentos**
@@ -56,7 +56,7 @@ El diagrama es el diseño completo. Hoy funcionan por la web el router, reglamen
 - [x] Canal de Telegram (`make bot`): PDF → ingesta, texto → `preguntar`, `/expensas` → SQL, lista blanca de chats
 - [x] Una base por consorcio y por chat de Telegram (`consorcio_id` en documentos y consultas; `make consorcios`, `make asignar`); falta la UI de administración de consorcios
 - [x] Crudos en un bucket S3 y control de duplicados por hash y por período (01/11)
-- [x] Migraciones con Alembic y usuarios con membresía por consorcio (01/11); falta el login
+- [x] Migraciones con Alembic y usuarios con membresía por consorcio (01/11); login con mail y contraseña (09/11)
 - [ ] WhatsApp: queda para después (la API de Meta pide número de negocio, verificación y webhook público; ver bitácora 26/10)
 - [ ] Probar embeddings (pgvector) o pesos por título: en test el baseline de palabras clave le ganó a tsvector (0,917 vs 0,583 de recall@3; ver `docs/evaluaciones/2026-10-26-consultas-y-expensas.md` §3)
 
@@ -78,7 +78,7 @@ El diagrama es el diseño completo. Hoy funcionan por la web el router, reglamen
 - [x] Web de pruebas: chat, documentos, solicitudes y bandeja (01/11)
 - [x] CRM para el equipo de plataforma → `/crm` (01/11)
 - [x] Tope de gasto mensual en la aplicación (01/11); falta contrastarlo con una factura real
-- [ ] Login real: reemplaza `ProveedorIdentidad` en `web/autenticacion.py`
+- [x] Login real con mail, contraseña e invitaciones, sobre el código de Lucas → `auth/` (09/11); falta la pantalla para invitar y cargar unidades
 
 **Cierre**
 - [ ] Correr la evaluación sobre el set de test
