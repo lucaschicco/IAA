@@ -740,6 +740,7 @@ def mlflow_contado(monkeypatch):
     monkeypatch.setitem(sys.modules, "mlflow", mlflow)
     monkeypatch.setattr(observabilidad, "_autolog_prendido", False)
     monkeypatch.setattr(observabilidad, "_mlflow_caido_hasta", 0.0)
+    monkeypatch.setattr(observabilidad, "_configurado_para", None)
     monkeypatch.setattr(config, "mlflow_tracking_uri", "http://mlflow-caido:5000")
     monkeypatch.setattr(config, "fake_guionado", True)
     return mlflow, llamadas
@@ -793,6 +794,17 @@ def test_puerto_abierto_con_servidor_colgado_tampoco_se_reintenta(monkeypatch, m
     atender("hola", yo(), None, "web")
     atender("hola", yo(), None, "web")
     assert llamadas == ["set_experiment"]
+
+
+def test_la_consulta_anidada_no_vuelve_a_configurar_mlflow(monkeypatch, mlflow_contado):
+    """`set_experiment` reinicia el proveedor de trazas: llamado por la consulta con la traza del turno
+    abierta, la dejaba "In progress" sin el span raíz (16/11). Se configura una vez por proceso."""
+    _, llamadas = mlflow_contado
+    monkeypatch.setattr(observabilidad.socket, "create_connection", _puerto_abierto)
+    primero = atender("¿se permiten mascotas?", yo(), None, "web")
+    segundo = atender("¿se permiten mascotas?", yo(), None, "web")
+    assert primero["resultado"] == segundo["resultado"] == "respondida"
+    assert llamadas == ["set_experiment"]  # solo el primer turno; ni su consulta ni el segundo turno
 
 
 def test_un_uri_local_de_mlflow_no_necesita_sondeo():

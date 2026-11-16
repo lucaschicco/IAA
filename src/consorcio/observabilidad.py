@@ -27,6 +27,8 @@ log = logging.getLogger("consorcio")
 _ESPERA_SONDEO = 1.0  # segundos
 _PAUSA_TRAS_FALLO = 60.0  # segundos
 _mlflow_caido_hasta = 0.0
+# Servidor y experimento con los que ya se configuró MLflow en este proceso (ver `_configurar`)
+_configurado_para: tuple[str, str] | None = None
 
 # Si MLflow se cae con la corrida abierta, cada pedido pendiente espera esto y no los valores por defecto
 os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "10")
@@ -125,8 +127,28 @@ def _prender_autolog(mlflow) -> None:
 
 
 def _marcar_caido() -> None:
-    global _mlflow_caido_hasta
+    """Además de la pausa, olvida la configuración: si el servidor volvió con otra base, el experimento
+    ya no existe y hay que fijarlo de nuevo al reconectar."""
+    global _mlflow_caido_hasta, _configurado_para
     _mlflow_caido_hasta = time.monotonic() + _PAUSA_TRAS_FALLO
+    _configurado_para = None
+
+
+def _configurar(mlflow) -> None:
+    """Fija servidor y experimento una sola vez por proceso; de nuevo solo si cambian o tras una caída.
+
+    `mlflow.set_experiment` reinicia el proveedor de trazas aunque el experimento sea el mismo (MLflow
+    3.18, `_sync_trace_destination_and_provider`), y los spans abiertos en ese momento ya no se exportan.
+    La consulta que corre dentro del turno del agente lo llamaba con la traza del turno abierta: la traza
+    quedaba "In progress", sin el span raíz ni el nodo `reglamento` (16/11). Lo mismo podía pasar entre
+    dos turnos simultáneos de la web."""
+    global _configurado_para
+    destino = (config.mlflow_tracking_uri, config.mlflow_experiment)
+    if _configurado_para == destino:
+        return
+    mlflow.set_tracking_uri(destino[0])
+    mlflow.set_experiment(destino[1])
+    _configurado_para = destino
 
 
 def _alcanzable(uri: str) -> bool:
@@ -155,8 +177,7 @@ def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
     try:
         import mlflow
 
-        mlflow.set_tracking_uri(config.mlflow_tracking_uri)
-        mlflow.set_experiment(config.mlflow_experiment)
+        _configurar(mlflow)  # nunca en cada corrida: con una traza abierta la rompe
         _prender_autolog(mlflow)
         from .ingesta.skill import version_skill
 
