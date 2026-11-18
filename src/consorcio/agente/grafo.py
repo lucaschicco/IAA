@@ -134,6 +134,8 @@ def nodo_registrar(estado: EstadoAgente) -> dict:
                 s.add(Mensaje(conversacion_id=conversacion_id, rol="usuario", texto=estado["entrada"][:config.agente_max_mensaje]))
                 s.flush()
             s.add(Mensaje(conversacion_id=conversacion_id, rol="asistente", texto=estado["respuesta"]))
+        if traza:
+            traza.asociar_conversacion(conversacion_id, identidad.usuario_id)
         turno = Turno(
             usuario_id=identidad.usuario_id, consorcio_id=identidad.consorcio_id, rol=identidad.rol,
             canal=estado["canal"], origen=estado["origen"], conversacion_id=conversacion_id,

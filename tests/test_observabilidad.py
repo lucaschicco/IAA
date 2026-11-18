@@ -106,6 +106,23 @@ with trazar_corrida("ingesta", {"origen": "ingesta"}):
 print(json.dumps({"anotados": anotados, "trazas": trazas()}))
 """
 
+# Tres turnos de dos conversaciones: `registrar` asocia la traza a la conversación y al usuario
+TRES_TURNOS_EN_DOS_CONVERSACIONES = """
+def registro(conversacion, usuario, traza):
+    def registrar(estado):
+        traza.asociar_conversacion(conversacion, usuario)
+        return {"texto": f"{estado['texto']} registrar"}
+    return registrar
+
+
+for n, conversacion, usuario in ((1, "conv-a", 7), (2, "conv-a", 7), (3, "conv-b", 8)):
+    with trazar_corrida("agente", {"canal": "prueba"}) as traza:
+        grafo(("preparar", paso("preparar")), ("registrar", registro(conversacion, usuario, traza))).invoke(
+            {"texto": f"turno {n}"}
+        )
+print(json.dumps(trazas()))
+"""
+
 
 def _correr(guion: str, tmp_path: Path):
     entorno = {
@@ -150,3 +167,14 @@ def test_cada_turno_anota_y_etiqueta_su_propia_traza(tmp_path):
         # La consulta anidada etiqueta la traza de su turno
         assert traza["etiquetas"].get("origen") == f"consulta-{n}", traza["etiquetas"]
     assert trazas["pdf"]["etiquetas"].get("origen") == "ingesta", trazas["pdf"]["etiquetas"]
+
+
+def test_la_traza_del_turno_dice_de_que_conversacion_y_de_que_usuario_es(tmp_path):
+    """Lo que usa la vista Sessions de MLflow para mostrar una conversación completa."""
+    trazas = _por_entrada(_correr(TRES_TURNOS_EN_DOS_CONVERSACIONES, tmp_path))
+
+    asociadas = {
+        texto: (t["metadata"].get("mlflow.trace.session"), t["metadata"].get("mlflow.trace.user"))
+        for texto, t in trazas.items()
+    }
+    assert asociadas == {"turno 1": ("conv-a", "7"), "turno 2": ("conv-a", "7"), "turno 3": ("conv-b", "8")}

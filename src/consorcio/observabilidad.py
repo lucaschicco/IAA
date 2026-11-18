@@ -69,6 +69,24 @@ class _Traza:
             log.debug("no se pudo leer el id de la traza: %s", e)
         return self._id
 
+    def asociar_conversacion(self, conversacion_id: str | None, usuario_id: int | None) -> None:
+        """Guarda en la traza abierta de qué conversación es (la sesión de MLflow, con la que la vista
+        Sessions junta los mensajes de una charla) y de qué usuario, por su número interno: nunca el
+        nombre ni el mail. Va desde adentro de la traza porque MLflow no deja cambiar la metadata
+        después. En el primer mensaje la conversación recién existe al registrar el turno (18/11)."""
+        if not self.activo:
+            return
+        datos = {"session_id": conversacion_id, "user": None if usuario_id is None else str(usuario_id)}
+        datos = {k: v for k, v in datos.items() if v}
+        if not datos:
+            return
+        try:
+            import mlflow
+
+            mlflow.update_current_trace(**datos)
+        except Exception as e:
+            log.debug("no se pudo asociar la traza a la conversación: %s", e)
+
     def registrar_metricas(self, etiquetas: dict[str, str], metricas: dict[str, float]) -> None:
         """Para corridas que no son ingestas (consultas, evaluaciones)."""
         if not self.activo:

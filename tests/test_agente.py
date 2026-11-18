@@ -688,11 +688,13 @@ def _mlflow_de_mentira() -> tuple[SimpleNamespace, list[bool]]:
         activos.append(run_name)
 
     nada = lambda *a, **k: None  # noqa: E731
+    actualizaciones: list[dict] = []  # cada `update_current_trace`
     return SimpleNamespace(
         set_tracking_uri=nada, set_experiment=nada, set_tags=nada, log_metrics=nada, set_trace_tag=nada,
         langchain=SimpleNamespace(autolog=nada), start_run=start_run, active_run=lambda: activos[-1] if activos else None,
         end_run=lambda status=None: activos.pop(), get_active_trace_id=lambda: "traza-1",
         get_last_active_trace_id=lambda thread_local=False: "traza-anterior",
+        update_current_trace=lambda **k: actualizaciones.append(k), actualizaciones=actualizaciones,
     ), anidados
 
 
@@ -709,6 +711,24 @@ def test_la_consulta_queda_anidada_en_la_traza_del_turno(monkeypatch):
     assert r["resultado"] == "respondida" and anidados == [False, True]
     assert turno(r["turno_id"]).mlflow_traza_id == "traza-1"
     assert observabilidad._skill_de("agente") == "agente" and observabilidad._skill_de("consulta") == "consulta"
+
+
+def test_la_traza_del_turno_lleva_la_conversacion_y_el_numero_de_usuario(monkeypatch):
+    """Para la vista Sessions de MLflow: la conversación como sesión y el usuario por su número interno,
+    nunca por su nombre ni su mail. En el primer mensaje la conversación recién nace al registrar."""
+    mlflow, _ = _mlflow_de_mentira()
+    monkeypatch.setitem(sys.modules, "mlflow", mlflow)
+    monkeypatch.setattr(observabilidad, "_autolog_prendido", False)
+    monkeypatch.setattr(config, "mlflow_tracking_uri", "http://mlflow-de-mentira")
+    monkeypatch.setattr(observabilidad, "_alcanzable", lambda _uri: True)
+    monkeypatch.setattr(config, "fake_guionado", True)
+
+    primero = atender("¿se permiten mascotas?", yo(), None, "web")
+    segundo = atender("¿y los ruidos?", yo(), primero["conversacion_id"], "web")
+
+    assert primero["conversacion_id"] and segundo["conversacion_id"] == primero["conversacion_id"]
+    esperado = {"session_id": primero["conversacion_id"], "user": str(yo().usuario_id)}
+    assert mlflow.actualizaciones == [esperado, esperado]
 
 
 @pytest.mark.parametrize("metodo", ["end_run", "log_metrics", "set_tags"])
