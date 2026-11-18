@@ -676,7 +676,8 @@ def test_sin_base_atender_no_propaga(monkeypatch):
 
 
 def _mlflow_de_mentira() -> tuple[SimpleNamespace, list[bool]]:
-    """Como el real: un `start_run` con otro activo y sin `nested` lanza excepción."""
+    """Como el real: un `start_run` con otro activo y sin `nested` lanza excepción, y la última traza
+    terminada no es la abierta (el turno tiene que anotar la abierta, `traza-1`)."""
     activos: list[str] = []
     anidados: list[bool] = []
 
@@ -690,7 +691,8 @@ def _mlflow_de_mentira() -> tuple[SimpleNamespace, list[bool]]:
     return SimpleNamespace(
         set_tracking_uri=nada, set_experiment=nada, set_tags=nada, log_metrics=nada, set_trace_tag=nada,
         langchain=SimpleNamespace(autolog=nada), start_run=start_run, active_run=lambda: activos[-1] if activos else None,
-        end_run=lambda status=None: activos.pop(), get_last_active_trace_id=lambda: "traza-1",
+        end_run=lambda status=None: activos.pop(), get_active_trace_id=lambda: "traza-1",
+        get_last_active_trace_id=lambda thread_local=False: "traza-anterior",
     ), anidados
 
 

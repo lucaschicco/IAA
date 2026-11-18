@@ -49,18 +49,25 @@ def _sin_frenar_la_corrida():
 class _Traza:
     def __init__(self, activo: bool):
         self.activo = activo
+        self._id: str | None = None  # la traza de la corrida, cuando ya se la vio abierta
 
     def traza_id(self) -> str | None:
-        """Id de la última traza GenAI de la corrida; None sin MLflow."""
+        """Id de la traza GenAI de la corrida; None sin MLflow o si nunca se la vio abierta.
+
+        Se llama desde adentro de la traza (el nodo `registrar` del agente), así que se pide la traza
+        abierta. `get_last_active_trace_id` no sirve: MLflow la actualiza recién cuando termina el span
+        raíz (3.18, `BaseMlflowSpanProcessor._on_end_impl`). Con la traza del turno abierta devolvía la
+        del turno anterior, y como es global al proceso, con dos turnos simultáneos podía ser la de otra
+        persona (18/11)."""
         if not self.activo:
             return None
         try:
             import mlflow
 
-            return mlflow.get_last_active_trace_id()
+            self._id = mlflow.get_active_trace_id() or self._id
         except Exception as e:
             log.debug("no se pudo leer el id de la traza: %s", e)
-            return None
+        return self._id
 
     def registrar_metricas(self, etiquetas: dict[str, str], metricas: dict[str, float]) -> None:
         """Para corridas que no son ingestas (consultas, evaluaciones)."""
@@ -202,15 +209,16 @@ def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
         "proveedor": config.llm_provider, "modelo": config.modelo,
         "endpoint": _endpoint_proveedor(), "skill_version": version_skill(_skill_de(nombre)),
     }
+    traza = _Traza(True)
     try:
-        yield _Traza(True)
+        yield traza
     except Exception:
-        _etiquetar_traza(mlflow, etiquetas_traza)
+        _etiquetar_traza(mlflow, etiquetas_traza, traza)
         with _sin_frenar_la_corrida():
             mlflow.end_run(status="FAILED")
         raise
     else:
-        _etiquetar_traza(mlflow, etiquetas_traza)
+        _etiquetar_traza(mlflow, etiquetas_traza, traza)
         with _sin_frenar_la_corrida():
             mlflow.end_run()
 
@@ -233,10 +241,15 @@ def _endpoint_proveedor() -> str:
     }.get(config.llm_provider, config.llm_provider)
 
 
-def _etiquetar_traza(mlflow, etiquetas: dict[str, str]) -> None:
-    """Copia a la traza GenAI (autolog) las mismas etiquetas del run: proveedor, modelo, endpoint, origen…"""
+def _etiquetar_traza(mlflow, etiquetas: dict[str, str], traza: _Traza) -> None:
+    """Copia a la traza GenAI (autolog) las mismas etiquetas del run: proveedor, modelo, endpoint, origen…
+
+    Qué traza: la que la corrida ya vio abierta (`traza_id`, el turno del agente); si no, la abierta
+    ahora (la consulta anidada termina con la del turno abierta, y antes del 18/11 etiquetaba la del
+    turno anterior); si no, la última que terminó en este hilo (una ingesta o una consulta suelta, que
+    terminan antes de etiquetar)."""
     try:
-        tid = mlflow.get_last_active_trace_id()
+        tid = traza._id or mlflow.get_active_trace_id() or mlflow.get_last_active_trace_id(thread_local=True)
         if not tid:
             return
         for k, v in etiquetas.items():
