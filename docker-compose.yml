@@ -1,3 +1,6 @@
+# Nombre fijo: los volúmenes (iaa_pgdata, iaa_seaweeddata) no dependen de cómo se llame la carpeta del repo.
+name: iaa
+
 services:
   app:
     build: .
