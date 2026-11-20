@@ -120,30 +120,42 @@ def poner_cookie_previa(respuesta: Response, nonce: str) -> None:
     _poner(respuesta, COOKIE_PREVIA, nonce, _DURACION_PREVIA)
 
 
-def _anotar_actividad(sujeto_externo: str) -> None:
-    """Por sujeto y no por identidad: quien entra solo al CRM no tiene membresías."""
+def usuario_activo(sujeto_externo: str) -> int | None:
+    """El id del usuario si existe y sigue activo. Como la API: dar de baja corta la sesión en el pedido siguiente."""
     with Session(engine()) as s:
-        usuario_id = s.scalar(select(Usuario.id).where(Usuario.sujeto_externo == sujeto_externo))
-    if usuario_id is not None:
-        registrar_actividad(usuario_id)
+        return s.scalar(select(Usuario.id).where(Usuario.sujeto_externo == sujeto_externo, Usuario.activo.is_(True)))
 
 
-def sesion_actual(request: Request) -> Sesion:
-    """Una cookie `selector` vieja no sobrevive a apagar el selector."""
+def sesion_de_cookie(request: Request) -> Sesion | None:
+    """La sesión firmada y vigente, sin mirar la base. Una cookie `selector` vieja no sobrevive a apagar el selector."""
     token = request.cookies.get(NOMBRE_COOKIE)
     sesion = leer_sesion(token) if token else None
     if sesion is None or (sesion.proveedor == "selector" and not config.web_selector_usuarios):
+        return None
+    return sesion
+
+
+def sesion_actual(request: Request) -> Sesion:
+    """401 (y de ahí a `/entrar`) si la cookie no vale o el usuario ya no existe o está dado de baja."""
+    sesion = sesion_de_cookie(request)
+    usuario_id = usuario_activo(sesion.sujeto_externo) if sesion else None
+    if sesion is None or usuario_id is None:
         raise HTTPException(status_code=401)
-    _anotar_actividad(sesion.sujeto_externo)
+    registrar_actividad(usuario_id)  # por usuario y no por identidad: quien entra solo al CRM no tiene membresías
     return sesion
 
 
 SesionActual = Annotated[Sesion, Depends(sesion_actual)]
 
 
+class ElegirConsorcio(Exception):
+    """Con sesión y sin consorcio elegido: no es falta de permiso, falta elegir. La app lo manda a `/consorcios`."""
+
+
 def identidad_actual(sesion: SesionActual) -> Identidad:
+    """Sin consorcio elegido, a elegirlo; con uno elegido sin membresía, 403."""
     if not sesion.consorcio_id:
-        raise HTTPException(status_code=403)
+        raise ElegirConsorcio
     try:
         return resolver_identidad(sesion.sujeto_externo, sesion.consorcio_id)
     except SinMembresia as e:

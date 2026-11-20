@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from .alta import cargar_unidades
+from .alta import MAX_PISO_DEPTO, MAX_UF, cargar_unidades
 from .db import obtener_conexion
 from .permisos import exigir_rol, usuario_actual
 
@@ -10,10 +10,10 @@ router = APIRouter(prefix="/auth/consorcios", tags=["consorcios"])
 
 
 class Unidad(BaseModel):
-    piso: str = Field(min_length=1)
-    depto: str = Field(min_length=1)
-    uf: int | None = None  # número de UF en la liquidación: con eso el agente busca sus expensas
-    porcentual: float | None = None
+    piso: str = Field(min_length=1, max_length=MAX_PISO_DEPTO)
+    depto: str = Field(min_length=1, max_length=MAX_PISO_DEPTO)
+    uf: int | None = Field(default=None, gt=0, le=MAX_UF)  # número de UF en la liquidación: con eso el agente busca sus expensas
+    porcentual: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
 
 
 @router.post("/{consorcio_id}/unidades", status_code=status.HTTP_201_CREATED)

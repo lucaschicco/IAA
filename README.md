@@ -213,7 +213,7 @@ make gasto                   # gasto del mes contra el tope
 
 **Cómo se entra.** `/entrar` pide mail y contraseña (login de Lucas, `src/consorcio/auth/`). Una cuenta nueva
 se crea desde el link de una invitación, `/registro?token=...`; las invitaciones salen de `make alta-consorcio`
-(la del administrador) o de la API (`make api`, http://127.0.0.1:8001/docs, que necesita `JWT_SECRETO`). Ver
+(la del administrador) o de la API (`make api`, http://127.0.0.1:8002/docs, que necesita `JWT_SECRETO`). Ver
 `src/consorcio/auth/LEEME.md`. Con `WEB_SELECTOR_USUARIOS=true`, `/entrar` ofrece además los usuarios `demo-*`
 sin contraseña. Los crea `sembrar-demo`, inventados, con dos consorcios (`demo-palmeras` y `demo-robles`), cada uno
 con reglamento, acta y dos liquidaciones. Salvo el de plataforma, también entran con `<usuario>@demo.test` y la

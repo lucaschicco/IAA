@@ -13,7 +13,7 @@ misma base que el resto del sistema.
 | `rutas.py` | API JSON: invitar, registrarse, login, quién soy |
 | `rutas_unidades.py` | Cargar y listar las unidades de un consorcio |
 | `alta.py` | Comando de terminal para dar de alta un consorcio y cargar unidades desde un CSV |
-| `app.py` | La API JSON aparte (`make api`, http://127.0.0.1:8001/docs) |
+| `app.py` | La API JSON aparte (`make api`, http://127.0.0.1:8002/docs) |
 
 Las tablas (`usuarios`, `unidades_funcionales`, `membresias`, `invitaciones`, `accesos`) están en
 `almacen/postgres.py` y se crean con Alembic (`migraciones/versions/0008_login.py`). Ya no hay SQL suelto.

@@ -1055,9 +1055,10 @@ def consultar_expensas(
     crear_tablas()
     with Session(engine()) as s:
         if que == "resumen":
-            filas = s.scalars(
-                select(Liquidacion).join(Documento).where(Documento.consorcio_id == cid).order_by(Liquidacion.periodo)
-            ).all()
+            q = select(Liquidacion).join(Documento).where(Documento.consorcio_id == cid)
+            if periodo:  # como en los otros tres: antes el resumen devolvía todos los períodos sin aviso
+                q = q.where(Liquidacion.periodo == periodo)
+            filas = s.scalars(q.order_by(Liquidacion.periodo)).all()
             return [
                 {"periodo": f.periodo, "primer_vencimiento": f.primer_vencimiento,
                  "segundo_vencimiento": f.segundo_vencimiento, "total_gastos": f.total_gastos,
@@ -1110,6 +1111,15 @@ def consultar_expensas(
 
 
 # ------------------------------------------------------------------ consorcios y chats
+
+
+def existe_consorcio(consorcio_id: str) -> bool:
+    """Para la CLI: un consorcio mal escrito tiene que distinguirse de uno sin datos."""
+    if "\x00" in consorcio_id:
+        return False
+    crear_tablas()
+    with Session(engine()) as s:
+        return s.get(Consorcio, consorcio_id) is not None
 
 
 def asegurar_consorcio(consorcio_id: str, nombre: str | None = None) -> None:

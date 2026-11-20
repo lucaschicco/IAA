@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 
 from .observabilidad import configurar_logging
@@ -60,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("preguntar", help="responde una consulta con cita verificada (tool 2)")
     p.add_argument("pregunta")
-    p.add_argument("--k", type=int, default=3, help="secciones a recuperar")
+    p.add_argument("--k", type=_positivo, default=3, help="secciones a recuperar")
     p.add_argument("--busqueda", choices=["tsvector", "palabras"], default="tsvector")
     p.add_argument("--sin-persistir", action="store_true", help="no guarda la consulta en Postgres")
     p.add_argument("--json", action="store_true", help="imprime el estado completo en JSON")
@@ -69,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("expensas", help="consulta las liquidaciones por SQL, sin modelo")
     p.add_argument("que", nargs="?", choices=["resumen", "rubros", "gastos", "unidades"], default="resumen")
-    p.add_argument("--periodo", help="AAAA-MM")
+    p.add_argument("--periodo", type=_periodo, help="AAAA-MM")
     p.add_argument("--unidad", help="piso-depto (5-D, COCH-16) o número de UF")
     p.add_argument("--texto", help="filtra gastos por rubro, proveedor o concepto")
     _arg_consorcio(p)
@@ -77,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("evaluar-consultas", help="recall@k del buscador y, opcionalmente, calidad de las respuestas")
     p.add_argument("csv")
     p.add_argument("--particion", choices=["dev", "test", "todas"], default="dev")
-    p.add_argument("--k", type=int, default=3)
+    p.add_argument("--k", type=_positivo, default=3)
     p.add_argument("--con-modelo", action="store_true", help="también responde cada pregunta (gasta tokens)")
     p.add_argument("--sin-detalle", action="store_true")
     _arg_consorcio(p)
@@ -97,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("consultas", help="últimas consultas registradas (pregunta, respuesta, cita, canal)")
     p.add_argument("--consorcio", help="solo esa base (por defecto, todas)")
     p.add_argument("--origen", choices=["telegram", "cli", "evaluacion", "web"])
-    p.add_argument("--ultimas", type=int, default=20)
+    p.add_argument("--ultimas", type=_positivo, default=20)
     sub.add_parser("gasto", help="gasto del mes en modelos contra el tope")
     sub.add_parser("sembrar-demo", help="carga consorcios y usuarios inventados para probar la web")
     p = sub.add_parser("dibujar-grafo", help="grafo de LangGraph en Mermaid")
@@ -108,6 +109,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _aplicar_modelo(args)
     _resolver_consorcio(args)
+    if args.cmd in CON_CONSORCIO_EXISTENTE and getattr(args, "consorcio", None):
+        from .almacen.postgres import existe_consorcio
+
+        if not existe_consorcio(args.consorcio):  # un typo no se confunde con "sin datos"
+            parser.exit(1, f"consorcio: error: no existe el consorcio {args.consorcio!r} "
+                           "(ver `consorcio consorcios`)\n")
 
     if args.cmd == "ingestar":
         from .ingesta.grafo import ingestar_pdf
@@ -257,6 +264,27 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.print_help()
     return 2
+
+
+# Los que leen o cambian datos de un consorcio que ya tiene que existir. `ingestar` no: crea la base si es nueva;
+# `evaluar-consultas` queda como estaba (la auditoría no la marcó y su corrida se reemplaza entera en los tests).
+CON_CONSORCIO_EXISTENTE = {"preguntar", "expensas", "documentos", "consultas"}
+
+
+def _positivo(valor: str) -> int:
+    try:
+        numero = int(valor)
+    except ValueError:
+        numero = 0
+    if not 0 < numero <= 2**31 - 1:  # más grande, el LIMIT de Postgres revienta
+        raise argparse.ArgumentTypeError(f"tiene que ser un entero entre 1 y 2147483647: {valor!r}")
+    return numero
+
+
+def _periodo(valor: str) -> str:
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", valor):
+        raise argparse.ArgumentTypeError(f"el período va como AAAA-MM (p. ej. 2026-07): {valor!r}")
+    return valor
 
 
 def _arg_consorcio(p) -> None:

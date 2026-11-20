@@ -14,9 +14,12 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    # API JSON del login (`make api`): solo en la máquina local
+    # Solo en la máquina local. 8001: la web demo que se levanta a mano dentro de `app`.
+    # 8002: la API JSON del login (`make api`); antes compartía el 8001 y chocaba con la demo.
+    # El puerto nuevo se publica al recrear el contenedor (`docker compose up -d app`).
     ports:
       - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
     command: sleep infinity
 
   # Bot de Telegram. Tiene perfil para que `docker compose up -d` no lo levante sin token:

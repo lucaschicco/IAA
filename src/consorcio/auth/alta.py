@@ -20,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 
 from ..texto import normalizar
 from . import config
-from .cuentas import crear_invitacion
+from .cuentas import PedidoInvalido, crear_invitacion
 from .db import conectar
 
 
@@ -51,17 +51,35 @@ def _numero(valor, campo: str, unidad: str, tipo):
         raise ValueError(f"{campo} inválido en {unidad}: {valor}") from e
 
 
+MAX_UF = 2**31 - 1  # lo que entra en la columna `uf` (integer)
+MAX_PORCENTUAL = Decimal(100)  # la columna es numeric(6, 3); un porcentual de más de 100 no tiene sentido
+MAX_PISO_DEPTO = 20
+
+
+def _validar_unidad(piso: str, depto: str, uf: int | None, porcentual: Decimal | None) -> None:
+    """Lo que la base rechazaría con un error de datos (un 500 en la API, un traceback en la terminal)."""
+    nombre = f"{piso}{depto}"
+    if "\x00" in nombre or len(piso) > MAX_PISO_DEPTO or len(depto) > MAX_PISO_DEPTO:
+        raise ValueError(f"Piso o depto inválido en {nombre!r}: hasta {MAX_PISO_DEPTO} caracteres, sin NUL")
+    if uf is not None and not 0 < uf <= MAX_UF:
+        raise ValueError(f"UF fuera de rango en {nombre}: {uf}")
+    if porcentual is not None and (not porcentual.is_finite() or not 0 <= porcentual <= MAX_PORCENTUAL):
+        raise ValueError(f"Porcentual fuera de rango en {nombre}: {porcentual} (entre 0 y 100)")
+
+
 def cargar_unidades(con, consorcio_id: str, unidades: list[dict]) -> int:
     """Carga o actualiza unidades. Si una unidad ya existe (mismo piso y depto),
     actualiza su UF y su porcentual, así el archivo se puede volver a cargar sin duplicar."""
-    if con.execute("SELECT 1 FROM consorcios WHERE id = %s", (consorcio_id,)).fetchone() is None:
-        raise ValueError(f"No existe el consorcio {consorcio_id}")
+    if "\x00" in consorcio_id or con.execute("SELECT 1 FROM consorcios WHERE id = %s",
+                                             (consorcio_id,)).fetchone() is None:
+        raise ValueError(f"No existe el consorcio {consorcio_id!r}")
     for u in unidades:
-        piso, depto = str(u["piso"]).strip(), str(u["depto"]).strip()
+        piso, depto = str(u.get("piso") or "").strip(), str(u.get("depto") or "").strip()
         if not piso or not depto:
             raise ValueError(f"Unidad sin piso o depto: {u}")
         porcentual = _numero(u.get("porcentual"), "Porcentual", f"{piso}{depto}", Decimal)
         uf = _numero(u.get("uf"), "UF", f"{piso}{depto}", int)
+        _validar_unidad(piso, depto, uf, porcentual)
         con.execute(
             """INSERT INTO unidades_funcionales (consorcio_id, piso, depto, uf, porcentual)
                VALUES (%s, %s, %s, %s, %s)
@@ -93,16 +111,19 @@ def main(argv: list[str] | None = None):
     u.add_argument("--csv", required=True)
 
     args = p.parse_args(argv)
-    with conectar() as con:
-        if args.comando == "consorcio":
-            consorcio_id, token = crear_consorcio(con, args.nombre, args.direccion, args.admin_email, args.id)
-            print(f"Consorcio creado con id {consorcio_id}.")
-            print("Invitación para el administrador (vence en "
-                  f"{config.DIAS_INVITACION} días), usarla en /registro:")
-            print(token)
-        else:
-            n = cargar_unidades(con, args.consorcio_id, _leer_csv(args.csv))
-            print(f"{n} unidades cargadas en el consorcio {args.consorcio_id}.")
+    try:
+        with conectar() as con:
+            if args.comando == "consorcio":
+                consorcio_id, token = crear_consorcio(con, args.nombre, args.direccion, args.admin_email, args.id)
+                print(f"Consorcio creado con id {consorcio_id}.")
+                print("Invitación para el administrador (vence en "
+                      f"{config.DIAS_INVITACION} días), usarla en /registro:")
+                print(token)
+            else:
+                n = cargar_unidades(con, args.consorcio_id, _leer_csv(args.csv))
+                print(f"{n} unidades cargadas en el consorcio {args.consorcio_id}.")
+    except (ValueError, PedidoInvalido, OSError) as e:  # un dato o un archivo mal: una línea y rc=1, sin traceback
+        p.exit(1, f"error: {e}\n")
 
 
 if __name__ == "__main__":

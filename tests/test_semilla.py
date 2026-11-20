@@ -205,13 +205,13 @@ def _con_ruta(sujeto, consorcio, dependencia):
         return {"ok": True}
 
     cliente.app.add_api_route("/prueba", ruta)
-    return cliente.get("/prueba").status_code
+    return cliente.get("/prueba", follow_redirects=False).status_code
 
 
 @pytest.mark.parametrize("sujeto,consorcio,dependencia,esperado", [
     ("demo-prop-palmeras", PALMERAS, identidad_actual, 200),
     ("demo-prop-palmeras", ROBLES, identidad_actual, 403),
-    ("demo-prop-palmeras", None, identidad_actual, 403),
+    ("demo-prop-palmeras", None, identidad_actual, 303),  # a /consorcios, a elegirlo
     ("demo-admin-palmeras", PALMERAS, exigir_administrador, 200),
     ("demo-prop-palmeras", PALMERAS, exigir_administrador, 403),
     ("demo-plataforma", None, exigir_plataforma, 200),

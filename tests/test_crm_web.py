@@ -71,10 +71,14 @@ def test_plataforma_entra(sembrado):
 
 @pytest.mark.parametrize("sujeto, consorcio", [
     ("demo-admin-palmeras", PALMERAS), ("demo-prop-palmeras", PALMERAS), ("demo-prop-robles", ROBLES),
-    ("demo-multi", ROBLES), ("sujeto-desconocido", None),
+    ("demo-multi", ROBLES), ("demo-multi", None),
 ])
 def test_quien_no_es_de_plataforma_recibe_404(sujeto, consorcio):
     assert cliente_como(sujeto, consorcio).get("/crm").status_code == 404
+
+
+def test_sujeto_desconocido_va_a_entrar():
+    assert manda_a_entrar(cliente_como("sujeto-desconocido").get("/crm"))
 
 
 def test_sin_sesion_va_a_entrar():

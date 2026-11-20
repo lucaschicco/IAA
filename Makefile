@@ -75,8 +75,8 @@ alta-consorcio: ## make alta-consorcio NOMBRE="Mercedes 274" DIRECCION="..." ADM
 alta-unidades: ## make alta-unidades CONSORCIO=mercedes-274 CSV=datos/unidades/unidades.csv (piso,depto[,uf][,porcentual])
 	$(RUN) python -m consorcio.auth.alta unidades --consorcio-id "$(CONSORCIO)" --csv "$(CSV)"
 
-api:          ## API JSON del login en http://127.0.0.1:8001/docs (necesita JWT_SECRETO en .env)
-	$(RUN) uvicorn consorcio.auth.app:app --host 0.0.0.0 --port 8001 --reload
+api:          ## API JSON del login en http://127.0.0.1:8002/docs (necesita JWT_SECRETO en .env; 8001 es de la web demo)
+	$(RUN) uvicorn consorcio.auth.app:app --host 0.0.0.0 --port 8002 --reload
 
 gasto:        ## Gasto en modelos del mes contra el tope
 	$(RUN) consorcio gasto

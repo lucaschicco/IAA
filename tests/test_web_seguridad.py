@@ -316,15 +316,34 @@ def test_el_rol_se_lee_de_la_base_y_no_de_la_cookie():
                              "(SELECT id FROM usuarios WHERE sujeto_externo='demo-multi')"), {"c": ROBLES})
 
 
-def test_usuario_sin_membresia():
+def test_sujeto_sin_usuario_no_conserva_la_sesion():
+    """Una cookie bien firmada de alguien que no está en `usuarios` vale lo mismo que una vencida."""
     cliente = cliente_como("alguien-sin-cuenta", PALMERAS)
-    assert cliente.get("/chat").status_code == 403
-    r = cliente.get("/consorcios")
-    assert r.status_code == 200 and "ningún consorcio" in r.text
+    assert manda_a_entrar(cliente.get("/chat"))
+    assert manda_a_entrar(cliente.get("/consorcios"))
 
 
-def test_sesion_sin_consorcio_elegido_no_entra_al_chat():
-    assert cliente_como(MULTI).get("/chat").status_code == 403
+def test_usuario_sin_membresia():
+    cliente = cliente_como("demo-prop-palmeras", ROBLES)
+    with postgres.engine().begin() as con:
+        con.execute(text("DELETE FROM membresias WHERE usuario_id="
+                         "(SELECT id FROM usuarios WHERE sujeto_externo='demo-prop-palmeras')"))
+    try:
+        assert cliente.get("/chat").status_code == 403
+        r = cliente.get("/consorcios")
+        assert r.status_code == 200 and "ningún consorcio" in r.text
+    finally:
+        vaciar_y_sembrar()
+
+
+def test_sesion_sin_consorcio_elegido_va_a_elegirlo():
+    cliente = cliente_como(MULTI)
+    cliente.follow_redirects = False
+    for camino in ("/chat", "/documentos", "/mis-solicitudes", "/bandeja", "/revisar"):
+        r = cliente.get(camino)
+        assert r.status_code == 303 and r.headers["location"] == "/consorcios", camino
+    r = cliente.get("/chat", headers={"HX-Request": "true"})
+    assert r.headers["hx-redirect"] == "/consorcios"
 
 
 def test_plataforma_no_es_miembro_de_ningun_consorcio():
@@ -490,7 +509,10 @@ def test_htmx_vendorizado_es_la_version_pedida():
 
 
 def test_404_de_ruta_oculta_igual_al_de_una_inexistente():
-    assert cliente_como(PROP, PALMERAS).get("/no-existe").text == TestClient(crear_app()).get("/no-existe").text
+    cliente = cliente_como(PROP, PALMERAS)
+    assert cliente.get("/crm").text == cliente.get("/no-existe").text
+    sin_sesion = TestClient(crear_app())
+    assert sin_sesion.get("/no-existe").status_code == 404
 
 
 # ------------------------------------------------------------------ criterio 21: actividad

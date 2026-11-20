@@ -144,19 +144,22 @@ def _id(valor: str) -> int:
     return int(valor)
 
 
-def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identidad | None = None,
-           status_code: int = 200, **datos) -> Response:
-    """Lo que el menú lateral y la barra superior necesitan en toda pantalla con sesión."""
-    consorcio = next((m["nombre"] for m in membresias_de(sesion.sujeto_externo)
-                      if identidad and m["consorcio_id"] == identidad.consorcio_id), None)
+def contexto_menu(sesion: Sesion, identidad: Identidad | None = None) -> dict:
+    """Lo que el menú lateral y la barra superior necesitan en toda pantalla con sesión (también la de error)."""
+    membresias = membresias_de(sesion.sujeto_externo)
+    consorcio = next((m["nombre"] for m in membresias if identidad and m["consorcio_id"] == identidad.consorcio_id), None)
     por_atender = 0
     if identidad and identidad.es_administracion:
         por_atender = sum(s["estado"] == "pendiente" for s in listar_solicitudes(identidad))
-    administra = any(m["rol"] == "administracion" for m in membresias_de(sesion.sujeto_externo))
-    return plantillas.TemplateResponse(request, plantilla, {
-        "sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion), "administra": administra,
-        "plataforma": es_plataforma(sesion.sujeto_externo), "por_atender": por_atender, **datos,
-    }, status_code=status_code)
+    administra = any(m["rol"] == "administracion" for m in membresias)
+    return {"sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion),
+            "administra": administra, "plataforma": es_plataforma(sesion.sujeto_externo), "por_atender": por_atender}
+
+
+def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identidad | None = None,
+           status_code: int = 200, **datos) -> Response:
+    return plantillas.TemplateResponse(request, plantilla, {**contexto_menu(sesion, identidad), **datos},
+                                       status_code=status_code)
 
 
 def _ir_a(destino: str) -> RedirectResponse:

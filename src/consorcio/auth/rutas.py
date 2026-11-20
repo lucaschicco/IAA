@@ -1,8 +1,9 @@
 """Funciones HTTP de la API JSON: invitar, registrarse, login y quién soy. La lógica está en `cuentas.py`."""
-from typing import Literal
+import re
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from . import config
 from .cuentas import (
@@ -23,23 +24,49 @@ router = APIRouter(prefix="/auth", tags=["autenticación"])
 
 Rol = Literal["administracion", "consejo", "propietario", "inquilino"]
 
+MAX_EMAIL = 320  # el mismo tope que la web
+MAX_TEXTO = 1024  # token y contraseña: de sobra, y Argon2 no recibe megas
+MAX_ID = 2**31 - 1
+_FORMA_MAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s.]+")
+
+
+def _mail(valor: str) -> str:
+    """Validación propia y no `EmailStr`: email-validator rechaza los dominios reservados (`@demo.test` de la
+    semilla), que la web sí acepta. Alcanza con la forma usuario@dominio.tld: la invitación prueba el resto."""
+    valor = valor.strip().lower()
+    if not _FORMA_MAIL.fullmatch(valor):
+        raise ValueError("no es un mail válido")
+    return valor
+
+
+def _sin_nul(valor: str) -> str:
+    if "\x00" in valor:
+        raise ValueError("no puede contener el carácter NUL")
+    return valor
+
+
+Mail = Annotated[str, StringConstraints(max_length=MAX_EMAIL), AfterValidator(_sin_nul), AfterValidator(_mail)]
+Texto = Annotated[str, StringConstraints(max_length=MAX_TEXTO), AfterValidator(_sin_nul)]
+# `strip_whitespace` corre antes de `min_length`: un nombre de puros espacios no llega a la base
+Nombre = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200), AfterValidator(_sin_nul)]
+
 
 class PedidoInvitacion(BaseModel):
-    consorcio_id: str
-    email: EmailStr
+    consorcio_id: Annotated[str, StringConstraints(max_length=200), AfterValidator(_sin_nul)]
+    email: Mail
     rol: Rol
-    unidad_id: int | None = None
+    unidad_id: int | None = Field(default=None, gt=0, le=MAX_ID)
 
 
 class PedidoRegistro(BaseModel):
-    token: str
-    nombre: str = Field(min_length=1)
-    contrasena: str = Field(min_length=config.LARGO_MINIMO_CONTRASENA)
+    token: Texto
+    nombre: Nombre
+    contrasena: Annotated[Texto, Field(min_length=config.LARGO_MINIMO_CONTRASENA)]
 
 
 class PedidoLogin(BaseModel):
-    email: EmailStr
-    contrasena: str
+    email: Mail
+    contrasena: Texto
 
 
 class RespuestaToken(BaseModel):

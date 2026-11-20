@@ -67,6 +67,9 @@ def chat_autorizado(chat_id: int, permitidos: set[int]) -> bool:
     return not permitidos or chat_id in permitidos
 
 
+MENSAJE_FALLA = "No pude completar el pedido. Probá de nuevo en un rato o avisale a la administración."
+
+
 def parsear_expensas(args: list[str]) -> dict:
     """`/expensas rubros 2026-07 5-D limpieza` → que, periodo, unidad, texto (en cualquier orden)."""
     res: dict = {"que": "resumen", "periodo": None, "unidad": None, "texto": None}
@@ -191,9 +194,9 @@ def correr_bot() -> int:
             await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
             try:
                 respuesta = await asyncio.to_thread(trabajo, *args)
-            except Exception as e:  # el bot no se cae por un PDF roto o un proveedor sin cuota
+            except Exception:  # el bot no se cae por un PDF roto o un proveedor sin cuota
                 log.exception("fallo en %s", getattr(trabajo, "__name__", trabajo))
-                respuesta = f"No pude completar el pedido: {type(e).__name__}: {str(e)[:300]}"
+                respuesta = MENSAJE_FALLA  # el detalle (rutas, SQL, el proveedor) queda solo en el log
         await msg.reply_text(respuesta)
 
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
