@@ -200,6 +200,9 @@ def obtener_llm(modelo: str | None = None, max_tokens: int | None = None) -> Bas
         if config.google_api_key:
             extra["google_api_key"] = config.google_api_key
         extra["max_output_tokens"] = extra.pop("max_tokens")
+        # Con las claves de AI Studio que empiezan con `AQ.` la biblioteca llama a `v1`, que rechaza las
+        # instrucciones de sistema ("Developer instruction is not enabled for api version v1")
+        extra["api_version"] = "v1beta"
     elif proveedor == "anthropic":
         if config.anthropic_api_key:
             extra["api_key"] = config.anthropic_api_key
