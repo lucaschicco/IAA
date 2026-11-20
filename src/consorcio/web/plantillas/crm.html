@@ -25,9 +25,59 @@
 {% macro duracion(segundos) %}
   {%- if segundos is none %}sin datos
   {%- elif segundos < 3600 %}{{ "%.0f"|format(segundos / 60) }} min
-  {%- else %}{{ "%.1f"|format(segundos / 3600) }} h
+  {%- elif segundos < 172800 %}{{ "%.1f"|format(segundos / 3600) }} h
+  {%- else %}{{ "%.1f"|format(segundos / 86400) }} días
   {%- endif %}
 {%- endmacro %}
+
+{% macro usd(valor) %}{{ "%.4f"|format(valor) }}{% endmacro %}
+
+{% macro segundos(valor) %}{% if valor is none %}sin datos{% else %}{{ "%.2f"|format(valor) }} s{% endif %}{% endmacro %}
+
+{# El filtro de Administración solo va en la URL cuando está puesto: así los links sin él quedan como antes #}
+{% macro enlace(clave) -%}
+/crm?{{ {'vista': clave, 'dias': dias, 'consorcio': filtro}|urlencode }}{% if filtro_administracion %}&amp;{{ {'administracion': filtro_administracion}|urlencode }}{% endif %}
+{%- endmacro %}
+
+{# Administración → consorcio. `con_consorcios`: suma una fila por consorcio debajo de cada Administración #}
+{% macro tabla_administraciones(datos, con_consorcios) %}
+  {% if datos.filas or datos.sin_consorcio %}
+  <div class="crm-tabla">
+    <table>
+      <thead><tr><th scope="col">{{ "Administración / consorcio" if con_consorcios else "Administración" }}</th><th scope="col">Preguntas</th><th scope="col">USD</th><th scope="col">Tokens entrada</th><th scope="col">Tokens salida</th></tr></thead>
+      <tbody>
+        {% for fila in datos.filas %}
+          <tr class="crm-fila-total"><th scope="row">{{ fila.nombre }}</th><td>{{ fila.preguntas }}</td><td>{{ usd(fila.costo_usd) }}</td><td>{{ fila.tokens_entrada }}</td><td>{{ fila.tokens_salida }}</td></tr>
+          {% if con_consorcios %}
+            {% for c in fila.consorcios %}
+              <tr class="crm-subfila"><td>{{ c.consorcio_id }}</td><td>{{ c.preguntas }}</td><td>{{ usd(c.costo_usd) }}</td><td>{{ c.tokens_entrada }}</td><td>{{ c.tokens_salida }}</td></tr>
+            {% else %}
+              <tr class="crm-subfila"><td colspan="5">sin consumo ni preguntas en el período</td></tr>
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+        {% if datos.sin_consorcio %}
+          <tr><th scope="row">Sin consorcio</th><td></td><td>{{ usd(datos.sin_consorcio.costo_usd) }}</td><td>{{ datos.sin_consorcio.tokens_entrada }}</td><td>{{ datos.sin_consorcio.tokens_salida }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% if datos.sin_consorcio %}<p class="crm-nota">"Sin consorcio" es lo del libro que no lleva consorcio (p. ej. una ingesta cortada antes de saberlo); con filtro no aparece.</p>{% endif %}
+  {% else %}
+    <p class="crm-nota">sin datos: no hay Administraciones en el filtro ni consumo en el período.</p>
+  {% endif %}
+{% endmacro %}
+
+{# Costo por día: columnas SVG por atributos, como la actividad #}
+{% macro costo_diario(serie) %}
+  {% set maximo = serie|map(attribute="costo_usd")|max %}
+  <svg class="crm-columnas crm-costo" viewBox="0 0 {{ serie|length * 10 }} 100" preserveAspectRatio="none" role="img" aria-label="Costo por día en USD">
+    {% for d in serie %}
+      {% set alto = (d.costo_usd / maximo * 98) if maximo else 0 %}
+      <rect class="serie-costo" x="{{ loop.index0 * 10 + 1 }}" y="{{ '%.2f'|format(100 - alto) }}" width="8" height="{{ '%.2f'|format(alto) }}"><title>{{ d.dia }}: {{ usd(d.costo_usd) }} USD</title></rect>
+    {% endfor %}
+  </svg>
+{% endmacro %}
 
 {# `malo_si_sube`: más derivaciones no es una buena noticia, aunque la flecha suba #}
 {% macro variacion(actual, anterior, malo_si_sube=false) %}
@@ -102,7 +152,7 @@
 {% block sub_crm %}
 <div class="sub">
   {% for clave, v in VISTAS.items() %}
-  <a href="/crm?{{ {'vista': clave, 'dias': dias, 'consorcio': filtro}|urlencode }}" class="sub-item"{% if clave == vista %} aria-current="page"{% endif %}>{{ i.icono(v[1]) }}<span>{{ v[0] }}</span></a>
+  <a href="{{ enlace(clave) }}" class="sub-item"{% if clave == vista %} aria-current="page"{% endif %}>{{ i.icono(v[1]) }}<span>{{ v[0] }}</span></a>
   {% endfor %}
 </div>
 {% endblock %}
@@ -130,6 +180,15 @@
           {% endfor %}
         </select>
       </label>
+      <label>Administración
+        <select name="administracion">
+          <option value="">Todas</option>
+          {% for a in administraciones %}
+            <option value="{{ a.id }}"{% if a.id|string == filtro_administracion %} selected{% endif %}>{{ a.nombre }}</option>
+          {% endfor %}
+          <option value="{{ sin_administracion }}"{% if filtro_administracion == sin_administracion %} selected{% endif %}>Sin administración</option>
+        </select>
+      </label>
       <label>Consorcio
         <select name="consorcio">
           <option value="">Todos</option>
@@ -143,7 +202,7 @@
   </header>
 
   <nav class="crm-vistas" aria-label="Vistas del CRM">
-    {% for clave, v in VISTAS.items() %}<a href="/crm?{{ {'vista': clave, 'dias': dias, 'consorcio': filtro}|urlencode }}"{% if clave == vista %} aria-current="page"{% endif %}>{{ v[0] }}</a>{% endfor %}
+    {% for clave, v in VISTAS.items() %}<a href="{{ enlace(clave) }}"{% if clave == vista %} aria-current="page"{% endif %}>{{ v[0] }}</a>{% endfor %}
   </nav>
 
   {% if vista == "resumen" %}
@@ -186,8 +245,16 @@
       <h2>Cómo terminaron</h2>
       {{ dato("turnos en el período", panel.preguntas.total) }}
       {{ barras(panel.preguntas.por_resultado) }}
+      {% set derivacion = panel.tasas.derivacion %}
+      <p>Tasa de derivación: {{ porcentaje(derivacion.valor) }} <small>({{ derivacion.derivadas }} de {{ derivacion.n }})</small></p>
     </article>
   </div>
+
+  <article>
+    <h2>Por Administración</h2>
+    <p class="crm-nota">Costo del libro de gastos (sin evaluaciones) y preguntas del período. Los consorcios creados por Telegram o por terminal van a "Sin administración". El detalle por consorcio está en Uso y costos.</p>
+    {{ tabla_administraciones(panel.consumo.por_administracion, false) }}
+  </article>
 
   <div class="crm-fila">
     <article>
@@ -274,6 +341,55 @@
     </article>
   </div>
 
+  <div class="crm-fila">
+    <article>
+      <h2>Latencia</h2>
+      <p class="crm-nota">Lo que esperó la persona por turno (p50 y p95 de <code>turnos.segundos</code>), con o sin llamada al modelo.</p>
+      {% set lat = panel.latencia %}
+      <div class="crm-datos">
+        {{ dato("p50", segundos(lat.total.p50_s)) }}
+        {{ dato("p95", segundos(lat.total.p95_s)) }}
+        {{ dato("turnos", lat.total.n) }}
+      </div>
+      {% if lat.por_funcionalidad %}
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Funcionalidad</th><th scope="col">Turnos</th><th scope="col">p50</th><th scope="col">p95</th></tr></thead>
+          <tbody>
+            {% for nombre, fila in lat.por_funcionalidad.items() %}
+              <tr><td>{{ nombre|replace("_", " ") }}</td><td>{{ fila.n }}</td><td>{{ segundos(fila.p50_s) }}</td><td>{{ segundos(fila.p95_s) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </article>
+    <article>
+      <h2>Elevadas después de una respuesta</h2>
+      {% set tras = panel.tasas.elevadas_tras_respuesta %}
+      <p class="crm-nota">Veces que el vecino tocó "Pasar a la administración" sobre las respuestas del período: una respuesta que no le sirvió, aunque haya salido con cita.</p>
+      <div class="crm-datos">
+        {{ dato("de las respondidas", porcentaje(tras.valor)) }}
+        {{ dato("elevadas", tras.elevadas) }}
+        {{ dato("respondidas", tras.respondidas) }}
+        {{ dato("mensajes directos", tras.pedidos_directos) }}
+      </div>
+      <p class="crm-nota">Los mensajes directos (desde Mis solicitudes) no siguen a una respuesta: se cuentan aparte y no entran en la tasa.</p>
+      {% if tras.por_funcionalidad %}
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Funcionalidad</th><th scope="col">Respondidas</th><th scope="col">Elevadas</th><th scope="col">Tasa</th></tr></thead>
+          <tbody>
+            {% for nombre, fila in tras.por_funcionalidad.items() %}
+              <tr><td>{{ nombre|replace("_", " ") }}</td><td>{{ fila.respondidas }}</td><td>{{ fila.elevadas }}</td><td>{{ porcentaje(fila.valor) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </article>
+  </div>
+
   {% else %}
   {# Uso y costos: quién usa, qué cuesta y qué tiene el buscador. #}
   <div class="crm-fila">
@@ -311,8 +427,136 @@
         {{ dato("activos en 7 días", usuarios.activos_semana) }}
         {{ dato("activos en 30 días", usuarios.activos_mes) }}
       </div>
+      {% set preguntaron = panel.usuarios_que_preguntaron %}
+      <h3>Preguntaron en el período</h3>
+      <div class="crm-datos">
+        {{ dato("personas que preguntaron", preguntaron.total) }}
+        {{ dato("preguntas por persona", "sin datos" if preguntaron.preguntas_por_usuario is none else "%.2f"|format(preguntaron.preguntas_por_usuario)) }}
+      </div>
+      <p class="crm-nota">Personas distintas con al menos un turno; "activos" cuenta cualquier pantalla de la web, no solo el chat.</p>
       <h3>Uso por rol</h3>
       {{ barras(panel.uso.por_rol) }}
+      <h3>Personas que preguntaron, por rol</h3>
+      {{ barras(preguntaron.por_rol) }}
+    </article>
+  </div>
+
+  {% set consumo = panel.consumo %}
+  <article>
+    <h2>Consumo por Administración y consorcio</h2>
+    <p class="crm-nota">Costo y tokens del libro de gastos del período, menos lo de los turnos de evaluación: incluye la ingesta, Telegram y la CLI. Las preguntas son los turnos del agente.</p>
+    {{ tabla_administraciones(consumo.por_administracion, true) }}
+  </article>
+
+  <div class="crm-fila crm-fila-ancha">
+    <article>
+      <header class="crm-titulo"><h2>Costo por día</h2></header>
+      {% set maximo_dia = consumo.por_dia|map(attribute="costo_usd")|max %}
+      {% if maximo_dia %}
+        {{ costo_diario(consumo.por_dia) }}
+        <div class="crm-eje">
+          {% set serie = consumo.por_dia %}
+          <span>{{ serie[0].dia[8:] }}/{{ serie[0].dia[5:7] }}</span>
+          <span>{{ serie[serie|length // 2].dia[8:] }}/{{ serie[serie|length // 2].dia[5:7] }}</span>
+          <span>{{ serie[-1].dia[8:] }}/{{ serie[-1].dia[5:7] }}</span>
+        </div>
+        <p class="crm-nota">Por día UTC, del libro de gastos sin evaluaciones; el día más caro: {{ usd(maximo_dia) }} USD; en el período: {{ usd(consumo.por_dia|sum(attribute="costo_usd")) }} USD.</p>
+      {% else %}
+        <p class="crm-nota crm-vacio">Sin gasto con precio en este período.</p>
+      {% endif %}
+    </article>
+    <article>
+      <h2>Costo por canal</h2>
+      {% if consumo.por_canal %}
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Canal</th><th scope="col">Preguntas</th><th scope="col">USD</th></tr></thead>
+          <tbody>
+            {% for canal, fila in consumo.por_canal.items() %}
+              <tr><td>{{ canal }}</td><td>{{ fila.preguntas }}</td><td>{{ usd(fila.costo_usd) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="crm-nota">sin datos</p>{% endif %}
+      <p class="crm-nota">Web sale de los turnos del agente; CLI y Telegram, de las consultas. La ingesta no tiene canal en el libro y no está acá.</p>
+    </article>
+  </div>
+
+  <div class="crm-fila">
+    <article>
+      <h2>Costo por pregunta y tokens</h2>
+      {% set pp = consumo.por_pregunta %}
+      <div class="crm-datos">
+        {{ dato("USD por pregunta", "sin datos" if pp.total.costo_por_pregunta_usd is none else "%.5f"|format(pp.total.costo_por_pregunta_usd)) }}
+        {{ dato("tokens de entrada", pp.total.tokens_entrada) }}
+        {{ dato("tokens de salida", pp.total.tokens_salida) }}
+      </div>
+      <p class="crm-nota">Divide solo por los turnos con precio ({{ pp.total.con_precio }} de {{ pp.total.turnos }}): un turno sin precio no es gratis.</p>
+      {% if pp.por_funcionalidad %}
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Funcionalidad</th><th scope="col">Turnos</th><th scope="col">USD por pregunta</th><th scope="col">Tokens entrada</th><th scope="col">Tokens salida</th></tr></thead>
+          <tbody>
+            {% for nombre, fila in pp.por_funcionalidad.items() %}
+              <tr><td>{{ nombre|replace("_", " ") }}</td><td>{{ fila.turnos }}</td><td>{{ "sin datos" if fila.costo_por_pregunta_usd is none else "%.5f"|format(fila.costo_por_pregunta_usd) }}</td><td>{{ fila.tokens_entrada }}</td><td>{{ fila.tokens_salida }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3>Por modelo</h3>
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Modelo</th><th scope="col">Turnos</th><th scope="col">Tokens entrada</th><th scope="col">Tokens salida</th></tr></thead>
+          <tbody>
+            {% for nombre, fila in pp.por_modelo.items() %}
+              <tr><td>{{ nombre }}</td><td>{{ fila.turnos }}</td><td>{{ fila.tokens_entrada }}</td><td>{{ fila.tokens_salida }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </article>
+    <article>
+      <h2>Costo de ingesta por documento</h2>
+      <p class="crm-nota">Estado de hoy: lo que costó extraer cada documento guardado, por método.</p>
+      {% if consumo.ingesta_por_documento %}
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Método</th><th scope="col">Documentos</th><th scope="col">USD promedio</th><th scope="col">Segundos promedio</th></tr></thead>
+          <tbody>
+            {% for metodo, fila in consumo.ingesta_por_documento.items() %}
+              <tr><td>{{ metodo }}</td><td>{{ fila.documentos }}</td><td>{% if fila.costo_promedio_usd is none %}sin datos{% else %}{{ usd(fila.costo_promedio_usd) }}{% endif %}</td><td>{{ "sin datos" if fila.segundos_promedio is none else "%.1f"|format(fila.segundos_promedio) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% set sin_precio = consumo.ingesta_por_documento.values()|sum(attribute="sin_precio") %}
+      {% if sin_precio %}<p class="crm-nota">{{ sin_precio }} sin costo registrado (semilla, modelo sin precio o solo Tesseract): no entran en el promedio.</p>{% endif %}
+      {% else %}<p class="crm-nota">sin datos: no hay documentos guardados.</p>{% endif %}
+    </article>
+    <article>
+      <h2>Pendientes hoy</h2>
+      {% set pend = panel.pendientes %}
+      <p class="crm-nota">Estado de hoy, sin período: lo que espera a una administración.</p>
+      <div class="crm-datos">
+        {{ dato("pendientes", pend.total) }}
+        {{ dato("derivaciones", pend.por_tipo.get("derivacion", 0)) }}
+        {{ dato("reclamos", pend.por_tipo.get("reclamo", 0)) }}
+      </div>
+      <p>La más vieja espera hace: {{ duracion(pend.mas_antigua_s) }}</p>
+      {% if pend.por_consorcio %}
+      <div class="crm-tabla">
+        <table>
+          <thead><tr><th scope="col">Consorcio</th><th scope="col">Pendientes</th><th scope="col">La más vieja</th></tr></thead>
+          <tbody>
+            {% for cid, fila in pend.por_consorcio.items() %}
+              <tr><td>{{ cid }}</td><td>{{ fila.n }}</td><td>{{ duracion(fila.mas_antigua_s) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
     </article>
   </div>
 
@@ -345,6 +589,8 @@
       {{ barras(panel.documentos.por_tipo) }}
       <h3>Por estado</h3>
       {{ barras(panel.documentos.por_estado) }}
+      <h3>Cargas del período</h3>
+      {{ barras(panel.cargas) }}
       <h3>Contextos</h3>
       <div class="crm-datos">
         {{ dato("respuestas con contexto", panel.contextos.respuestas_con_contexto) }}
@@ -358,13 +604,16 @@
       <h2>Reclamos</h2>
       <p class="crm-nota">Reclamos creados en el período, según lo que decidió la administración.</p>
       {{ barras({"aprobadas": panel.acciones.aprobadas, "editadas": panel.acciones.editadas, "rechazadas": panel.acciones.rechazadas, "pendientes": panel.acciones.pendientes}) }}
+      {% set edicion = panel.tasas.edicion_reclamos %}
+      <p>Tasa de edición: {{ porcentaje(edicion.valor) }} <small>({{ edicion.editadas }} de {{ edicion.decididas }} decididos)</small></p>
+      <p class="crm-nota">Editados sobre aprobados, editados y rechazados: cuánto corrige la administración lo que propuso el modelo.</p>
     </article>
   </div>
   {% endif %}
 
   <footer class="crm-nota">
-    <p>Telegram no pasa por el router, así que sus preguntas no aparecen acá; su gasto sí entra en el tope.</p>
-    <p>Solo agregados: es la única pantalla que cruza consorcios y no muestra textos ni nombres. Las evaluaciones no cuentan.</p>
+    <p>Telegram no pasa por el router, así que sus preguntas no aparecen en los turnos (sí en Costo por canal); su gasto sí entra en el tope.</p>
+    <p>Solo agregados: es la única pantalla que cruza consorcios y no muestra textos ni nombres de personas o consorcios; de las Administraciones, que son los clientes, sí el nombre. Las evaluaciones no cuentan.</p>
   </footer>
 </div>
 {% endblock %}

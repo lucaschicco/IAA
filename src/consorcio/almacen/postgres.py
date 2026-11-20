@@ -68,15 +68,27 @@ def exigir_consorcio(consorcio_id: str | None) -> str:
     return consorcio_id
 
 
+class Administracion(Base):
+    """La empresa o persona que administra uno o varios consorcios (0011). No da permisos, que salen de
+    `membresias`: es solo una dimensión de métricas y de agrupación visual."""
+
+    __tablename__ = "administraciones"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
 class Consorcio(Base):
     """Una base por consorcio: todo lo que se ingesta y se consulta lleva `consorcio_id`.
     Por ahora cada número/grupo de Telegram tiene el suyo (`chat-<id>`); la tabla `chats` permite
-    después asignar varios números a un mismo consorcio."""
+    después asignar varios números a un mismo consorcio. `administracion_id` NULL: creado por Telegram o
+    por terminal sin Administración; el CRM lo muestra en "Sin administración"."""
 
     __tablename__ = "consorcios"
     id: Mapped[str] = mapped_column(String(60), primary_key=True)  # slug: mercedes-274, chat-123
     nombre: Mapped[str] = mapped_column(Text)
     direccion: Mapped[str | None] = mapped_column(Text)
+    administracion_id: Mapped[int | None] = mapped_column(ForeignKey("administraciones.id"), index=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
 
 
@@ -1170,11 +1182,56 @@ def listar_consorcios() -> list[dict]:
         return filas
 
 
+class AdministracionNoEncontrada(LookupError):
+    """El id de Administración no existe."""
+
+
+class ConsorcioNoEncontrado(LookupError):
+    """El id de consorcio no existe."""
+
+
+def crear_administracion(nombre: str) -> int:
+    """Crea una Administración y devuelve su id. El nombre va de 1 a 120 caracteres, sin espacios de más."""
+    nombre = " ".join(nombre.split())
+    if not 1 <= len(nombre) <= 120:
+        raise ValueError("el nombre de la Administración tiene que tener entre 1 y 120 caracteres")
+    crear_tablas()
+    with Session(engine()) as s, s.begin():
+        fila = Administracion(nombre=nombre)
+        s.add(fila)
+        s.flush()
+        return fila.id
+
+
+def asignar_administracion(consorcio_id: str, administracion_id: int | None) -> None:
+    """Pone el consorcio en esa Administración (None: lo saca de la que tenga). Nunca crea un consorcio."""
+    crear_tablas()
+    with Session(engine()) as s, s.begin():
+        consorcio = s.get(Consorcio, consorcio_id)
+        if consorcio is None:
+            raise ConsorcioNoEncontrado(consorcio_id)
+        if administracion_id is not None and s.get(Administracion, administracion_id) is None:
+            raise AdministracionNoEncontrada(administracion_id)
+        consorcio.administracion_id = administracion_id
+
+
+def listar_administraciones() -> list[dict]:
+    """Cada Administración con sus consorcios, y al final los consorcios sin Administración."""
+    crear_tablas()
+    with Session(engine()) as s:
+        consorcios = s.execute(select(Consorcio.id, Consorcio.administracion_id).order_by(Consorcio.id)).all()
+        filas = [{"id": a.id, "nombre": a.nombre, "consorcios": [c for c, adm in consorcios if adm == a.id]}
+                 for a in s.scalars(select(Administracion).order_by(Administracion.id))]
+    filas.append({"id": None, "nombre": "Sin administración", "consorcios": [c for c, adm in consorcios if adm is None]})
+    return filas
+
+
 def migrar_consorcios(por_defecto: str) -> list[dict]:
     """Migración 26/10/2026: los documentos existentes (id = hash) pasan a `<consorcio>:<hash>`.
     Idempotente. Cabrera va a su propio consorcio y vuelve a estar activo ahí; el resto, al consorcio
     por defecto. Devuelve [{viejo, nuevo, consorcio}]."""
-    Base.metadata.create_all(engine(), tables=[Consorcio.__table__, Chat.__table__])
+    # `consorcios` tiene FK a `administraciones`: va primero, y la 0011 la crea con IF NOT EXISTS
+    Base.metadata.create_all(engine(), tables=[Administracion.__table__, Consorcio.__table__, Chat.__table__])
     hijas = ["paginas", "personas", "organizaciones", "direcciones", "eventos", "unidades", "montos",
              "secciones", "llamadas_modelo", "datos_sensibles", "liquidaciones",
              # cuelgan de liquidaciones.documento_id

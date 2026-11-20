@@ -99,6 +99,13 @@
 
 .crm table { font-size: .88rem; }
 .crm th, .crm td { padding: 8px 10px 8px 0; }
+/* Tablas anchas (consumo, latencia): se desplazan dentro de la tarjeta, nunca la página */
+.crm-tabla { max-width: 100%; overflow-x: auto; }
+.crm-tabla th[scope="row"] { text-align: left; }
+.crm-fila-total { font-weight: 700; }
+.crm-subfila td:first-child { padding-left: 16px; color: var(--suave); }
+.crm-costo { height: 170px; }
+.serie-costo { fill: var(--naranja); }
 
 .crm footer { padding-top: 12px; border-top: 1px solid var(--borde); }
 .crm footer p { margin: 0 0 4px; }

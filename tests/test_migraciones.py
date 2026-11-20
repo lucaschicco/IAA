@@ -536,11 +536,37 @@ def test_0010_suma_los_motivos_de_elevar_y_el_downgrade_los_conserva_como_pedido
         _ejecutar(_SOLICITUD.format(motivo))
     with pytest.raises(IntegrityError):
         _ejecutar(_SOLICITUD.format("otro"))
-    command.check(_alembic())
+    # `check` compara contra head (desde la 0011 ya no es la 0010): se hace al final
 
     command.downgrade(_alembic(), "0009_calidad")
     assert _escalar("SELECT count(*) FROM solicitudes WHERE motivo = 'pedido_usuario'") == 3
     with pytest.raises(IntegrityError):
         _ejecutar(_SOLICITUD.format("pedido_directo"))
+    command.upgrade(_alembic(), "head")
+    command.check(_alembic())
+
+
+def test_0011_administraciones_sin_backfill_con_fk_y_downgrade_limpio(base_vacia):
+    _base_con_membresias_0007()
+    command.upgrade(_alembic(), "0010_elevar")
+    assert not _existe("administraciones")
+
+    command.upgrade(_alembic(), "0011_administraciones")
+    assert _existe("administraciones")
+    assert _escalar("SELECT count(*) FROM consorcios WHERE administracion_id IS NULL") == _escalar(
+        "SELECT count(*) FROM consorcios") > 0  # sin backfill: ningún consorcio queda asignado solo
+    with pytest.raises(IntegrityError):
+        _ejecutar("UPDATE consorcios SET administracion_id = 999")
+    _ejecutar("INSERT INTO administraciones (nombre, creado_en) VALUES ('Adm', now())")
+    _ejecutar("UPDATE consorcios SET administracion_id = (SELECT id FROM administraciones)")
+    with pytest.raises(IntegrityError):  # no se borra una Administración con consorcios
+        _ejecutar("DELETE FROM administraciones")
+    command.check(_alembic())
+
+    command.downgrade(_alembic(), "0010_elevar")
+    assert not _existe("administraciones")
+    assert _escalar("SELECT count(*) FROM information_schema.columns WHERE table_name = 'consorcios' "
+                    "AND column_name = 'administracion_id'") == 0
+    assert _escalar("SELECT count(*) FROM consorcios") > 0  # se pierde la agrupación, no los consorcios
     command.upgrade(_alembic(), "head")
     command.check(_alembic())

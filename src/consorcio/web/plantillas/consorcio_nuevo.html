@@ -12,6 +12,17 @@
     {% include "_csrf.html" %}
     <label>Nombre del edificio <input type="text" name="nombre" value="{{ nombre or '' }}" required minlength="3" maxlength="120" autocomplete="off" placeholder="Edificio Mercedes 274"></label>
     <label>Dirección (opcional) <input type="text" name="direccion" value="{{ direccion or '' }}" maxlength="200" autocomplete="street-address" placeholder="Mercedes 274, CABA"></label>
+    {# Solo las Administraciones de los consorcios que ya administra: el servidor rechaza cualquier otra #}
+    {% if administraciones|length > 1 %}
+    <label>Administración
+      <select name="administracion" required>
+        <option value="">Elegí una</option>
+        {% for a in administraciones %}<option value="{{ a.id }}">{{ a.nombre }}</option>{% endfor %}
+      </select>
+    </label>
+    {% elif administraciones %}
+    <p class="nota">Queda en {{ administraciones[0].nombre }}, como tus otros consorcios.</p>
+    {% endif %}
     {% if error %}<p class="alerta" role="alert">{{ i.icono("alerta") }}<span>{{ error }}</span></p>{% endif %}
     <button type="submit">Crear consorcio {{ i.icono("flecha") }}</button>
   </form>

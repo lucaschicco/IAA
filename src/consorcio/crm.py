@@ -13,13 +13,18 @@ Qué depende del período: `usuarios` son ventanas móviles desde ahora y `docum
 `secciones_indexadas` son el estado de hoy (salvo `duplicados_evitados`); el resto es del período.
 Con filtro de consorcio solo `costos.tope` sigue global: el tope es uno solo, de toda la plataforma.
 `actividad` va por día UTC y `periodo_anterior` es la ventana del mismo largo justo antes de `desde`.
+
+El filtro de Administración (`administracion`: id o `SIN_ADMINISTRACION`) se aplica igual que el de consorcio, a
+toda tabla con `consorcio_id`: ningún número incluye consorcios de otra Administración. `pendientes` es el estado de
+hoy, sin período. `consumo` sale del libro `gastos_modelo` menos los turnos de evaluación (ver `_libro_neto`); el
+nombre de la Administración es el del cliente de la plataforma y es el único nombre que se lee.
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import Float, Integer, cast, func, select
@@ -31,6 +36,7 @@ from .agente.revision import REVISABLES
 from .almacen.postgres import (
     MOTIVOS_REVISION,
     VEREDICTOS,
+    Administracion,
     Carga,
     Consorcio,
     Consulta,
@@ -60,6 +66,10 @@ ESTADOS_DUPLICADO = ("duplicado", "periodo_duplicado")  # cortes sin OCR ni mode
 RESULTADO_DERIVADA = "derivada"
 TOP_USUARIOS = 20
 MINUTOS_CONECTADO = 5
+SIN_ADMINISTRACION = "sin"  # valor del filtro: los consorcios con `administracion_id` NULL
+ROTULO_SIN_ADMINISTRACION = "Sin administración"
+CANALES_FUERA_DEL_AGENTE = ("cli", "telegram")  # `consultas.origen` que no pasan por `atender`
+ROLES_VECINO = ("consejo", "propietario", "inquilino")
 
 
 @dataclass(frozen=True)
@@ -67,24 +77,39 @@ class _Filtro:
     desde: datetime
     hasta: datetime
     consorcio_id: str | None
+    administracion: int | str | None = None  # id, SIN_ADMINISTRACION o None (todas)
 
     def periodo(self, q, tabla):
         """Del consorcio elegido y con `desde <= creado_en < hasta`."""
         q = q.where(tabla.creado_en >= self.desde, tabla.creado_en < self.hasta)
         return self.consorcio(q, tabla)
 
-    def consorcio(self, q, tabla):
-        return q.where(tabla.consorcio_id == self.consorcio_id) if self.consorcio_id else q
+    def consorcio(self, q, tabla, columna=None):
+        """Del consorcio y de la Administración elegidos. `columna`: para tablas cuyo consorcio no se llama
+        `consorcio_id` (la propia `consorcios`)."""
+        columna = tabla.consorcio_id if columna is None else columna
+        if self.consorcio_id:
+            q = q.where(columna == self.consorcio_id)
+        if self.administracion is not None:
+            q = q.where(columna.in_(self.consorcios_de_la_administracion()))
+        return q
+
+    def consorcios_de_la_administracion(self):
+        if self.administracion == SIN_ADMINISTRACION:
+            return select(Consorcio.id).where(Consorcio.administracion_id.is_(None))
+        return select(Consorcio.id).where(Consorcio.administracion_id == self.administracion)
 
     def turnos(self, q):
         return self.periodo(q, Turno).where(Turno.origen != ORIGEN_EVALUACION)
 
     def solicitudes(self, q, tipo: str):
         """Sin `origen` propio: una solicitud es de evaluación si la creó un turno de evaluación."""
-        de_evaluacion = select(Turno.solicitud_id).where(
-            Turno.origen == ORIGEN_EVALUACION, Turno.solicitud_id.is_not(None)
-        )
-        return self.periodo(q, Solicitud).where(Solicitud.tipo == tipo, Solicitud.id.not_in(de_evaluacion))
+        return self.periodo(q, Solicitud).where(Solicitud.tipo == tipo, Solicitud.id.not_in(_de_evaluacion()))
+
+
+def _de_evaluacion():
+    """Ids de las solicitudes que creó un turno de evaluación."""
+    return select(Turno.solicitud_id).where(Turno.origen == ORIGEN_EVALUACION, Turno.solicitud_id.is_not(None))
 
 
 def _cociente(parte: int, total: int) -> float | None:
@@ -101,8 +126,8 @@ def _usuarios(s: Session, f: _Filtro) -> dict:
     consorcio que estuvieron activos, aunque haya sido en otro de sus consorcios."""
     ahora = datetime.now(UTC)
     q = select(func.count()).select_from(Usuario)
-    if f.consorcio_id:
-        q = q.where(Usuario.id.in_(select(Membresia.usuario_id).where(Membresia.consorcio_id == f.consorcio_id)))
+    if f.consorcio_id or f.administracion is not None:
+        q = q.where(Usuario.id.in_(f.consorcio(select(Membresia.usuario_id), Membresia)))
 
     def activos_desde(ventana: timedelta) -> int:
         return s.scalar(q.where(Usuario.ultima_actividad >= ahora - ventana))
@@ -173,7 +198,7 @@ def _actividad(s: Session, f: _Filtro) -> list[dict]:
 
 
 def _periodo_anterior(s: Session, f: _Filtro) -> dict:
-    previo = _Filtro(f.desde - (f.hasta - f.desde), f.desde, f.consorcio_id)
+    previo = replace(f, desde=f.desde - (f.hasta - f.desde), hasta=f.desde)
     return {
         "preguntas": s.scalar(previo.turnos(select(func.count()).select_from(Turno))),
         "elevaciones": s.scalar(previo.solicitudes(select(func.count()).select_from(Solicitud), "derivacion")),
@@ -322,22 +347,296 @@ def _exactitud_evaluacion() -> dict:
     return {"valor": valor, "n": n, "fecha": _ARCHIVO_EVALUACION.fullmatch(ultimo.name).group(1), "fuente": ultimo.name}
 
 
-def consorcios() -> list[str]:
-    """Los ids, para el filtro de la pantalla: el nombre no hace falta y `chat-<id>` ya es un slug."""
+# ------------------------------------------------------------------ uso por persona, tasas y pendientes
+
+
+def _usuarios_que_preguntaron(s: Session, f: _Filtro, preguntas: int) -> dict:
+    """U3 y U4: personas distintas con al menos un turno en el período. Por rol y por consorcio una misma
+    persona puede contar en más de una fila, así que esas filas no suman el total."""
+    distintos = func.count(func.distinct(Turno.usuario_id))
+    total = s.scalar(f.turnos(select(distintos)))
+    return {
+        "total": total,
+        "por_rol": _conteo_por(s, f.turnos(select(Turno.rol, distintos).group_by(Turno.rol))),
+        "por_consorcio": _conteo_por(s, f.turnos(select(Turno.consorcio_id, distintos).group_by(Turno.consorcio_id))),
+        "preguntas_por_usuario": None if not total else round(preguntas / total, 2),
+    }
+
+
+def _tasas(s: Session, f: _Filtro, preguntas: dict, acciones: dict) -> dict:
+    """U6, U11 y U12, cada una con su numerador y su denominador, y None sin casos.
+
+    U12: derivaciones `elevada_usuario` del período sobre turnos `respondida` del período. Por funcionalidad, la
+    elevación cuenta en la funcionalidad del turno que se elevó (`turnos.solicitud_id`)."""
+    derivadas = preguntas["por_resultado"].get(RESULTADO_DERIVADA, 0)
+    decididas = acciones["aprobadas"] + acciones["editadas"] + acciones["rechazadas"]
+    clave = func.coalesce(Turno.funcionalidad, SIN_FUNCIONALIDAD)
+    respondidas_por = _conteo_por(s, f.turnos(
+        select(clave, func.count()).where(Turno.resultado == "respondida").group_by(clave)))
+    elevadas_por = _conteo_por(s, f.solicitudes(
+        select(clave, func.count()).select_from(Solicitud).join(Turno, Turno.solicitud_id == Solicitud.id)
+        .where(Solicitud.motivo == "elevada_usuario").group_by(clave), "derivacion"))
+    por_motivo = _conteo_por(s, f.solicitudes(
+        select(Solicitud.motivo, func.count()).where(Solicitud.motivo.in_(("elevada_usuario", "pedido_directo")))
+        .group_by(Solicitud.motivo), "derivacion"))
+    elevadas, respondidas = por_motivo.get("elevada_usuario", 0), sum(respondidas_por.values())
+    return {
+        "derivacion": {"valor": _cociente(derivadas, preguntas["total"]), "derivadas": derivadas,
+                       "n": preguntas["total"]},
+        "edicion_reclamos": {"valor": _cociente(acciones["editadas"], decididas), "editadas": acciones["editadas"],
+                             "decididas": decididas},
+        "elevadas_tras_respuesta": {
+            "valor": _cociente(elevadas, respondidas), "elevadas": elevadas, "respondidas": respondidas,
+            "pedidos_directos": por_motivo.get("pedido_directo", 0),
+            "por_funcionalidad": {
+                nombre: {"elevadas": elevadas_por.get(nombre, 0), "respondidas": respondidas_por.get(nombre, 0),
+                         "valor": _cociente(elevadas_por.get(nombre, 0), respondidas_por.get(nombre, 0))}
+                for nombre in sorted(set(respondidas_por) | set(elevadas_por))
+            },
+        },
+    }
+
+
+def _antiguedad(ahora: datetime, momento: datetime | None) -> float | None:
+    return None if momento is None else round(max((ahora - momento).total_seconds(), 0.0), 1)
+
+
+def _pendientes(s: Session, f: _Filtro, ahora: datetime) -> dict:
+    """U10: lo que espera a la administración hoy, sin filtro de período. La antigüedad es la de la más vieja."""
+    filas = s.execute(f.consorcio(
+        select(Solicitud.consorcio_id, Solicitud.tipo, func.count(), func.min(Solicitud.creado_en))
+        .where(Solicitud.estado == "pendiente", Solicitud.id.not_in(_de_evaluacion()))
+        .group_by(Solicitud.consorcio_id, Solicitud.tipo), Solicitud)).all()
+    por_tipo: dict[str, int] = {}
+    por_consorcio: dict[str, dict] = {}
+    for cid, tipo, n, primera in filas:
+        por_tipo[tipo] = por_tipo.get(tipo, 0) + n
+        fila = por_consorcio.setdefault(cid, {"n": 0, "primera": primera})
+        fila["n"] += n
+        fila["primera"] = min(fila["primera"], primera)
+    primera = min((c["primera"] for c in por_consorcio.values()), default=None)
+    return {
+        "total": sum(por_tipo.values()), "por_tipo": por_tipo, "mas_antigua_s": _antiguedad(ahora, primera),
+        "por_consorcio": {cid: {"n": c["n"], "mas_antigua_s": _antiguedad(ahora, c["primera"])}
+                          for cid, c in sorted(por_consorcio.items(), key=lambda x: x[1]["primera"])},
+    }
+
+
+def _cargas(s: Session, f: _Filtro) -> dict:
+    """U14: cómo terminaron las cargas del período."""
+    return _conteo_por(s, f.periodo(select(Carga.estado, func.count()).group_by(Carga.estado), Carga))
+
+
+def _latencia(s: Session, f: _Filtro) -> dict:
+    """C9: p50 y p95 de `turnos.segundos`, lo que esperó la persona (con o sin llamada al modelo)."""
+    clave = func.coalesce(Turno.funcionalidad, SIN_FUNCIONALIDAD)
+    percentiles = (func.count(), func.percentile_cont(0.5).within_group(Turno.segundos),
+                   func.percentile_cont(0.95).within_group(Turno.segundos))
+
+    def fila(n, p50, p95) -> dict:
+        return {"n": n, "p50_s": None if p50 is None else round(float(p50), 2),
+                "p95_s": None if p95 is None else round(float(p95), 2)}
+
+    total = s.execute(f.turnos(select(*percentiles))).one()
+    por = s.execute(f.turnos(select(clave, *percentiles).group_by(clave).order_by(clave))).all()
+    return {"total": fila(*total), "por_funcionalidad": {nombre: fila(*resto) for nombre, *resto in por}}
+
+
+# ------------------------------------------------------------------ consumo
+
+
+_CERO = (0.0, 0, 0)
+
+
+def _libro_neto(s: Session, f: _Filtro, clave) -> dict:
+    """Costo y tokens del libro `gastos_modelo` agrupados por `clave(tabla)`, menos los turnos de evaluación del
+    mismo grupo: el libro no tiene `origen`, y sin la resta una evaluación aparecería como consumo. Lo que se
+    evalúa sin pasar por `atender` (`evaluar-consultas`) queda, porque se pagó. Nunca negativo."""
+    def agrupado(tabla, solo_evaluacion: bool) -> dict:
+        k = clave(tabla).label("clave")
+        q = select(k, func.coalesce(func.sum(tabla.costo_usd), 0.0), func.coalesce(func.sum(tabla.tokens_entrada), 0),
+                   func.coalesce(func.sum(tabla.tokens_salida), 0))
+        if solo_evaluacion:
+            q = q.where(Turno.origen == ORIGEN_EVALUACION)
+        return {k_: (c, te, ts) for k_, c, te, ts in s.execute(f.periodo(q, tabla).group_by(k))}
+
+    libro, evaluacion = agrupado(GastoModelo, False), agrupado(Turno, True)
+    return {
+        k: {"costo_usd": round(max(c - evaluacion.get(k, _CERO)[0], 0.0), 6),
+            "tokens_entrada": max(te - evaluacion.get(k, _CERO)[1], 0),
+            "tokens_salida": max(ts - evaluacion.get(k, _CERO)[2], 0)}
+        for k, (c, te, ts) in libro.items()
+    }
+
+
+def _vacio() -> dict:
+    return {"costo_usd": 0.0, "tokens_entrada": 0, "tokens_salida": 0, "preguntas": 0}
+
+
+def _sumar(destino: dict, origen: dict) -> None:
+    for campo in ("costo_usd", "tokens_entrada", "tokens_salida", "preguntas"):
+        destino[campo] += origen.get(campo, 0)
+    destino["costo_usd"] = round(destino["costo_usd"], 6)
+
+
+def _por_administracion(s: Session, f: _Filtro) -> dict:
+    """C4 y C5: Administración → consorcio, con costo y tokens del libro neto y las preguntas.
+
+    Los consorcios sin Administración (Telegram, terminal) y los ids del libro que no están en `consorcios` van a
+    "Sin administración"; lo del libro sin consorcio va a `sin_consorcio`, solo sin filtro (con filtro no es de
+    nadie). Se listan todas las Administraciones del filtro, y solo los consorcios con consumo o preguntas."""
+    neto = _libro_neto(s, f, lambda t: t.consorcio_id)
+    preguntas = _conteo_por(s, f.turnos(select(Turno.consorcio_id, func.count()).group_by(Turno.consorcio_id)))
+    de_consorcio = dict(s.execute(f.consorcio(select(Consorcio.id, Consorcio.administracion_id), None, Consorcio.id)).all())
+    q = select(Administracion.id, Administracion.nombre).order_by(Administracion.nombre, Administracion.id)
+    if f.administracion == SIN_ADMINISTRACION:
+        q = q.where(Administracion.id.is_(None))
+    elif f.administracion is not None:
+        q = q.where(Administracion.id == f.administracion)
+    if f.consorcio_id:
+        q = q.where(Administracion.id.in_(select(Consorcio.administracion_id).where(Consorcio.id == f.consorcio_id)))
+    filas = {i: {"administracion_id": i, "nombre": nombre, **_vacio(), "consorcios": []} for i, nombre in s.execute(q)}
+    sin = {"administracion_id": None, "nombre": ROTULO_SIN_ADMINISTRACION, **_vacio(), "consorcios": []}
+    for cid in sorted((set(neto) | set(preguntas)) - {None}):
+        consorcio = {"consorcio_id": cid, **_vacio()}
+        _sumar(consorcio, {**neto.get(cid, {}), "preguntas": preguntas.get(cid, 0)})
+        fila = filas.get(de_consorcio.get(cid), sin)
+        fila["consorcios"].append(consorcio)
+        _sumar(fila, consorcio)
+    resultado = [*filas.values()]
+    if sin["consorcios"] or f.administracion == SIN_ADMINISTRACION:
+        resultado.append(sin)
+    for fila in resultado:
+        fila["consorcios"].sort(key=lambda c: (-c["costo_usd"], c["consorcio_id"]))
+    filtrado = f.consorcio_id or f.administracion is not None
+    sin_consorcio = None if filtrado else neto.get(None, {"costo_usd": 0.0, "tokens_entrada": 0, "tokens_salida": 0})
+    return {"filas": resultado, "sin_consorcio": sin_consorcio}
+
+
+def _costo_por_dia(s: Session, f: _Filtro) -> list[dict]:
+    """C6: el libro neto por día UTC, con los días sin gasto en cero."""
+    neto = _libro_neto(s, f, lambda t: func.date_trunc("day", func.timezone("UTC", t.creado_en)))
+    por_dia = {momento.date(): fila["costo_usd"] for momento, fila in neto.items()}
+    inicio, fin = f.desde.astimezone(UTC).date(), (f.hasta - timedelta(microseconds=1)).astimezone(UTC).date()
+    return [{"dia": date.fromordinal(n).isoformat(), "costo_usd": por_dia.get(date.fromordinal(n), 0.0)}
+            for n in range(inicio.toordinal(), fin.toordinal() + 1)]
+
+
+def _por_pregunta_y_tokens(s: Session, f: _Filtro) -> dict:
+    """C7 y C8. El costo por pregunta divide solo por los turnos con precio: uno sin precio no es gratis."""
+    columnas = (func.count(Turno.costo_usd), func.coalesce(func.sum(Turno.costo_usd), 0.0),
+                func.coalesce(func.sum(Turno.tokens_entrada), 0), func.coalesce(func.sum(Turno.tokens_salida), 0),
+                func.count())
+
+    def fila(con_precio, costo, entrada, salida, turnos) -> dict:
+        return {"turnos": turnos, "con_precio": con_precio,
+                "costo_por_pregunta_usd": round(costo / con_precio, 6) if con_precio else None,
+                "tokens_entrada": entrada, "tokens_salida": salida}
+
+    def por(clave) -> dict:
+        return {nombre: fila(*resto) for nombre, *resto in
+                s.execute(f.turnos(select(clave, *columnas).group_by(clave).order_by(clave)))}
+
+    return {
+        "total": fila(*s.execute(f.turnos(select(*columnas))).one()),
+        "por_funcionalidad": por(func.coalesce(Turno.funcionalidad, SIN_FUNCIONALIDAD)),
+        "por_modelo": por(Turno.modelo),
+    }
+
+
+def _por_canal(s: Session, f: _Filtro) -> dict:
+    """C10: web desde `turnos` (el agente); CLI y Telegram desde `consultas.origen`, que no pasan por `atender`.
+    Las consultas que hace el agente llevan `origen='web'` y ya están en su turno: no se suman dos veces. La
+    ingesta no tiene canal en el libro y queda afuera."""
+    canales: dict[str, dict] = {}
+    turnos = f.turnos(select(Turno.canal, func.count(), func.coalesce(func.sum(Turno.costo_usd), 0.0)).group_by(Turno.canal))
+    consultas = f.periodo(
+        select(Consulta.origen, func.count(), func.coalesce(func.sum(Consulta.costo_usd), 0.0))
+        .where(Consulta.origen.in_(CANALES_FUERA_DEL_AGENTE)).group_by(Consulta.origen), Consulta)
+    for q in (turnos, consultas):
+        for canal, n, costo in s.execute(q):
+            fila = canales.setdefault(canal, {"preguntas": 0, "costo_usd": 0.0})
+            fila["preguntas"] += n
+            fila["costo_usd"] = round(fila["costo_usd"] + costo, 6)
+    return dict(sorted(canales.items()))
+
+
+def _ingesta_por_documento(s: Session, f: _Filtro) -> dict:
+    """C11: `documentos.costo` (el resumen del `Contador`) y `segundos_total`, por método de extracción; estado de
+    hoy. Un documento sin `costo_usd` (semilla, modelo sin precio, o solo Tesseract) cuenta en `sin_precio` y no
+    entra en el promedio."""
+    por_metodo: dict[str, dict] = {}
+    for metodo, costo, segundos in s.execute(f.consorcio(
+            select(Documento.metodo_extraccion, Documento.costo, Documento.segundos_total), Documento)):
+        fila = por_metodo.setdefault(metodo, {"documentos": 0, "costos": [], "segundos": []})
+        fila["documentos"] += 1
+        valor = costo.get("costo_usd") if isinstance(costo, dict) else None
+        if isinstance(valor, int | float) and not isinstance(valor, bool):
+            fila["costos"].append(float(valor))
+        if segundos is not None:
+            fila["segundos"].append(float(segundos))
+    return {
+        metodo: {
+            "documentos": fila["documentos"], "con_precio": len(fila["costos"]),
+            "sin_precio": fila["documentos"] - len(fila["costos"]),
+            "costo_promedio_usd": round(sum(fila["costos"]) / len(fila["costos"]), 6) if fila["costos"] else None,
+            "segundos_promedio": round(sum(fila["segundos"]) / len(fila["segundos"]), 1) if fila["segundos"] else None,
+        }
+        for metodo, fila in sorted(por_metodo.items())
+    }
+
+
+def _consumo(s: Session, f: _Filtro) -> dict:
+    return {
+        "por_administracion": _por_administracion(s, f),
+        "por_dia": _costo_por_dia(s, f),
+        "por_pregunta": _por_pregunta_y_tokens(s, f),
+        "por_canal": _por_canal(s, f),
+        "ingesta_por_documento": _ingesta_por_documento(s, f),
+    }
+
+
+# ------------------------------------------------------------------ entrada
+
+
+def consorcios(administracion: int | str | None = None) -> list[str]:
+    """Los ids, para el filtro de la pantalla: el nombre no hace falta y `chat-<id>` ya es un slug.
+    Con Administración, solo los suyos (o los que no tienen ninguna, con `SIN_ADMINISTRACION`)."""
+    crear_tablas()
+    q = select(Consorcio.id).order_by(Consorcio.id)
+    if administracion == SIN_ADMINISTRACION:
+        q = q.where(Consorcio.administracion_id.is_(None))
+    elif administracion is not None:
+        q = q.where(Consorcio.administracion_id == administracion)
+    with Session(engine()) as s:
+        return list(s.scalars(q))
+
+
+def administraciones() -> list[dict]:
+    """Id y nombre de cada Administración, para el filtro."""
     crear_tablas()
     with Session(engine()) as s:
-        return list(s.scalars(select(Consorcio.id).order_by(Consorcio.id)))
+        return [{"id": i, "nombre": n} for i, n in s.execute(
+            select(Administracion.id, Administracion.nombre).order_by(Administracion.nombre, Administracion.id))]
 
 
-def panel(desde: datetime, hasta: datetime, consorcio_id: str | None = None) -> dict:
+def panel(desde: datetime, hasta: datetime, consorcio_id: str | None = None,
+          administracion: int | str | None = None) -> dict:
     """Todas las métricas de `desde <= creado_en < hasta`; serializable con `json.dumps`.
 
     `acertadas` son tres indicadores que miden cosas distintas: no se promedian."""
     crear_tablas()
-    f = _Filtro(desde, hasta, consorcio_id)
+    f = _Filtro(desde, hasta, consorcio_id, administracion)
     with Session(engine()) as s:
         preguntas = _preguntas(s, f)
+        acciones = _acciones(s, f)
         return {
+            "usuarios_que_preguntaron": _usuarios_que_preguntaron(s, f, preguntas["total"]),
+            "tasas": _tasas(s, f, preguntas, acciones),
+            "pendientes": _pendientes(s, f, datetime.now(UTC)),
+            "cargas": _cargas(s, f),
+            "latencia": _latencia(s, f),
+            "consumo": _consumo(s, f),
             "usuarios": _usuarios(s, f),
             "uso": _uso(s, f),
             "documentos": _documentos(s, f),
@@ -348,7 +647,7 @@ def panel(desde: datetime, hasta: datetime, consorcio_id: str | None = None) -> 
             "funcionalidades": _funcionalidades(s, f),
             "intenciones": _intenciones(s, f),
             "elevaciones": _elevaciones(s, f),
-            "acciones": _acciones(s, f),
+            "acciones": acciones,
             "costos": _costos(s, f),
             "calidad": _calidad(s, f),
             "acertadas": {

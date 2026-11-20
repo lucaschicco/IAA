@@ -1,4 +1,5 @@
-"""`consorcio sembrar-demo`: dos edificios y cinco usuarios inventados para probar la web sin clave.
+"""`consorcio sembrar-demo`: dos edificios de una misma Administración y cinco usuarios inventados para probar
+la web sin clave.
 
 Sin modelo, sin bucket y sin `datos/`: todo está escrito acá. Idempotente: `guardar_documento` reemplaza
 por consorcio + hash y los usuarios se buscan por `sujeto_externo`. Los importes también son inventados,
@@ -12,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..almacen.postgres import (
+    Administracion,
+    Consorcio,
     Membresia,
     UnidadFuncional,
     Usuario,
@@ -26,6 +29,7 @@ from ..texto import id_documento
 PALMERAS, ROBLES = "demo-palmeras", "demo-robles"
 CONSORCIOS = {PALMERAS: "Edificio Las Palmeras (demo)", ROBLES: "Edificio Los Robles (demo)"}
 PERIODOS = ("2026-07", "2026-08")
+ADMINISTRACION = "Administración Demo"  # agrupa los dos consorcios: una empresa con dos edificios
 
 # Contraseña de los usuarios demo para probar el login real (`WEB_SELECTOR_USUARIOS=false`). El de plataforma no
 # la tiene: ve el CRM, que cruza consorcios, y solo entra con el selector de desarrollo.
@@ -177,10 +181,23 @@ def _usuarios() -> None:
         s.commit()
 
 
+def _administracion() -> None:
+    """Se busca por nombre para que sembrar dos veces no cree otra."""
+    with Session(engine()) as s, s.begin():
+        adm = s.scalars(select(Administracion).where(Administracion.nombre == ADMINISTRACION)).first()
+        if adm is None:
+            adm = Administracion(nombre=ADMINISTRACION)
+            s.add(adm)
+            s.flush()
+        for cid in CONSORCIOS:
+            s.get(Consorcio, cid).administracion_id = adm.id
+
+
 def sembrar_demo() -> dict:
     crear_tablas()
     for cid, nombre in CONSORCIOS.items():
         asegurar_consorcio(cid, nombre)
         _documentos(cid)
+    _administracion()
     _usuarios()
-    return {"consorcios": list(CONSORCIOS), "usuarios": [u[0] for u in USUARIOS]}
+    return {"consorcios": list(CONSORCIOS), "administracion": ADMINISTRACION, "usuarios": [u[0] for u in USUARIOS]}

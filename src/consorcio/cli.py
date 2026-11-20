@@ -10,6 +10,7 @@
                            (con modelo real sobre test, guarda docs/evaluaciones/<fecha>-consultas-test.json para el CRM)
   consorcio documentos [--desactivar X | --activar X]   # lista lo que hay en Postgres; X: id o parte del nombre
   consorcio consorcios [--asignar-chat ID --a CONSORCIO] [--crear ID --nombre "..."]   # bases y chats
+  consorcio administraciones [--crear "NOMBRE"] [--asignar CONSORCIO --a ID] [--quitar CONSORCIO]   # empresas y sus consorcios
   consorcio consultas [--consorcio ID] [--origen telegram|cli|evaluacion|web] [--ultimas 20]   # qué se preguntó y qué se contestó
   consorcio gasto                       # gasto del mes en modelos contra TOPE_USD_MENSUAL
   consorcio sembrar-demo                # consorcios y usuarios inventados para probar la web; sin modelo ni bucket
@@ -93,6 +94,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--a", metavar="CONSORCIO", help="consorcio destino de --asignar-chat")
     p.add_argument("--crear", metavar="CONSORCIO", help="crea un consorcio (slug: letras, números y guiones)")
     p.add_argument("--nombre", help="nombre legible para --crear o --a")
+    p = sub.add_parser("administraciones", help="lista las Administraciones y sus consorcios; crea y asigna")
+    p.add_argument("--crear", metavar="NOMBRE", help="crea una Administración e imprime su id")
+    p.add_argument("--asignar", metavar="CONSORCIO", help="pone ese consorcio en la Administración --a")
+    p.add_argument("--a", type=_positivo, metavar="ID", help="id de la Administración destino de --asignar")
+    p.add_argument("--quitar", metavar="CONSORCIO", help="deja ese consorcio sin Administración")
     sub.add_parser("migrar", help="migra una base anterior al 26/10/2026 al esquema con consorcios")
     sub.add_parser("actualizar-base", help="lleva la base a la última revisión de Alembic (respaldar antes)")
     p = sub.add_parser("consultas", help="últimas consultas registradas (pregunta, respuesta, cita, canal)")
@@ -207,6 +213,9 @@ def main(argv: list[str] | None = None) -> int:
         for c in listar_consorcios():
             print(json.dumps(c, ensure_ascii=False))
         return 0
+
+    if args.cmd == "administraciones":
+        return _administraciones(parser, args)
 
     if args.cmd == "consultas":
         from .almacen.postgres import listar_consultas, listar_consultas_de_todos_los_consorcios
@@ -349,6 +358,36 @@ def _imprimir_resumen(final: dict) -> None:
         "errores": final.get("errores", []),
     }
     print(json.dumps(resumen, ensure_ascii=False, indent=2))
+
+
+def _administraciones(parser: argparse.ArgumentParser, args) -> int:
+    """Sin backfill automático: la base real se asigna a mano con esto. Los errores salen con rc=1 y un mensaje,
+    sin traceback, y antes de tocar la base si son de argumentos."""
+    from .almacen import postgres
+
+    if args.asignar is None and args.a is not None:
+        parser.error("--a va con --asignar CONSORCIO")
+    if args.asignar is not None and args.a is None:
+        parser.error("--asignar necesita --a ID (ver los ids con `consorcio administraciones`)")
+    if args.asignar is not None and args.quitar is not None:
+        parser.error("--asignar y --quitar no van juntos")
+    if args.crear is not None and not 1 <= len(" ".join(args.crear.split())) <= 120:
+        parser.error("--crear necesita un nombre de 1 a 120 caracteres")
+    try:
+        if args.crear is not None:
+            print(json.dumps({"creada": postgres.crear_administracion(args.crear)}, ensure_ascii=False))
+        if args.asignar is not None:
+            postgres.asignar_administracion(args.asignar, args.a)
+        if args.quitar is not None:
+            postgres.asignar_administracion(args.quitar, None)
+    except postgres.ConsorcioNoEncontrado as e:
+        parser.exit(1, f"consorcio: error: no existe el consorcio {e.args[0]!r} (ver `consorcio consorcios`)\n")
+    except postgres.AdministracionNoEncontrada as e:
+        parser.exit(1, f"consorcio: error: no existe la Administración {e.args[0]} "
+                       "(ver `consorcio administraciones`)\n")
+    for fila in postgres.listar_administraciones():
+        print(json.dumps(fila, ensure_ascii=False))
+    return 0
 
 
 def _cfg():

@@ -17,6 +17,7 @@ from consorcio import cli, crm, tope
 from consorcio.agente.registro import FUNCIONALIDADES
 from consorcio.almacen import postgres
 from consorcio.almacen.postgres import (
+    Administracion,
     Carga,
     Consorcio,
     Consulta,
@@ -57,7 +58,7 @@ def esquema():
 @pytest.fixture(autouse=True)
 def base(esquema, monkeypatch, tmp_path):
     with postgres.engine().begin() as con:
-        con.execute(text("TRUNCATE consorcios, usuarios, gastos_modelo, cargas, consultas CASCADE"))
+        con.execute(text("TRUNCATE administraciones, consorcios, usuarios, gastos_modelo, cargas, consultas CASCADE"))
     monkeypatch.setattr(config, "tope_usd_mensual", 20.0)
     monkeypatch.setattr(crm, "DIR_EVALUACIONES", tmp_path)
     return tmp_path
@@ -85,16 +86,19 @@ def _solicitud(s: Session, cid: str, autor: int, tipo: str, estado: str, motivo:
 def _turno(s: Session, cid: str, usuario: int, rol: str, funcionalidad: str | None, resultado: str,
            intencion: str | None = "igual", creado_en: datetime = HACE_1H, origen: str = "usuario",
            secciones: tuple[int, ...] = (), costo: float | None = None, feedback: int | None = None,
-           consulta: int | None = None, solicitud: int | None = None) -> None:
+           consulta: int | None = None, solicitud: int | None = None, tokens: tuple[int, int] = (0, 0),
+           segundos: float = 0.1, modelo: str = "fake") -> None:
     s.add(Turno(usuario_id=usuario, consorcio_id=cid, rol=rol, canal="web", origen=origen, funcionalidad=funcionalidad,
                 intencion=funcionalidad if intencion == "igual" else intencion, resultado=resultado,
                 secciones_usadas=list(secciones), consulta_id=consulta, solicitud_id=solicitud, costo_usd=costo,
-                segundos=0.1, modelo="fake", skill_version="0.1.0", feedback=feedback, creado_en=creado_en))
+                tokens_entrada=tokens[0], tokens_salida=tokens[1], segundos=segundos, modelo=modelo,
+                skill_version="0.1.0", feedback=feedback, creado_en=creado_en))
 
 
-def _gasto(s: Session, cid: str | None, costo: float | None, creado_en: datetime = HACE_1H, modelo: str = "m") -> None:
-    s.add(GastoModelo(consorcio_id=cid, nodo="n", modelo=modelo, tokens_entrada=10, tokens_salida=5, costo_usd=costo,
-                      creado_en=creado_en))
+def _gasto(s: Session, cid: str | None, costo: float | None, creado_en: datetime = HACE_1H, modelo: str = "m",
+           tokens: tuple[int, int] = (10, 5)) -> None:
+    s.add(GastoModelo(consorcio_id=cid, nodo="n", modelo=modelo, tokens_entrada=tokens[0], tokens_salida=tokens[1],
+                      costo_usd=costo, creado_en=creado_en))
 
 
 def _documento(s: Session, id_: str, cid: str, tipo: str, estado: str, activo: bool, secciones: int) -> None:
@@ -180,8 +184,9 @@ def _evaluacion(s: Session, usuario: int) -> None:
     prop = "propietario"
     d = _solicitud(s, A, usuario, "derivacion", "resuelta", "sin_respaldo", espera_s=7777)
     r = _solicitud(s, A, usuario, "reclamo", "aprobada", "reclamo", espera_s=10)
+    # Los tokens del turno son los del gasto que asienta (10 y 5), como cuando `atender` corre de verdad
     _turno(s, A, usuario, prop, "reglamento", "derivada", origen="evaluacion", secciones=(1, 2, 3, 4, 5), costo=0.7,
-           feedback=-1, consulta=_consulta(s, False, "evaluacion"), solicitud=d)
+           feedback=-1, consulta=_consulta(s, False, "evaluacion"), solicitud=d, tokens=(10, 5), segundos=99.0)
     _turno(s, A, usuario, prop, "reclamo", "reclamo_pendiente", origen="evaluacion", costo=0.3, feedback=1, solicitud=r)
     _turno(s, A, usuario, prop, "documentos", "error", origen="evaluacion", intencion=None)
     _gasto(s, A, 1.0)
@@ -402,9 +407,13 @@ def test_filtro_de_periodo_amplio_suma_lo_viejo(escenario):
 
 
 def test_evaluacion_no_altera_ninguna_metrica(escenario):
-    """Antes y después, panel completo. Solo se mueve el tope: ese gasto se pagó de verdad."""
+    """Antes y después, panel completo. Solo se mueve el tope: ese gasto se pagó de verdad. La antigüedad de lo
+    pendiente se saca porque depende del reloj, no de los datos."""
     def sin_tope(datos: dict) -> dict:
         datos["costos"] = {**datos["costos"], "tope": None}
+        pendientes = datos["pendientes"]
+        datos["pendientes"] = {**pendientes, "mas_antigua_s": None,
+                               "por_consorcio": {c: f["n"] for c, f in pendientes["por_consorcio"].items()}}
         return datos
 
     for consorcio in (None, A):
@@ -556,3 +565,275 @@ def test_periodo_anterior_es_la_ventana_previa_del_mismo_largo_y_respeta_el_filt
     assert crm.panel(desde, fin)["periodo_anterior"] == {"preguntas": 2, "elevaciones": 1}
     assert crm.panel(desde, fin, A)["periodo_anterior"] == {"preguntas": 1, "elevaciones": 1}
 
+
+
+# ------------------------------------------------------------------ métricas del objetivo B (plan de perfiles)
+
+
+def _administraciones(asignar: dict[str, str]) -> dict[str, int]:
+    """Crea una Administración por nombre y le asigna los consorcios de `asignar` (consorcio → nombre)."""
+    with Session(postgres.engine()) as s:
+        ids = {}
+        for nombre in dict.fromkeys(asignar.values()):
+            fila = Administracion(nombre=nombre)
+            s.add(fila)
+            s.flush()
+            ids[nombre] = fila.id
+        for cid, nombre in asignar.items():
+            s.get(Consorcio, cid).administracion_id = ids[nombre]
+        s.commit()
+    return ids
+
+
+def test_usuarios_que_preguntaron_y_preguntas_por_usuario(escenario):
+    datos = crm.panel(DESDE, HASTA)["usuarios_que_preguntaron"]
+    # u1, u2 y u3 en A; u3 y u4 en B: u3 cuenta una vez en el total y en las dos filas por consorcio
+    assert datos == {"total": 4, "por_rol": {"propietario": 3, "administracion": 1}, "por_consorcio": {A: 3, B: 2},
+                     "preguntas_por_usuario": 2.25}
+    assert crm.panel(DESDE, HASTA, A)["usuarios_que_preguntaron"]["preguntas_por_usuario"] == 2.33  # 7 / 3
+    vacio = crm.panel(AHORA - timedelta(days=500), AHORA - timedelta(days=499))["usuarios_que_preguntaron"]
+    assert vacio == {"total": 0, "por_rol": {}, "por_consorcio": {}, "preguntas_por_usuario": None}
+
+
+def test_tasa_de_derivacion_y_de_edicion_de_reclamos(escenario):
+    tasas = crm.panel(DESDE, HASTA)["tasas"]
+    assert tasas["derivacion"] == {"valor": 0.3333, "derivadas": 3, "n": 9}
+    assert tasas["edicion_reclamos"] == {"valor": 0.25, "editadas": 1, "decididas": 4}  # 1 de 2 + 1 + 1
+    assert crm.panel(DESDE, HASTA, B)["tasas"]["edicion_reclamos"] == {"valor": 0.0, "editadas": 0, "decididas": 1}
+    vacio = crm.panel(AHORA - timedelta(days=500), AHORA - timedelta(days=499))["tasas"]
+    assert vacio["derivacion"]["valor"] is None and vacio["edicion_reclamos"]["valor"] is None
+
+
+def test_elevadas_despues_de_una_respuesta():
+    with Session(postgres.engine()) as s:
+        s.add(Consorcio(id=A, nombre="x"))
+        s.flush()
+        u = _usuario(s, "1", (A,), None)
+        prop = "propietario"
+        elevada = _solicitud(s, A, u, "derivacion", "pendiente", "elevada_usuario")
+        _solicitud(s, A, u, "derivacion", "pendiente", "pedido_directo")  # sin turno: no sigue a una respuesta
+        _solicitud(s, A, u, "derivacion", "pendiente", "elevada_usuario", creado_en=HACE_10D)  # fuera del período
+        _turno(s, A, u, prop, "reglamento", "respondida", solicitud=elevada)
+        _turno(s, A, u, prop, "reglamento", "respondida")
+        _turno(s, A, u, prop, "expensas", "respondida")
+        _turno(s, A, u, prop, "reglamento", "derivada")  # no es una respuesta
+        # Evaluación: ni la respuesta ni la elevación cuentan
+        de_evaluacion = _solicitud(s, A, u, "derivacion", "pendiente", "elevada_usuario")
+        _turno(s, A, u, prop, "reglamento", "respondida", origen="evaluacion", solicitud=de_evaluacion)
+        s.commit()
+    assert crm.panel(DESDE, HASTA)["tasas"]["elevadas_tras_respuesta"] == {
+        "valor": 0.3333, "elevadas": 1, "respondidas": 3, "pedidos_directos": 1,
+        "por_funcionalidad": {"expensas": {"elevadas": 0, "respondidas": 1, "valor": 0.0},
+                              "reglamento": {"elevadas": 1, "respondidas": 2, "valor": 0.5}},
+    }
+    assert crm.panel(DESDE, HASTA)["elevaciones"]["por_motivo"] == {"elevada_usuario": 1, "pedido_directo": 1}
+
+
+def test_pendientes_son_de_hoy_sin_periodo_y_con_antiguedad():
+    with Session(postgres.engine()) as s:
+        s.add_all([Consorcio(id=A, nombre="x"), Consorcio(id=B, nombre="y")])
+        s.flush()
+        u = _usuario(s, "1", (A, B), None)
+        _solicitud(s, A, u, "derivacion", "pendiente", "pedido_usuario", creado_en=HACE_10D)
+        _solicitud(s, A, u, "reclamo", "pendiente", "reclamo")
+        _solicitud(s, B, u, "reclamo", "pendiente", "reclamo")
+        _solicitud(s, B, u, "reclamo", "aprobada", "reclamo", creado_en=HACE_10D, espera_s=5)  # ya decidida
+        de_evaluacion = _solicitud(s, A, u, "derivacion", "pendiente", "sin_respaldo", creado_en=AHORA - timedelta(days=50))
+        _turno(s, A, u, "propietario", "reglamento", "derivada", origen="evaluacion", solicitud=de_evaluacion)
+        s.commit()
+    # Un período de 1 hora que no incluye nada: lo pendiente igual se ve
+    pendientes = crm.panel(AHORA - timedelta(minutes=5), HASTA)["pendientes"]
+    # `AHORA` es de cuando se importó el módulo: la antigüedad se mide contra el reloj de ahora
+    diez_dias, una_hora = ((datetime.now(UTC) - t).total_seconds() for t in (HACE_10D, HACE_1H))
+    assert pendientes["total"] == 3 and pendientes["por_tipo"] == {"derivacion": 1, "reclamo": 2}
+    assert pendientes["mas_antigua_s"] == pytest.approx(diez_dias, abs=60)
+    assert list(pendientes["por_consorcio"]) == [A, B]  # el que más espera, primero
+    assert pendientes["por_consorcio"][A]["n"] == 2
+    assert pendientes["por_consorcio"][A]["mas_antigua_s"] == pytest.approx(diez_dias, abs=60)
+    assert pendientes["por_consorcio"][B] == {"n": 1, "mas_antigua_s": pytest.approx(una_hora, abs=60)}
+    assert crm.panel(DESDE, HASTA, B)["pendientes"]["total"] == 1
+    assert crm.panel(DESDE, HASTA, "otro")["pendientes"] == {"total": 0, "por_tipo": {}, "mas_antigua_s": None,
+                                                              "por_consorcio": {}}
+
+
+def test_cargas_por_estado_del_periodo(escenario):
+    assert crm.panel(DESDE, HASTA)["cargas"] == {"duplicado": 2, "periodo_duplicado": 1, "procesado": 1}
+    assert crm.panel(DESDE, HASTA, B)["cargas"] == {"duplicado": 1}
+
+
+def test_latencia_p50_y_p95_por_funcionalidad():
+    with Session(postgres.engine()) as s:
+        s.add(Consorcio(id=A, nombre="x"))
+        s.flush()
+        u = _usuario(s, "1", (A,), None)
+        for segundos in (1.0, 2.0, 3.0, 4.0):
+            _turno(s, A, u, "propietario", "reglamento", "respondida", segundos=segundos)
+        _turno(s, A, u, "propietario", "expensas", "respondida", segundos=10.0)
+        _turno(s, A, u, "propietario", "reglamento", "respondida", segundos=100.0, origen="evaluacion")
+        _turno(s, A, u, "propietario", "reglamento", "respondida", segundos=100.0, creado_en=HACE_10D)
+        s.commit()
+    # percentile_cont interpola: p95 de [1, 2, 3, 4, 10] es 4 + 0,8 × 6
+    assert crm.panel(DESDE, HASTA)["latencia"] == {
+        "total": {"n": 5, "p50_s": 3.0, "p95_s": 8.8},
+        "por_funcionalidad": {"expensas": {"n": 1, "p50_s": 10.0, "p95_s": 10.0},
+                              "reglamento": {"n": 4, "p50_s": 2.5, "p95_s": 3.85}},
+    }
+    assert crm.panel(DESDE, HASTA, "otro")["latencia"] == {"total": {"n": 0, "p50_s": None, "p95_s": None},
+                                                            "por_funcionalidad": {}}
+
+
+def test_costo_y_tokens_por_administracion_y_consorcio(escenario):
+    ids = _administraciones({A: "Administración Uno"})
+    with Session(postgres.engine()) as s:
+        s.add(Administracion(nombre="Administración Vacía"))
+        s.commit()
+    datos = crm.panel(DESDE, HASTA)["consumo"]["por_administracion"]
+    cero = {"costo_usd": 0.0, "tokens_entrada": 0, "tokens_salida": 0, "preguntas": 0}
+    # Libro de A en el período: 0,066 + 0,25 + 1,0 de evaluación, menos 1,0 de sus turnos; tokens: 3 × (10, 5) − (10, 5)
+    fila_a = {"consorcio_id": A, "costo_usd": pytest.approx(0.316), "tokens_entrada": 20, "tokens_salida": 10, "preguntas": 7}
+    fila_b = {"consorcio_id": B, "costo_usd": pytest.approx(0.192), "tokens_entrada": 20, "tokens_salida": 10, "preguntas": 2}
+    assert datos == {
+        "filas": [
+            {"administracion_id": ids["Administración Uno"], "nombre": "Administración Uno",
+             **{k: v for k, v in fila_a.items() if k != "consorcio_id"}, "consorcios": [fila_a]},
+            {"administracion_id": ids["Administración Uno"] + 1, "nombre": "Administración Vacía", **cero, "consorcios": []},
+            {"administracion_id": None, "nombre": "Sin administración",
+             **{k: v for k, v in fila_b.items() if k != "consorcio_id"}, "consorcios": [fila_b]},
+        ],
+        "sin_consorcio": {"costo_usd": pytest.approx(0.05), "tokens_entrada": 10, "tokens_salida": 5},
+    }
+    # Los totales cierran con el libro: todo lo del período menos lo de los turnos de evaluación
+    assert sum(f["costo_usd"] for f in datos["filas"]) + datos["sin_consorcio"]["costo_usd"] == pytest.approx(0.558)
+
+
+def test_filtro_por_administracion_no_incluye_consorcios_de_otra(escenario):
+    ids = _administraciones({A: "Administración Uno", B: "Administración Dos"})
+
+    def sin_reloj(datos: dict) -> dict:
+        """Lo único que depende del instante de la llamada: la antigüedad de lo pendiente."""
+        datos["pendientes"] = {**datos["pendientes"], "mas_antigua_s": None, "por_consorcio": list(datos["pendientes"]["por_consorcio"])}
+        return datos
+
+    for consorcio, nombre in ((A, "Administración Uno"), (B, "Administración Dos")):
+        por_administracion = sin_reloj(crm.panel(DESDE, HASTA, None, ids[nombre]))
+        assert por_administracion == sin_reloj(crm.panel(DESDE, HASTA, consorcio))
+        assert [f["nombre"] for f in por_administracion["consumo"]["por_administracion"]["filas"]] == [nombre]
+        assert por_administracion["consumo"]["por_administracion"]["sin_consorcio"] is None
+    assert crm.consorcios(ids["Administración Uno"]) == [A]
+    # Consorcio y Administración que no se cruzan: nada
+    assert crm.panel(DESDE, HASTA, B, ids["Administración Uno"])["preguntas"]["total"] == 0
+
+
+def test_filtro_sin_administracion(escenario):
+    _administraciones({A: "Administración Uno"})
+    datos = crm.panel(DESDE, HASTA, None, crm.SIN_ADMINISTRACION)
+    assert datos["preguntas"]["total"] == 2 and datos["uso"]["por_consorcio"] == {B: 2}
+    assert [f["nombre"] for f in datos["consumo"]["por_administracion"]["filas"]] == ["Sin administración"]
+    assert crm.consorcios(crm.SIN_ADMINISTRACION) == [B]
+    assert crm.administraciones()[0]["nombre"] == "Administración Uno"
+
+
+def test_costo_por_dia_rellena_los_dias_y_resta_la_evaluacion():
+    fin = datetime(2026, 3, 10, 12, tzinfo=UTC)
+    with Session(postgres.engine()) as s:
+        s.add(Consorcio(id=A, nombre="x"))
+        s.flush()
+        u = _usuario(s, "1", (A,), None)
+        _gasto(s, A, 0.2, fin - timedelta(days=2))
+        _gasto(s, None, 0.05, fin - timedelta(days=2))
+        _gasto(s, A, 0.1, fin - timedelta(hours=1))
+        _gasto(s, A, 0.3, fin - timedelta(hours=2))  # lo asentó un turno de evaluación
+        _turno(s, A, u, "propietario", "reglamento", "respondida", origen="evaluacion", costo=0.3, creado_en=fin - timedelta(hours=2))
+        _gasto(s, A, 9.0, fin - timedelta(days=5))  # fuera del período
+        s.commit()
+    assert crm.panel(fin - timedelta(days=3), fin)["consumo"]["por_dia"] == [
+        {"dia": "2026-03-07", "costo_usd": 0.0}, {"dia": "2026-03-08", "costo_usd": pytest.approx(0.25)},
+        {"dia": "2026-03-09", "costo_usd": 0.0}, {"dia": "2026-03-10", "costo_usd": pytest.approx(0.1)},
+    ]
+    # Con filtro no entra lo que no tiene consorcio
+    assert crm.panel(fin - timedelta(days=3), fin, A)["consumo"]["por_dia"][1]["costo_usd"] == pytest.approx(0.2)
+
+
+def test_costo_por_pregunta_divide_solo_por_los_turnos_con_precio(escenario):
+    por_pregunta = crm.panel(DESDE, HASTA)["consumo"]["por_pregunta"]
+    assert por_pregunta["total"] == {"turnos": 9, "con_precio": 7, "costo_por_pregunta_usd": 0.015429,
+                                     "tokens_entrada": 0, "tokens_salida": 0}
+    assert por_pregunta["por_funcionalidad"] == {
+        "expensas": {"turnos": 1, "con_precio": 1, "costo_por_pregunta_usd": 0.001, "tokens_entrada": 0, "tokens_salida": 0},
+        "reclamo": {"turnos": 1, "con_precio": 0, "costo_por_pregunta_usd": None, "tokens_entrada": 0, "tokens_salida": 0},
+        "reglamento": {"turnos": 5, "con_precio": 4, "costo_por_pregunta_usd": 0.025, "tokens_entrada": 0, "tokens_salida": 0},
+        "sin_funcionalidad": {"turnos": 2, "con_precio": 2, "costo_por_pregunta_usd": 0.0035, "tokens_entrada": 0,
+                              "tokens_salida": 0},
+    }
+
+
+def test_tokens_por_funcionalidad_y_modelo():
+    with Session(postgres.engine()) as s:
+        s.add(Consorcio(id=A, nombre="x"))
+        s.flush()
+        u = _usuario(s, "1", (A,), None)
+        _turno(s, A, u, "propietario", "reglamento", "respondida", tokens=(1000, 200), costo=0.002, modelo="flash")
+        _turno(s, A, u, "propietario", "reglamento", "respondida", tokens=(500, 100), costo=0.001, modelo="flash")
+        _turno(s, A, u, "propietario", "expensas", "respondida", tokens=(300, 50), modelo="sin-precio")
+        _turno(s, A, u, "propietario", "expensas", "respondida", tokens=(9999, 9999), origen="evaluacion", modelo="flash")
+        s.commit()
+    por_pregunta = crm.panel(DESDE, HASTA)["consumo"]["por_pregunta"]
+    assert por_pregunta["total"]["tokens_entrada"] == 1800 and por_pregunta["total"]["tokens_salida"] == 350
+    assert por_pregunta["por_modelo"] == {
+        "flash": {"turnos": 2, "con_precio": 2, "costo_por_pregunta_usd": 0.0015, "tokens_entrada": 1500, "tokens_salida": 300},
+        "sin-precio": {"turnos": 1, "con_precio": 0, "costo_por_pregunta_usd": None, "tokens_entrada": 300, "tokens_salida": 50},
+    }
+    assert por_pregunta["por_funcionalidad"]["expensas"]["tokens_entrada"] == 300
+
+
+def test_costo_por_canal_no_cuenta_dos_veces_lo_del_agente():
+    with Session(postgres.engine()) as s:
+        s.add(Consorcio(id=A, nombre="x"))
+        s.flush()
+        u = _usuario(s, "1", (A,), None)
+        consulta_web = _consulta(s, True, "web")  # la que hace el agente: su costo ya está en el turno
+        _turno(s, A, u, "propietario", "reglamento", "respondida", costo=0.01, consulta=consulta_web)
+        for origen, costo in (("telegram", 0.2), ("telegram", None), ("cli", 0.1), ("evaluacion", 5.0)):
+            s.get(Consulta, _consulta(s, True, origen)).costo_usd = costo
+        s.get(Consulta, consulta_web).costo_usd = 0.01
+        s.commit()
+    assert crm.panel(DESDE, HASTA)["consumo"]["por_canal"] == {
+        "cli": {"preguntas": 1, "costo_usd": pytest.approx(0.1)},
+        "telegram": {"preguntas": 2, "costo_usd": pytest.approx(0.2)},
+        "web": {"preguntas": 1, "costo_usd": pytest.approx(0.01)},
+    }
+    assert crm.panel(DESDE, HASTA, "otro")["consumo"]["por_canal"] == {}
+
+
+def test_costo_de_ingesta_por_documento_y_metodo():
+    with Session(postgres.engine()) as s:
+        s.add_all([Consorcio(id=A, nombre="x"), Consorcio(id=B, nombre="y")])
+        s.flush()
+        for n, (cid, metodo, costo, segundos) in enumerate((
+            (A, "vision", {"costo_usd": 0.02, "llamadas": 3}, 30.0), (A, "vision", {"costo_usd": 0.04}, 50.0),
+            (A, "vision", {"costo_usd": None}, 10.0), (A, "tesseract", {}, 4.0), (B, "texto", {"costo_usd": 0.001}, 1.0),
+        )):
+            _documento(s, f"doc-{n}", cid, "acta", "extraido", True, 0)
+            documento = s.get(Documento, f"doc-{n}")
+            documento.metodo_extraccion, documento.costo, documento.segundos_total = metodo, costo, segundos
+        s.commit()
+    assert crm.panel(DESDE, HASTA, A)["consumo"]["ingesta_por_documento"] == {
+        "tesseract": {"documentos": 1, "con_precio": 0, "sin_precio": 1, "costo_promedio_usd": None, "segundos_promedio": 4.0},
+        "vision": {"documentos": 3, "con_precio": 2, "sin_precio": 1, "costo_promedio_usd": 0.03, "segundos_promedio": 30.0},
+    }
+    assert list(crm.panel(DESDE, HASTA)["consumo"]["ingesta_por_documento"]) == ["tesseract", "texto", "vision"]
+
+
+TEXTO_DE_SOLICITUD = {"mensaje", "titulo", "detalle", "titulo_final", "detalle_final", "respuesta"}
+
+
+def test_crm_no_lee_columnas_de_texto():
+    """Ni de `solicitudes`, ni la respuesta correcta de `revisiones`, ni pregunta y respuesta de `consultas`, ni
+    nombres de usuarios o consorcios. El nombre de la Administración sí: es el cliente de la plataforma."""
+    arbol = ast.parse(Path(crm.__file__).read_text(encoding="utf-8"))
+    prohibidos = {("Solicitud", c) for c in TEXTO_DE_SOLICITUD} | {
+        ("Revision", "respuesta_correcta"), ("Consulta", "pregunta"), ("Consulta", "respuesta"), ("Consulta", "cita"),
+        ("Usuario", "nombre"), ("Usuario", "email"), ("Consorcio", "nombre"), ("Consorcio", "direccion"),
+    }
+    leidos = {(n.value.id, n.attr) for n in ast.walk(arbol) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)}
+    assert not leidos & prohibidos

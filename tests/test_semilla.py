@@ -52,6 +52,7 @@ def conteos() -> dict[str, int]:
 def test_dos_veces_deja_los_mismos_conteos(base):
     antes = conteos()
     assert antes["consorcios"] == 2 and antes["documentos"] == 8 and antes["usuarios"] == 6
+    assert antes["administraciones"] == 1  # "Administración Demo", con los dos consorcios
     assert antes["membresias"] == 7 and antes["unidades_funcionales"] == 8 and antes["liquidaciones"] == 4
     sembrar_demo()
     assert conteos() == antes

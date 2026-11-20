@@ -193,6 +193,29 @@ def test_el_panel_muestra_el_saldo_anterior_de_la_ultima_liquidacion():
     assert "liquidación 2026-08" in html and "$ 100.000" in html and "1 con saldo del período anterior" in html
 
 
+def test_el_panel_suma_vecinos_que_usaron_espera_y_mediana_sin_dolares():
+    from datetime import UTC, datetime, timedelta
+
+    vecino = cliente_como(PROP, PALMERAS)
+    enviar(vecino, "quiero hablar con una persona")  # un turno de vecino y una derivación pendiente
+    enviar(vecino, "¿se permiten mascotas?")
+    with Session(postgres.engine()) as s:
+        ahora = datetime.now(UTC)
+        s.add(Solicitud(tipo="derivacion", estado="resuelta", consorcio_id=PALMERAS, autor_id=usuario_id(PROP),
+                        motivo="pedido_directo", mensaje="m", titulo="t", detalle="d",
+                        creado_en=ahora - timedelta(hours=3), resuelta_en=ahora - timedelta(hours=1)))
+        s.commit()
+    html = cliente_como(ADMIN).get("/panel").text
+    assert "<dt>Vecinos que usaron</dt><dd>1</dd>" in html  # dos preguntas, una persona
+    assert "de 1 vecino en 7 días" in html
+    assert re.search(r"<dt>Espera más vieja</dt><dd>\d+ min</dd>", html)
+    assert "<dt>Mediana de resolución</dt><dd>2 h</dd>" in html
+    assert "USD" not in html and "costo" not in html.lower()  # el costo es de la plataforma: queda en el CRM
+    robles = cliente_como(MULTI).get("/panel").text  # Robles: nadie preguntó ni hay pendientes
+    assert "<dt>Vecinos que usaron</dt><dd>0</dd>" in robles and "nada pendiente" in robles
+    assert "<dt>Mediana de resolución</dt><dd>sin datos</dd>" in robles
+
+
 def test_entrar_desde_el_panel_va_a_la_pantalla_pedida_y_nunca_afuera():
     cliente = cliente_como(MULTI)
     r = cliente.post("/consorcios", data={"consorcio_id": ROBLES, "destino": "/bandeja?solicitud=7", "csrf": cliente.csrf},

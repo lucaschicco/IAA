@@ -12,6 +12,13 @@
   <button type="submit" class="{{ clase }}">{{ caller() }}</button>
 </form>
 {%- endmacro %}
+{% macro espera(segundos) -%}
+  {%- if segundos is none %}sin datos
+  {%- elif segundos < 3600 %}{{ "%.0f"|format(segundos / 60) }} min
+  {%- elif segundos < 172800 %}{{ "%.0f"|format(segundos / 3600) }} h
+  {%- else %}{{ "%.0f"|format(segundos / 86400) }} días
+  {%- endif %}
+{%- endmacro %}
 {% macro pesos(valor) %}$ {{ "{:,.0f}".format(valor).replace(",", ".") }}{% endmacro %}
 {% block contenido %}
 <div class="ancho panel">
@@ -24,8 +31,8 @@
 </header>
 
 <section class="panel-kpis" aria-label="Resumen">
-  <div class="panel-kpi"><span class="panel-kpi-icono">{{ i.icono("bandeja") }}</span><span>Para atender</span><strong>{{ totales.pendientes }}</strong><small>reclamos y derivaciones pendientes</small></div>
-  <div class="panel-kpi"><span class="panel-kpi-icono">{{ i.icono("chat") }}</span><span>Consultas</span><strong>{{ totales.consultas }}</strong><small>de vecinos en {{ dias }} días</small></div>
+  <div class="panel-kpi"><span class="panel-kpi-icono">{{ i.icono("bandeja") }}</span><span>Para atender</span><strong>{{ totales.pendientes }}</strong><small>reclamos y derivaciones pendientes{% if totales.espera_mas_vieja_s is not none %}; el más viejo espera hace {{ espera(totales.espera_mas_vieja_s) }}{% endif %}</small></div>
+  <div class="panel-kpi"><span class="panel-kpi-icono">{{ i.icono("chat") }}</span><span>Consultas</span><strong>{{ totales.consultas }}</strong><small>de {{ totales.vecinos }} {{ "vecino" if totales.vecinos == 1 else "vecinos" }} en {{ dias }} días</small></div>
   <div class="panel-kpi"><span class="panel-kpi-icono">{{ i.icono("revisar") }}</span><span>Sin revisar</span><strong>{{ totales.sin_revisar }}</strong><small>respuestas del asistente</small></div>
   <div class="panel-kpi panel-kpi-marron"><span class="panel-kpi-icono">{{ i.icono("moneda") }}</span><span>Saldo anterior</span><strong>{{ pesos(totales.saldo) }}</strong><small>{{ totales.unidades_con_saldo }} {{ "unidad" if totales.unidades_con_saldo == 1 else "unidades" }}, según la última liquidación</small></div>
 </section>
@@ -83,6 +90,9 @@
       <div><dt>Votos negativos</dt><dd>{{ c.semana.negativas }}</dd></div>
       <div><dt>Sin revisar</dt><dd>{{ c.sin_revisar }}</dd></div>
       <div><dt>Documentos</dt><dd>{{ c.documentos }}</dd></div>
+      <div><dt>Vecinos que usaron</dt><dd>{{ c.semana.vecinos }}</dd></div>
+      <div><dt>Espera más vieja</dt><dd>{{ espera(c.espera_mas_vieja_s) if c.total_pendientes else "nada pendiente" }}</dd></div>
+      <div><dt>Mediana de resolución</dt><dd>{{ espera(c.resolucion_mediana_s) }}</dd></div>
     </dl>
     <div class="panel-cobro">
       {% if c.cobro %}

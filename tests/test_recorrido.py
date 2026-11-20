@@ -387,7 +387,9 @@ RAROS = {
     "/documentos": ["tipo=%3Cscript%3Ealert(1)%3C/script%3E", "tipo=x", "tipo=", "tipo=%00", "tipo=" + "a" * 5000],
     "/chat": ["conversacion=abc", "conversacion=999999", "conversacion=00000000-0000-0000-0000-000000000000",
               "conversacion=%00", "conversacion="],
-    "/crm": ["vista=x", "vista=", "dias=x", "dias=5", "consorcio=x", "vista=calidad&dias=7", "vista=uso&dias=90"],
+    "/crm": ["vista=x", "vista=", "dias=x", "dias=5", "consorcio=x", "vista=calidad&dias=7", "vista=uso&dias=90",
+             "administracion=x", "administracion=999999", "administracion=sin", "administracion=%00",
+             "administracion=" + "9" * 40, "administracion=1&consorcio=x", "administracion=sin&consorcio=demo-palmeras"],
     "/registro": ["token=abc", "token=", "token=%00", "token=" + "a" * 5000],
     "/consorcios": ["x=1"],
 }

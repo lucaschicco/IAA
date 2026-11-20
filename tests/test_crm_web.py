@@ -12,8 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from consorcio import crm
+from consorcio.agente.semilla import ADMINISTRACION as ADMINISTRACION_DEMO
 from consorcio.almacen import postgres
 from consorcio.almacen.postgres import (
+    Administracion,
     Consorcio,
     Conversacion,
     GastoModelo,
@@ -289,3 +291,130 @@ def test_variacion_contra_el_periodo_previo(monkeypatch):
     assert "50 %" in html  # de 2 a 3 preguntas
     assert "sin período previo" in html  # con 0 no hay porcentaje que calcular
 
+
+
+# ------------------------------------------------------------------ filtro y agrupación por Administración
+
+
+def _id_demo() -> int:
+    with Session(postgres.engine()) as s:
+        return s.scalar(select(Administracion.id).where(Administracion.nombre == ADMINISTRACION_DEMO))
+
+
+@pytest.fixture
+def otra_administracion():
+    """Un consorcio de otra Administración, que se borra al final."""
+    with Session(postgres.engine()) as s:
+        adm = Administracion(nombre="Administración Ajena")
+        s.add(adm)
+        s.flush()
+        s.add(Consorcio(id="prueba-ajeno", nombre="Consorcio Ajeno de Prueba", administracion_id=adm.id))
+        s.commit()
+        yield adm.id
+    with postgres.engine().begin() as con:
+        con.exec_driver_sql("TRUNCATE turnos CASCADE")
+        con.exec_driver_sql("DELETE FROM consorcios WHERE id = 'prueba-ajeno'")
+        con.exec_driver_sql("DELETE FROM administraciones WHERE nombre = 'Administración Ajena'")
+
+
+def test_filtro_por_administracion_lista_solo_sus_consorcios(otra_administracion):
+    _turnos(PALMERAS, 2)
+    _turnos("prueba-ajeno", 5)
+    html = cliente_como(PLATAFORMA).get("/crm", params={"administracion": str(_id_demo())}).text
+    assert f'<option value="{_id_demo()}" selected>{ADMINISTRACION_DEMO}</option>' in html
+    assert f'<option value="{PALMERAS}"' in html and f'<option value="{ROBLES}"' in html
+    assert 'value="prueba-ajeno"' not in html
+    assert _valor_de(html, "turnos en el período") == 2  # los 5 del consorcio ajeno no entran
+    ajena = cliente_como(PLATAFORMA).get("/crm", params={"administracion": str(otra_administracion)}).text
+    assert _valor_de(ajena, "turnos en el período") == 5 and f'value="{PALMERAS}"' not in ajena
+
+
+def test_sin_administracion_muestra_los_consorcios_sueltos(otra_administracion):
+    with Session(postgres.engine()) as s:
+        s.add(Consorcio(id="chat-99", nombre="Base del chat de prueba"))
+        s.commit()
+    try:
+        _turnos("chat-99", 1)
+        _turnos(PALMERAS, 3)
+        html = cliente_como(PLATAFORMA).get("/crm", params={"administracion": "sin"}).text
+        assert '<option value="sin" selected>Sin administración</option>' in html
+        assert 'value="chat-99"' in html and f'value="{PALMERAS}"' not in html
+        assert _valor_de(html, "turnos en el período") == 1
+    finally:
+        with postgres.engine().begin() as con:
+            con.exec_driver_sql("TRUNCATE turnos CASCADE")
+            con.exec_driver_sql("DELETE FROM consorcios WHERE id = 'chat-99'")
+
+
+@pytest.mark.parametrize("valor", ["x", "-1", "1.5", "１", "0x1", "1 ", "%00", "9" * 15, "a" * 300])
+def test_administracion_invalida_da_422_con_menu(valor):
+    respuesta = cliente_como(PLATAFORMA).get(f"/crm?administracion={valor}")
+    assert respuesta.status_code == 422
+    assert "text/html" in respuesta.headers["content-type"]
+    assert 'class="menu-principal' in respuesta.text or "menu-principal" in respuesta.text
+
+
+def test_administracion_inexistente_da_404_con_menu():
+    respuesta = cliente_como(PLATAFORMA).get("/crm", params={"administracion": "999999"})
+    assert respuesta.status_code == 404 and "menu-principal" in respuesta.text
+
+
+def test_administracion_no_revela_nada_a_quien_no_es_de_plataforma():
+    cliente = cliente_como("demo-admin-palmeras", PALMERAS)
+    for valor in ("x", "999999", str(_id_demo())):
+        assert cliente.get("/crm", params={"administracion": valor}).status_code == 404
+
+
+def test_consorcio_de_otra_administracion_saca_el_consorcio(otra_administracion):
+    cliente = cliente_como(PLATAFORMA)
+    r = cliente.get("/crm", params={"vista": "uso", "dias": "7", "administracion": str(otra_administracion),
+                                    "consorcio": PALMERAS}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/crm?vista=uso&dias=7&consorcio=&administracion={otra_administracion}"
+    assert cliente.get(r.headers["location"]).status_code == 200
+
+
+def test_los_links_de_las_vistas_conservan_la_administracion():
+    html = cliente_como(PLATAFORMA).get("/crm", params={"administracion": "sin", "dias": "7"}).text
+    assert 'href="/crm?vista=calidad&amp;dias=7&amp;consorcio=&amp;administracion=sin"' in html
+
+
+@pytest.mark.parametrize("vista", VISTAS)
+def test_con_filtro_de_administracion_sigue_sin_estilos_ni_textos(vista):
+    _turnos(PALMERAS, 1)
+    html = cliente_como(PLATAFORMA).get("/crm", params={"vista": vista, "administracion": str(_id_demo())}).text
+    assert "style=" not in html.lower() and "<style" not in html.lower()
+    assert re.findall(r"<script\b[^>]*>", html.lower()) == ['<script src="/estaticos/htmx.min.js" defer>']
+    with Session(postgres.engine()) as s:
+        nombres = [n for n in [*s.scalars(select(Usuario.nombre)), *s.scalars(select(Consorcio.nombre))] if n]
+    assert not [n for n in nombres if n in html]
+
+
+def test_resumen_y_uso_agrupan_por_administracion():
+    _turnos(PALMERAS, 2)
+    _turnos(ROBLES, 1)
+    with Session(postgres.engine()) as s:
+        s.add(GastoModelo(consorcio_id=PALMERAS, nodo="n", modelo="m", tokens_entrada=1234, tokens_salida=56, costo_usd=0.25))
+        s.add(GastoModelo(consorcio_id=None, nodo="n", modelo="m", tokens_entrada=1, tokens_salida=1, costo_usd=0.5))
+        s.commit()
+    cliente = cliente_como(PLATAFORMA)
+    resumen = cliente.get("/crm").text
+    assert f'<th scope="row">{ADMINISTRACION_DEMO}</th><td>3</td><td>0.2500</td><td>1234</td><td>56</td>' in resumen
+    assert "Sin consorcio" in resumen
+    uso = cliente.get("/crm", params={"vista": "uso"}).text
+    assert f'<td>{PALMERAS}</td><td>2</td><td>0.2500</td><td>1234</td><td>56</td>' in uso
+    assert f'<td>{ROBLES}</td><td>1</td><td>0.0000</td>' in uso
+    assert 'class="crm-columnas crm-costo"' in uso and 'height="98.00"' in uso  # el día más caro llena la escala
+    filtrado = cliente.get("/crm", params={"vista": "uso", "administracion": str(_id_demo())}).text
+    assert "Sin consorcio" not in filtrado
+
+
+def test_metricas_nuevas_sin_casos_dicen_sin_datos():
+    html = _todas(cliente_como(PLATAFORMA))
+    for rotulo in ("Latencia", "Elevadas después de una respuesta", "Costo por día", "Costo por canal",
+                   "Costo de ingesta por documento", "Pendientes hoy", "Tasa de edición", "Tasa de derivación"):
+        assert rotulo in html
+    assert "Sin gasto con precio en este período" in html
+    assert "0.0 %" not in html
+    # La semilla no registra costo de ingesta: se dice, no se inventa un promedio
+    assert "sin costo registrado" in html

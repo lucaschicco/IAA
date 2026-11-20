@@ -54,9 +54,11 @@ from ..canales.formato import formatear_ingesta
 from ..canales.telegram import ruta_entrada
 from ..config import config
 from ..identidad import (
+    AdministracionInvalida,
     ConsorcioInvalido,
     Identidad,
     SinMembresia,
+    administraciones_de,
     crear_consorcio,
     es_plataforma,
     listar_usuarios_demo,
@@ -297,20 +299,30 @@ def consorcios(request: Request, sesion: SesionActual) -> Response:
 def consorcio_nuevo(request: Request, sesion: SesionActual) -> Response:
     if not puede_crear_consorcio(sesion.sujeto_externo):
         raise HTTPException(status_code=403)
-    return pagina(request, "consorcio_nuevo.html", sesion)
+    return pagina(request, "consorcio_nuevo.html", sesion, administraciones=administraciones_de(sesion.sujeto_externo))
 
 
 @router.post("/consorcios/nuevo", dependencies=POST_SESION)
 def consorcio_nuevo_post(request: Request, sesion: SesionActual, datos: Formulario) -> Response:
     """Quien crea queda como administración y entra directo a cargar los documentos."""
     nombre, direccion = _campo(datos, "nombre"), _campo(datos, "direccion")
+    administracion = _campo(datos, "administracion")
+
+    def de_nuevo(error: str) -> Response:
+        return pagina(request, "consorcio_nuevo.html", sesion, status_code=422, nombre=nombre[:120],
+                      direccion=direccion[:200], error=error, administraciones=administraciones_de(sesion.sujeto_externo))
+
+    elegida = int(administracion) if administracion.isascii() and administracion.isdigit() and len(administracion) <= 9 else None
+    if administracion and elegida is None:
+        return de_nuevo("Elegí una de tus Administraciones.")
     try:
-        consorcio_id = crear_consorcio(sesion.sujeto_externo, nombre, direccion)
+        consorcio_id = crear_consorcio(sesion.sujeto_externo, nombre, direccion, elegida)
     except PermissionError as e:
         raise HTTPException(status_code=403) from e
     except ConsorcioInvalido:
-        return pagina(request, "consorcio_nuevo.html", sesion, status_code=422, nombre=nombre[:120],
-                      direccion=direccion[:200], error="El nombre tiene que tener entre 3 y 120 letras.")
+        return de_nuevo("El nombre tiene que tener entre 3 y 120 letras.")
+    except AdministracionInvalida:
+        return de_nuevo("Elegí una de tus Administraciones.")
     return _elegir_consorcio(sesion, consorcio_id, "/documentos")
 
 

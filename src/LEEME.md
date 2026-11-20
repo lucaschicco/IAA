@@ -11,7 +11,7 @@ Paquete `consorcio/` (se instala con `pip install -e .`; dentro de Docker ya est
 | `identidad.py` | `Identidad` inmutable y `resolver_identidad(sujeto_externo, consorcio_id)`, que falla sin membresía activa y junta los roles y unidades de esa persona en el consorcio (rol principal y UF); equipo de plataforma y última actividad. Agnóstico al login |
 | `auth/` | Login de Lucas: `cuentas.py` (autenticar con bloqueo, invitaciones), `seguridad.py` (Argon2, JWT), la API JSON (`app.py`, `make api`) y `alta.py` (alta de consorcios y unidades por terminal). Ver `auth/LEEME.md` |
 | `tope.py` | Tope de gasto mensual sobre el libro `gastos_modelo`: lo consultan `atender` e `ingestar_pdf` |
-| `crm.py` | Métricas agregadas del CRM, solo SQL: la única lectura que cruza consorcios. No importa `Mensaje` |
+| `crm.py` | Métricas agregadas del CRM, solo SQL: la única lectura que cruza consorcios, con filtro por Administración y consorcio. No importa `Mensaje` ni lee columnas de texto |
 | `texto.py` | Normalización de texto compartida (búsqueda, verificación de citas, evaluación) e ids: `id_documento(consorcio, hash)`, `consorcio_de_chat_id` |
 | `ingesta/` | **Tool 1**: PDF → hash y control de duplicados → clasificar calidad → extraer texto → estructurar → guardar en disco → preparar guardado → persistir (grafo de LangGraph en `grafo.py`). `liquidacion.py`: liquidaciones de expensas (modelo para rubros y gastos, regex para el prorrateo por unidad) |
 | `consulta/` | **Tool 2**: pregunta → `buscador.py` (tsvector o palabras clave en Postgres) → responder con cita → verificar la cita en el texto original o derivar (grafo en `grafo.py`); `evaluar.py` mide recall@k y calidad de respuestas contra `datos/evaluacion/preguntas.csv` |

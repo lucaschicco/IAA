@@ -157,18 +157,39 @@ resultado, certeza y prioridad; la pregunta y la respuesta como burbujas. Veredi
 (Correcta / Parcial / Incorrecta); los motivos son chips y se ocultan si es "Correcta". "Guardar y seguir" vuelve a
 la cola y toma la siguiente. No muestra quién preguntó, solo el rol.
 
-### CRM — `/crm?vista=resumen|calidad|uso&dias=&consorcio=` · [Resumen](mockups/Main.dc.html), [Calidad](mockups/Calidad.dc.html), [Uso](mockups/Uso.dc.html) · claro
-Tres vistas de hasta 6 tarjetas, con filtros de período y consorcio arriba que se conservan al cambiar de vista
-(subítems del menú y pestañas).
+### CRM — `/crm?vista=resumen|calidad|uso&dias=&consorcio=&administracion=` · [Resumen](mockups/Main.dc.html), [Calidad](mockups/Calidad.dc.html), [Uso](mockups/Uso.dc.html) · claro
+Tres vistas, con filtros de período, Administración y consorcio arriba que se conservan al cambiar de vista
+(subítems del menú y pestañas; `administracion` va en el link solo si está puesta). El select de Administración
+ofrece "Todas", cada Administración por nombre y "Sin administración" (`sin`); con una elegida, el de consorcio lista
+solo los suyos. Un valor que no es un id da 422 y un id inexistente 404, las dos con la página de error y el menú; un
+consorcio de otra Administración (pasa al cambiar solo la Administración en el formulario) redirige sin el consorcio.
 - **Resumen:** 4 KPIs (preguntas, activos en 7 días, elevaciones, documentos) con variación contra el período
   previo en píldora verde o roja (más elevaciones es rojo); actividad por día (barras negras y naranjas); cómo
-  terminaron; por consorcio; funcionalidades; tope mensual (global).
+  terminaron, con la tasa de derivación; tabla "Por Administración" (preguntas, USD, tokens; "Sin administración"
+  para lo de Telegram y la terminal, "Sin consorcio" solo sin filtro); por consorcio; funcionalidades; tope
+  mensual (global).
 - **Calidad:** anillos de acertadas (cita verificada, feedback, exactitud en evaluación; no se promedian),
-  revisión de la administración, calibración del medidor de certeza, por intención, motivos de error, elevaciones.
-- **Uso y costos:** tope mensual, costos por funcionalidad (y modelos sin precio), usuarios y uso por rol, uso
-  por usuario (por id), documentos y contextos, reclamos.
-Solo agregados: no muestra textos ni nombres. Del mockup faltan series semanales, costo por día y "últimas
-revisiones", porque esos datos todavía no se calculan.
+  revisión de la administración, calibración del medidor de certeza, por intención, motivos de error, elevaciones;
+  latencia p50/p95 por funcionalidad; elevadas después de una respuesta (tasa sobre las respondidas, por
+  funcionalidad, y los mensajes directos aparte).
+- **Uso y costos:** tope mensual, costos por funcionalidad (y modelos sin precio), usuarios (ventanas, personas que
+  preguntaron, preguntas por persona, por rol); tabla Administración → consorcio con USD y tokens; costo por día
+  (columnas naranjas en SVG por atributos, como la actividad; sin gasto con precio, el recuadro punteado); costo por
+  canal; costo por pregunta y tokens por funcionalidad y modelo; costo de ingesta por documento y método; pendientes
+  de hoy con la antigüedad de la más vieja; uso por usuario (por id); documentos, cargas del período y contextos;
+  reclamos con la tasa de edición.
+Las tablas anchas van en `.crm-tabla` (scroll dentro de la tarjeta, nunca de la página); las filas de consorcio
+bajo su Administración son `.crm-subfila`. Una métrica sin casos dice "sin datos" (nunca "0 %"), y si falta el dato
+de origen lo dice (p. ej. documentos "sin costo registrado"). Solo agregados: no muestra textos ni nombres de
+personas o consorcios; de la Administración, que es el cliente, sí el nombre. Del mockup faltan las series semanales
+y "últimas revisiones".
+
+### Panel — `/panel` · claro
+Inicio de quien administra, con todos sus consorcios. KPIs: para atender (con lo que espera el más viejo), consultas
+"de N vecinos" en 7 días, sin revisar, saldo anterior. Cada tarjeta de consorcio suma "Vecinos que usaron" (personas
+distintas con turnos de vecino en 7 días, no la actividad global), "Espera más vieja" ("nada pendiente" si no hay) y
+"Mediana de resolución" (de lo resuelto en 7 días; es espera, no esfuerzo). Sin montos en dólares: el costo del
+modelo es de la plataforma y queda en el CRM.
 
 ### Vecinos y unidades · [Vecinos](mockups/Vecinos.dc.html) · claro — **no implementada**
 Alta de unidades, invitaciones y roles por consorcio. Necesita backend nuevo.
@@ -192,11 +213,13 @@ plataforma) en 1366, 820 y 390px: sin scroll horizontal en ninguna pantalla. Aju
 Solo para quien administra al menos un consorcio. En Consorcios aparece como una carta más, transparente con borde fino
 y un "+" naranja (`.opcion-nueva`), en lugar de la nota de la invitación. El formulario (nombre, dirección opcional) usa
 el mismo estilo que Ingresar. Al crear, entra a Documentos, que con el consorcio vacío dice "Todavía no hay documentos en
-…" y lleva a la carga.
+…" y lleva a la carga. La Administración se hereda: si los consorcios que la persona administra tienen una sola, el
+formulario lo dice en una nota ("Queda en …"); si tienen varias, suma un `<select>` obligatorio con solo esas; si no
+tienen ninguna, no muestra nada y el consorcio queda sin Administración.
 
 ## 7. Pendientes
 
 - Vecinos y unidades; "Olvidé mi contraseña"; etapas de progreso al cargar un PDF; tarjeta de expensas en el chat.
-- Datos para las tarjetas faltantes del CRM (series semanales, costo por día, últimas revisiones).
+- Datos para las tarjetas faltantes del CRM (series semanales, últimas revisiones).
 - Nombre y logo definitivos (hoy "Consorcio" con un edificio de línea).
 - Usuario demo `demo-admin-dos` (administra los dos consorcios demo) para probar la vista por consorcio.

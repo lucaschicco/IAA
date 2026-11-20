@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .almacen.postgres import (
     ROLES,
+    Administracion,
     Consorcio,
     Membresia,
     UnidadFuncional,
@@ -108,22 +109,61 @@ class ConsorcioInvalido(ValueError):
     """Nombre vacío o demasiado largo, o dirección demasiado larga."""
 
 
+class AdministracionInvalida(ValueError):
+    """La Administración elegida no es una de las de los consorcios que la persona administra, o falta elegirla."""
+
+
+def administraciones_de(sujeto_externo: str) -> list[dict]:
+    """Las Administraciones de los consorcios donde la persona es administración (sin repetir, por nombre).
+    Es lo único que puede heredar un consorcio que crea: nunca una Administración ajena."""
+    crear_tablas()
+    with Session(engine()) as s:
+        filas = s.execute(
+            select(Administracion.id, Administracion.nombre).distinct()
+            .join(Consorcio, Consorcio.administracion_id == Administracion.id)
+            .join(Membresia, Membresia.consorcio_id == Consorcio.id)
+            .join(Usuario, Usuario.id == Membresia.usuario_id)
+            .where(Usuario.sujeto_externo == sujeto_externo, Usuario.activo, Membresia.activo,
+                   Membresia.rol == "administracion")
+            .order_by(Administracion.nombre, Administracion.id)
+        ).all()
+    return [{"id": i, "nombre": n} for i, n in filas]
+
+
+def _administracion_heredada(sujeto_externo: str, elegida: int | None) -> int | None:
+    """Única → esa (y si se eligió otra, error); varias → la elegida, que tiene que ser una de esas; ninguna → NULL.
+    Los consorcios administrados sin Administración no cuentan: no hay nada que heredar de ellos."""
+    opciones = [a["id"] for a in administraciones_de(sujeto_externo)]
+    if not opciones:
+        if elegida is not None:
+            raise AdministracionInvalida(elegida)
+        return None
+    if len(opciones) == 1 and elegida is None:
+        return opciones[0]
+    if elegida not in opciones:
+        raise AdministracionInvalida(elegida)
+    return elegida
+
+
 def puede_crear_consorcio(sujeto_externo: str) -> bool:
     """Crea consorcios quien ya administra alguno: una administración que suma un edificio a su cartera."""
     return any(m["rol"] == "administracion" for m in membresias_de(sujeto_externo))
 
 
-def crear_consorcio(sujeto_externo: str, nombre: str, direccion: str = "") -> str:
+def crear_consorcio(sujeto_externo: str, nombre: str, direccion: str = "", administracion_id: int | None = None) -> str:
     """Crea un consorcio vacío con quien lo pide como su administración y devuelve el id.
 
     Nunca toca un consorcio existente: si el slug del nombre ya está tomado se le agrega un número. Así nadie
-    se suma como administración de un consorcio ajeno eligiendo un nombre igual.
+    se suma como administración de un consorcio ajeno eligiendo un nombre igual. La Administración se hereda de
+    los consorcios que la persona ya administra (`_administracion_heredada`); `administracion_id` solo hace
+    falta si tiene más de una.
     """
     nombre, direccion = " ".join(nombre.split()), " ".join(direccion.split())
     if not 3 <= len(nombre) <= 120 or len(direccion) > 200:
         raise ConsorcioInvalido(nombre)
     if not puede_crear_consorcio(sujeto_externo):
         raise PermissionError(sujeto_externo)
+    administracion_id = _administracion_heredada(sujeto_externo, administracion_id)
     base = re.sub(r"\s+", "-", normalizar(nombre))[:50].strip("-") or "consorcio"
     with Session(engine()) as s, s.begin():
         usuario_id = s.scalar(select(Usuario.id).where(Usuario.sujeto_externo == sujeto_externo, Usuario.activo))
@@ -131,7 +171,7 @@ def crear_consorcio(sujeto_externo: str, nombre: str, direccion: str = "") -> st
         tomados = set(s.scalars(select(Consorcio.id).where(Consorcio.id.like(f"{base}%"))))
         consorcio_id = base if base not in tomados else next(
             f"{base}-{n}" for n in range(2, 10_000) if f"{base}-{n}" not in tomados)
-        s.add(Consorcio(id=consorcio_id, nombre=nombre, direccion=direccion or None))
+        s.add(Consorcio(id=consorcio_id, nombre=nombre, direccion=direccion or None, administracion_id=administracion_id))
         s.flush()
         s.add(Membresia(usuario_id=usuario_id, consorcio_id=consorcio_id, rol="administracion", unidad_id=None))
     return consorcio_id
