@@ -39,6 +39,7 @@ MENSAJES_ERROR = {
     413: "El archivo supera el tamaño que acepta la carga.",
     415: "El archivo no es un PDF.",
     422: "Faltan datos o no son válidos.",
+    429: "Ya mandaste muchos mensajes a la administración hoy. Probá de nuevo más tarde.",
     500: "Algo falló de nuestro lado. Probá de nuevo en un rato.",
 }
 

@@ -72,6 +72,26 @@ titulares de portada usan `clamp()` (2–4rem). Radios: 18px tarjetas, 28px pane
   en la URL (`?solicitud=`, `?turno=`) y por defecto se elige la primera. En claro la lista es una sola tarjeta
   con filas separadas por líneas.
 - **Íconos:** SVG de línea en `_iconos.html` (macro `icono`), trazo 1.8, `currentColor`.
+- **Selector de consorcio** (`.contexto-menu`, `base.html`): con más de una membresía o si administra alguna, la
+  píldora de la barra es el `<summary>` de un `<details>` (sin JS; teclado nativo, texto "Cambiar de consorcio"
+  para lectores de pantalla) con un chevrón que gira al abrir. La lista (`.contexto-lista`) cae bajo la píldora,
+  alineada a la derecha, de hasta 340px: "Tus consorcios", el actual primero con tilde naranja y `aria-current`,
+  después el resto por nombre (máx. 8), cada uno con rol y, donde administra, "N pendientes". Cada fila es un
+  botón de un form `POST /consorcios` con `consorcio_id` y `destino` = la pantalla actual sin query; si con el rol
+  nuevo esa pantalla daría 403 (`/bandeja`, `/revisar`), el servidor manda a `/chat`. Pie: "Panel" y "Nuevo
+  consorcio" (si administra) y "Ver todos". Filas de 44px. En ≤900px la lista pasa a `position: fixed` a ancho
+  completo bajo la barra (10px de margen) con scroll propio. Un vecino de un solo consorcio ve la píldora como
+  texto, como antes.
+- **Pasar a la administración** (`_acciones_turno.html`): bajo cada respuesta del asistente, después del voto, un
+  `<details class="elevar">` con línea fina arriba y summary chico en color de enlace (ícono de flecha arriba).
+  Abierto: "Le mandamos tu pregunta y la respuesta del asistente", `textarea` opcional (máx. 500) y botón
+  secundario "Enviar a la administración". htmx (`hx-target="closest details"`) lo reemplaza por `.elevado`: tilde
+  verde y "Lo pasaste a la administración (n.º N). Ver en Mis solicitudes". Aparece en `respondida`, `sin_datos`,
+  `fuera_de_alcance`, `tope_excedido` y `error`; un derivado o un reclamo muestran solo "Ver en Mis solicitudes".
+  Igual al reabrir una conversación (también el voto, o el "Gracias…" si ya votó).
+- **Escribirle a la administración** (`.escribir`, Mis solicitudes): tarjeta plegada bajo el encabezado, con
+  asunto (3–120) y mensaje (10–2000) y el botón primario. Si falla la validación o el cupo, vuelve abierta con la
+  alerta y lo escrito.
 
 ## 5. Pantallas
 
@@ -99,6 +119,7 @@ naranja con una puerta. Sin sesión usa la pantalla partida. Por htmx se devuelv
 ### Chat — `/chat` · [Chat](mockups/Chat.dc.html) · oscuro
 - Cabecera "¿En qué te ayudo hoy?" y "Nueva conversación". Burbujas: del vecino en naranja a la derecha, del
   asistente oscuras a la izquierda. Voto con pulgares (con `aria-label` "Me sirvió" / "No me sirvió").
+  Debajo, "Pasar a la administración" (ver Componentes).
 - Vacío: explicación corta y tres sugerencias que se envían con un clic (form htmx, sin JS propio). La
   bienvenida desaparece con el primer mensaje (`:only-child`).
 - Caja de envío en píldora con botón redondo; indicador "Pensando…".
@@ -121,7 +142,9 @@ naranja con una puerta. Sin sesión usa la pantalla partida. Por htmx se devuelv
 
 ### Mis solicitudes — `/mis-solicitudes?solicitud=` · [Solicitudes](mockups/Solicitudes.dc.html) · oscuro
 Lista (tipo, fecha, título, estado) y detalle con el seguimiento en tres pasos según el estado: lo pediste → la
-administración lo está viendo → respuesta. La respuesta va en una caja crema.
+administración lo está viendo → respuesta. La respuesta va en una caja crema. Arriba, "Escribirle a la administración"
+(mensaje directo, sin modelo). El primer paso dice cómo llegó: desde el chat, desde una respuesta elevada o
+escrito directo; en una elevada, el detalle muestra la pregunta y, en una caja, lo que había respondido el asistente.
 
 ### Bandeja — `/bandeja?ver=pendientes|resueltas&solicitud=` · [Bandeja](mockups/Bandeja.dc.html) · claro
 Pestañas con conteo. Detalle: autor con inicial, lo que armó el asistente al lado del mensaje original, y las

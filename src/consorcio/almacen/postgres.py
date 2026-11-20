@@ -493,7 +493,7 @@ class Solicitud(Base):
         ),
         CheckConstraint(
             "motivo IN ('pedido_usuario', 'sin_respaldo', 'cita_no_verificada', 'router_invalido', "
-            "'error_funcionalidad', 'reclamo')",
+            "'error_funcionalidad', 'reclamo', 'elevada_usuario', 'pedido_directo')",
             name="ck_solicitudes_motivo",
         ),
         Index("ix_solicitudes_consorcio_estado", "consorcio_id", "estado"),

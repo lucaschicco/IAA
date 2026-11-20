@@ -204,6 +204,93 @@ def test_entrar_desde_el_panel_va_a_la_pantalla_pedida_y_nunca_afuera():
         assert r.headers["location"] == "/chat", malo
 
 
+# ------------------------------------------------------------------ selector de consorcio en la barra
+
+
+def formularios_del_selector(html: str) -> dict[str, str]:
+    """consorcio_id → destino de cada fila del desplegable de la barra."""
+    menu = re.search(r'<details class="contexto-menu">(.*?)</details>', html, re.S)
+    if menu is None:
+        return {}
+    return dict(re.findall(r'name="consorcio_id" value="([^"]*)">\s*<input type="hidden" name="destino" value="([^"]*)"',
+                           menu.group(1)))
+
+
+def cambiar(cliente, consorcio: str, destino: str, **extra):
+    datos = {"consorcio_id": consorcio, "destino": destino, "csrf": cliente.csrf, **extra}
+    return cliente.post("/consorcios", data=datos, follow_redirects=False)
+
+
+def test_el_selector_lista_los_otros_consorcios_y_vuelve_a_la_misma_pantalla():
+    cliente = cliente_como(MULTI)
+    elegir(cliente, PALMERAS)
+    html = cliente.get("/documentos").text
+    assert formularios_del_selector(html) == {ROBLES: "/documentos"}  # el actual no es un botón: lleva tilde
+    assert 'aria-current="true"' in re.search(r'<details class="contexto-menu">.*?</details>', html, re.S).group(0)
+    r = cambiar(cliente, ROBLES, "/documentos")
+    assert r.status_code == 303 and r.headers["location"] == "/documentos"
+    adoptar_cookie(cliente, r)
+    nombres = {m["consorcio_id"]: m["nombre"] for m in membresias_de(MULTI)}
+    barra = re.search(r'<header class="barra">.*?</header>', cliente.get("/documentos").text, re.S).group(0)
+    assert f'<span class="contexto-nombre">{nombres[ROBLES]}</span>' in barra and "administración" in barra
+
+
+def test_el_destino_del_selector_no_lleva_la_query():
+    cliente = cliente_como(MULTI, PALMERAS)
+    html = cliente.get("/mis-solicitudes?solicitud=123").text
+    assert formularios_del_selector(html) == {ROBLES: "/mis-solicitudes"}
+
+
+@pytest.mark.parametrize("pantalla", ["/bandeja", "/revisar", "/bandeja?solicitud=7"])
+def test_cambiar_a_un_consorcio_donde_no_administra_manda_al_chat(pantalla):
+    cliente = cliente_como(MULTI, ROBLES)
+    assert formularios_del_selector(cliente.get(pantalla.split("?")[0]).text) == {PALMERAS: pantalla.split("?")[0]}
+    r = cambiar(cliente, PALMERAS, pantalla)
+    assert r.status_code == 303 and r.headers["location"] == "/chat"
+    adoptar_cookie(cliente, r)
+    assert cliente.get("/chat").status_code == 200
+
+
+def test_cambiar_entre_consorcios_que_administra_conserva_la_bandeja():
+    cliente = cliente_como("demo-admin-dos", PALMERAS)
+    assert cambiar(cliente, ROBLES, "/bandeja").headers["location"] == "/bandeja"
+    assert cambiar(cliente, ROBLES, "/panel").headers["location"] == "/panel"
+
+
+def test_el_selector_no_cambia_a_un_consorcio_ajeno_ni_sin_csrf():
+    cliente = cliente_como(PROP, PALMERAS)
+    for consorcio in (ROBLES, "no-existe"):
+        r = cambiar(cliente, consorcio, "/chat")
+        assert r.status_code == 403 and "set-cookie" not in r.headers
+    r = cliente.post("/consorcios", data={"consorcio_id": PALMERAS, "destino": "/chat"}, follow_redirects=False)
+    assert r.status_code == 403 and "set-cookie" not in r.headers
+
+
+def test_un_vecino_de_un_solo_consorcio_ve_la_pildora_sin_desplegable():
+    html = cliente_como(PROP, PALMERAS).get("/chat").text
+    assert 'class="contexto-menu"' not in html and '<span class="contexto"' in html
+
+
+def test_la_administracion_de_un_consorcio_ve_el_desplegable_con_panel_y_nuevo():
+    html = cliente_como(ADMIN, PALMERAS).get("/chat").text
+    menu = re.search(r'<details class="contexto-menu">.*?</details>', html, re.S).group(0)
+    assert formularios_del_selector(html) == {}
+    assert 'href="/panel"' in menu and 'href="/consorcios/nuevo"' in menu and 'href="/consorcios"' in menu
+    vecino = re.search(r'<details class="contexto-menu">.*?</details>', cliente_como(MULTI, PALMERAS).get("/chat").text,
+                       re.S).group(0)
+    assert 'href="/panel"' in vecino  # administra en otro consorcio
+
+
+def test_el_selector_muestra_las_pendientes_de_cada_consorcio_que_administra():
+    propietario = cliente_como(PROP, PALMERAS)
+    enviar(propietario, "quiero hablar con una persona")
+    html = cliente_como("demo-admin-dos", ROBLES).get("/chat").text
+    menu = re.search(r'<details class="contexto-menu">.*?</details>', html, re.S).group(0)
+    assert "1 pendiente<" in menu
+    assert "pendiente" not in re.search(r'<details class="contexto-menu">.*?</details>',
+                                        cliente_como(MULTI, ROBLES).get("/chat").text, re.S).group(0)
+
+
 def test_la_navegacion_depende_del_rol():
     assert 'href="/bandeja"' in cliente_como(ADMIN, PALMERAS).get("/chat").text
     assert 'href="/bandeja"' not in cliente_como(PROP, PALMERAS).get("/chat").text

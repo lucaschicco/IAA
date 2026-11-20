@@ -8,7 +8,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..almacen.postgres import Conversacion, Mensaje, crear_tablas, engine
+from ..almacen.postgres import Conversacion, Mensaje, Turno, crear_tablas, engine
 from ..identidad import Identidad
 
 _ID_CONVERSACION = re.compile(r"[0-9a-f]{32}")
@@ -42,14 +42,21 @@ def conversaciones_de(identidad: Identidad, limite: int = 20) -> list[dict]:
 
 
 def historial(identidad: Identidad, conversacion_id: str) -> list[dict]:
-    """Toda la conversación, de la más vieja a la más nueva; [] si es ajena."""
+    """Toda la conversación, de la más vieja a la más nueva; [] si es ajena.
+
+    Cada respuesta del asistente trae su turno (`turno_id`, `resultado`, `solicitud_id`, `feedback`), para que
+    al reabrir la conversación sigan el voto y "Pasar a la administración"; en los mensajes del vecino van None."""
     if not conversacion_valida(identidad, conversacion_id):
         return []
     with Session(engine()) as s:
-        filas = s.scalars(
-            select(Mensaje).where(Mensaje.conversacion_id == conversacion_id).order_by(Mensaje.id)
+        filas = s.execute(
+            select(Mensaje, Turno.id, Turno.resultado, Turno.solicitud_id, Turno.feedback)
+            .outerjoin(Turno, Turno.mensaje_asistente_id == Mensaje.id)
+            .where(Mensaje.conversacion_id == conversacion_id).order_by(Mensaje.id)
         ).all()
-        return [{"rol": m.rol, "texto": m.texto, "creado_en": m.creado_en} for m in filas]
+        return [{"rol": m.rol, "texto": m.texto, "creado_en": m.creado_en, "turno_id": turno_id, "resultado": resultado,
+                 "solicitud_id": solicitud_id, "feedback": feedback}
+                for m, turno_id, resultado, solicitud_id, feedback in filas]
 
 
 def ultimos_mensajes(conversacion_id: str, cantidad: int) -> list[dict]:

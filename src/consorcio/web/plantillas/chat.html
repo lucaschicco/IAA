@@ -15,7 +15,7 @@
   </header>
   <div id="mensajes" class="mensajes">
     {% for m in mensajes %}
-    <div class="mensaje {{ m.rol }}"><div class="texto">{{ m.texto }}</div></div>
+    <div class="mensaje {{ m.rol }}"><div class="texto">{{ m.texto }}</div>{% if m.acciones %}{% with a = m.acciones %}{% include "_acciones_turno.html" %}{% endwith %}{% endif %}</div>
     {% else %}
     <div class="chat-vacio">
       <p>Preguntá por el reglamento, las expensas o los documentos, o dejá un reclamo. Las respuestas citan la fuente; lo que no puede resolver pasa a la administración.</p>

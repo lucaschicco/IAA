@@ -1,17 +1,7 @@
-{% import "_iconos.html" as i %}
 <div class="mensaje usuario"><div class="texto">{{ pregunta }}</div></div>
 <div class="mensaje asistente">
   <div class="texto">{{ turno.mensaje }}</div>
-  {% if turno.solicitud_id %}<a href="/mis-solicitudes" class="pie">Ver en Mis solicitudes</a>{% endif %}
-  {% if con_voto %}
-  <form class="voto" hx-post="/chat/feedback" hx-swap="outerHTML">
-    {% include "_csrf.html" %}
-    <input type="hidden" name="turno_id" value="{{ turno.turno_id }}">
-    <span>¿Te sirvió?</span>
-    <button type="submit" name="valor" value="1" aria-label="Me sirvió" title="Me sirvió">{{ i.icono("pulgar-arriba") }}</button>
-    <button type="submit" name="valor" value="-1" aria-label="No me sirvió" title="No me sirvió">{{ i.icono("pulgar-abajo") }}</button>
-  </form>
-  {% endif %}
+  {% with a = acciones %}{% include "_acciones_turno.html" %}{% endwith %}
 </div>
 {% with conversacion_id = turno.conversacion_id or "", oob = true %}
 {% include "_conversacion.html" %}

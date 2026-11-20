@@ -467,6 +467,7 @@ def test_0009_turnos_anteriores_quedan_sin_certeza_ni_mensajes(base_vacia):
     assert _existe("revisiones")
     assert _escalar("SELECT certeza IS NULL AND mensaje_asistente_id IS NULL FROM turnos") is True
     assert _escalar("SELECT senales_certeza::text FROM turnos") == "{}"
+    command.upgrade(_alembic(), "head")  # `check` compara contra head
     command.check(_alembic())
 
 
@@ -517,4 +518,29 @@ def test_0008_downgrade_y_upgrade_limpios(base_vacia):
 
     command.upgrade(_alembic(), "head")
     assert resolver_identidad("prop", "a").unidades == (3, 7)
+    command.check(_alembic())
+
+
+_SOLICITUD = ("INSERT INTO solicitudes (tipo, estado, consorcio_id, autor_id, motivo, mensaje, titulo, detalle, "
+              "creado_en) VALUES ('derivacion', 'pendiente', 'a', 1, '{}', 'm', 't', 'd', now())")
+
+
+def test_0010_suma_los_motivos_de_elevar_y_el_downgrade_los_conserva_como_pedido(base_vacia):
+    _base_con_membresias_0007()
+    command.upgrade(_alembic(), "0009_calidad")
+    with pytest.raises(IntegrityError):
+        _ejecutar(_SOLICITUD.format("elevada_usuario"))
+
+    command.upgrade(_alembic(), "0010_elevar")
+    for motivo in ("elevada_usuario", "pedido_directo", "pedido_usuario"):
+        _ejecutar(_SOLICITUD.format(motivo))
+    with pytest.raises(IntegrityError):
+        _ejecutar(_SOLICITUD.format("otro"))
+    command.check(_alembic())
+
+    command.downgrade(_alembic(), "0009_calidad")
+    assert _escalar("SELECT count(*) FROM solicitudes WHERE motivo = 'pedido_usuario'") == 3
+    with pytest.raises(IntegrityError):
+        _ejecutar(_SOLICITUD.format("pedido_directo"))
+    command.upgrade(_alembic(), "head")
     command.check(_alembic())

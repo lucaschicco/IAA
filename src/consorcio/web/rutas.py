@@ -23,14 +23,25 @@ from starlette.datastructures import FormData, UploadFile
 
 from ..agente import revision
 from ..agente.bandeja import (
+    CUPO_DIARIO,
+    LARGO_ASUNTO,
+    LARGO_MENSAJE,
+    MAX_NOTA,
+    RESULTADOS_ELEVABLES,
+    CupoExcedido,
+    PedidoInvalido,
     SinPermiso,
     SolicitudInexistente,
     SolicitudYaResuelta,
     TurnoAjeno,
+    TurnoNoElevable,
     aprobar_reclamo,
     editar_reclamo,
+    elevar_turno,
     listar_solicitudes,
     mis_solicitudes,
+    pedido_directo,
+    pendientes_por_consorcio,
     rechazar_reclamo,
     registrar_feedback,
     resolver_derivacion,
@@ -147,13 +158,30 @@ def _id(valor: str) -> int:
 def contexto_menu(sesion: Sesion, identidad: Identidad | None = None) -> dict:
     """Lo que el menú lateral y la barra superior necesitan en toda pantalla con sesión (también la de error)."""
     membresias = membresias_de(sesion.sujeto_externo)
-    consorcio = next((m["nombre"] for m in membresias if identidad and m["consorcio_id"] == identidad.consorcio_id), None)
-    por_atender = 0
-    if identidad and identidad.es_administracion:
-        por_atender = sum(s["estado"] == "pendiente" for s in listar_solicitudes(identidad))
+    actual = identidad.consorcio_id if identidad else None
+    consorcio = next((m["nombre"] for m in membresias if m["consorcio_id"] == actual), None)
     administra = any(m["rol"] == "administracion" for m in membresias)
+    # Una sola consulta para todo lo que administra: el número del menú y el de cada fila del selector
+    pendientes = pendientes_por_consorcio([m["consorcio_id"] for m in membresias if m["rol"] == "administracion"])
+    por_atender = pendientes.get(actual, 0) if identidad and identidad.es_administracion else 0
     return {"sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion),
-            "administra": administra, "plataforma": es_plataforma(sesion.sujeto_externo), "por_atender": por_atender}
+            "administra": administra, "plataforma": es_plataforma(sesion.sujeto_externo), "por_atender": por_atender,
+            "selector": _selector(membresias, actual, administra, pendientes)}
+
+
+MAX_SELECTOR = 8
+
+
+def _selector(membresias: list[dict], actual: str | None, administra: bool, pendientes: dict[str, int]) -> list[dict]:
+    """Los consorcios de la píldora de la barra: el actual primero y después por nombre, hasta `MAX_SELECTOR`
+    (el resto, en "Ver todos"). Vacío si no hay nada que elegir: un vecino de un solo consorcio ve la píldora
+    como texto."""
+    if actual is None or (len(membresias) < 2 and not administra):
+        return []
+    filas = sorted(membresias, key=lambda m: (m["consorcio_id"] != actual, m["nombre"]))[:MAX_SELECTOR]
+    return [{**m, "actual": m["consorcio_id"] == actual,
+             "pendientes": pendientes.get(m["consorcio_id"], 0) if m["rol"] == "administracion" else 0}
+            for m in filas]
 
 
 def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identidad | None = None,
@@ -290,14 +318,23 @@ def consorcio_nuevo_post(request: Request, sesion: SesionActual, datos: Formular
 def consorcios_post(sesion: SesionActual, datos: Formulario) -> Response:
     """Valida contra las membresías: elegir un consorcio ajeno no llega a firmarse en la cookie."""
     elegido = _campo(datos, "consorcio_id")
-    if elegido not in {m["consorcio_id"] for m in membresias_de(sesion.sujeto_externo)}:
+    roles = {m["consorcio_id"]: m["rol"] for m in membresias_de(sesion.sujeto_externo)}
+    if elegido not in roles:
         raise HTTPException(status_code=403)
     destino = _campo(datos, "destino")
-    return _elegir_consorcio(sesion, elegido, destino if DESTINO_VALIDO.fullmatch(destino) else "/chat")
+    if not DESTINO_VALIDO.fullmatch(destino):
+        destino = "/chat"
+    # Desde la barra se cambia de consorcio quedándose en la pantalla; si con el rol nuevo daría 403, al chat
+    if destino.split("?")[0] in SOLO_ADMINISTRACION and roles[elegido] != "administracion":
+        destino = "/chat"
+    return _elegir_consorcio(sesion, elegido, destino)
 
 
-# Desde el panel se entra a un consorcio directo a una pantalla: solo rutas propias, nunca una URL externa
-DESTINO_VALIDO = re.compile(r"/(chat|documentos|mis-solicitudes|bandeja|revisar)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
+# Desde el panel y desde la barra se entra a un consorcio directo a una pantalla: solo rutas propias, nunca
+# una URL externa
+DESTINO_VALIDO = re.compile(
+    r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
+SOLO_ADMINISTRACION = {"/bandeja", "/revisar"}
 
 
 @router.get("/panel")
@@ -322,10 +359,13 @@ def chat(request: Request, sesion: SesionActual, identidad: Miembro, conversacio
     """Una conversación ajena da lo mismo que una que no existe."""
     if conversacion and not conversacion_valida(identidad, conversacion):
         raise HTTPException(status_code=404)
+    mensajes = [{**m, "acciones": _acciones(m["turno_id"], m["resultado"], m["solicitud_id"], m["feedback"])
+                 if m["rol"] == "asistente" and m["turno_id"] else None}
+                for m in (historial(identidad, conversacion) if conversacion else [])]
     return pagina(
         request, "chat.html", sesion, identidad, conversacion_id=conversacion or "",
-        conversaciones=conversaciones_de(identidad), mensajes=historial(identidad, conversacion) if conversacion else [],
-        max_mensaje=config.agente_max_mensaje,
+        conversaciones=conversaciones_de(identidad), mensajes=mensajes,
+        max_mensaje=config.agente_max_mensaje, max_nota=MAX_NOTA,
         # la columna de la derecha: lo último del vecino y del consorcio, para tenerlo a mano
         solicitudes=mis_solicitudes(identidad, limite=3), documentos=listar_documentos(identidad.consorcio_id)[:3],
     )
@@ -337,9 +377,32 @@ def chat_mensaje(request: Request, sesion: SesionActual, identidad: Miembro, dat
     turno = atender(mensaje, identidad, _campo(datos, "conversacion_id") or None, canal="web")
     return plantillas.TemplateResponse(request, "_turno.html", {
         "pregunta": mensaje, "turno": turno, "csrf": token_csrf(sesion), "max_mensaje": config.agente_max_mensaje,
-        "con_voto": turno["turno_id"] is not None and turno["resultado"] not in RESULTADOS_SIN_VOTO,
+        "acciones": _acciones(turno["turno_id"], turno["resultado"], turno["solicitud_id"]), "max_nota": MAX_NOTA,
         "conversaciones": conversaciones_de(identidad),  # la conversación nueva tiene que aparecer en el menú
     })
+
+
+def _acciones(turno_id: int | None, resultado: str | None, solicitud_id: int | None, feedback: int | None = None) -> dict:
+    """Qué va bajo una respuesta, igual al responder que al reabrir la conversación. Un turno derivado o con
+    reclamo ya tiene su solicitud: muestra el link y no el botón de elevar."""
+    elevable = turno_id is not None and resultado in RESULTADOS_ELEVABLES
+    return {"turno_id": turno_id, "solicitud_id": solicitud_id, "feedback": feedback,
+            "con_voto": turno_id is not None and resultado not in RESULTADOS_SIN_VOTO,
+            "elevable": elevable and solicitud_id is None, "elevada": elevable and solicitud_id is not None}
+
+
+@router.post("/chat/elevar", dependencies=POST_MIEMBRO)
+def chat_elevar(request: Request, identidad: Miembro, datos: Formulario) -> Response:
+    """Pasa una respuesta propia a la administración. Un turno ajeno, de otro consorcio o inexistente: 404."""
+    try:
+        elevada = elevar_turno(identidad, _id(_campo(datos, "turno_id")), _campo(datos, "nota"))
+    except TurnoAjeno as e:
+        raise HTTPException(status_code=404) from e
+    except (TurnoNoElevable, PedidoInvalido) as e:
+        raise HTTPException(status_code=422) from e
+    except CupoExcedido as e:
+        raise HTTPException(status_code=429) from e
+    return plantillas.TemplateResponse(request, "_elevado.html", {"solicitud_id": elevada["solicitud_id"]})
 
 
 @router.post("/chat/feedback", dependencies=POST_MIEMBRO)
@@ -447,9 +510,32 @@ def documentos_post(request: Request, identidad: Administrador, datos: Formulari
 @router.get("/mis-solicitudes")
 def solicitudes_propias(request: Request, sesion: SesionActual, identidad: Miembro, solicitud: str = "") -> Response:
     """Lista y detalle: `solicitud` elige cuál se ve al lado; sin ella (o si no es tuya), la más reciente."""
+    return _pantalla_solicitudes(request, sesion, identidad, solicitud)
+
+
+def _pantalla_solicitudes(request: Request, sesion: Sesion, identidad: Identidad, solicitud: str = "",
+                          status_code: int = 200, **escribir) -> Response:
     solicitudes = mis_solicitudes(identidad)
-    return pagina(request, "mis_solicitudes.html", sesion, identidad, solicitudes=solicitudes,
-                  elegida=_elegida(solicitudes, "id", solicitud))
+    return pagina(request, "mis_solicitudes.html", sesion, identidad, status_code, solicitudes=solicitudes,
+                  elegida=_elegida(solicitudes, "id", solicitud), largo_asunto=LARGO_ASUNTO,
+                  largo_mensaje=LARGO_MENSAJE, **escribir)
+
+
+@router.post("/mis-solicitudes", dependencies=POST_MIEMBRO)
+def solicitudes_propias_post(request: Request, sesion: SesionActual, identidad: Miembro, datos: Formulario) -> Response:
+    """El formulario "Escribirle a la administración": una derivación directa, sin modelo (anda con el tope excedido)."""
+    asunto, mensaje = _campo(datos, "asunto"), _campo(datos, "mensaje")
+    try:
+        solicitud_id = pedido_directo(identidad, asunto, mensaje)
+    except (PedidoInvalido, CupoExcedido) as e:
+        cupo = isinstance(e, CupoExcedido)
+        error = (f"Ya mandaste {CUPO_DIARIO} mensajes a la administración en las últimas 24 horas. Probá más tarde."
+                 if cupo else f"El asunto va de {LARGO_ASUNTO[0]} a {LARGO_ASUNTO[1]} caracteres y el mensaje de "
+                 f"{LARGO_MENSAJE[0]} a {LARGO_MENSAJE[1]}.")
+        return _pantalla_solicitudes(request, sesion, identidad, status_code=429 if cupo else 422, escribir_error=error,
+                                     escribir_abierto=True, asunto=asunto[:LARGO_ASUNTO[1]],
+                                     cuerpo=mensaje[:LARGO_MENSAJE[1]])
+    return _ir_a(f"/mis-solicitudes?solicitud={solicitud_id}")
 
 
 @router.get("/bandeja")

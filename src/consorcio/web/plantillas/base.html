@@ -60,7 +60,36 @@
       <label for="menu" class="boton-menu" aria-hidden="true">{{ i.icono("menu") }}<span>Menú</span></label>
       <div class="quien">
         {% set rotulo_rol = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
-        {% if consorcio %}<span class="contexto" title="{{ consorcio }} · {{ rotulo_rol.get(identidad.rol, identidad.rol) }}"><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rotulo_rol.get(identidad.rol, identidad.rol) }}</span></span>
+        {% if consorcio and selector %}
+        {# Cambiar de consorcio sin salir de la pantalla: un <details> sin scripts; cada fila es un POST con destino #}
+        {% set destino = request.url.path %}
+        <details class="contexto-menu">
+          <summary class="contexto" title="{{ consorcio }} · {{ rotulo_rol.get(identidad.rol, identidad.rol) }}"><span class="solo-lector">Cambiar de consorcio. Actual: </span><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rotulo_rol.get(identidad.rol, identidad.rol) }}</span>{{ i.icono("desplegar") }}</summary>
+          <div class="contexto-lista">
+            <p class="contexto-titulo">Tus consorcios</p>
+            <ul>
+              {% for m in selector %}
+              <li>
+                {% if m.actual %}
+                <span class="contexto-opcion" aria-current="true"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rotulo_rol.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span>{{ i.icono("listo") }}</span>
+                {% else %}
+                <form method="post" action="/consorcios">
+                  {% include "_csrf.html" %}
+                  <input type="hidden" name="consorcio_id" value="{{ m.consorcio_id }}">
+                  <input type="hidden" name="destino" value="{{ destino }}">
+                  <button type="submit" class="contexto-opcion"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rotulo_rol.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span></button>
+                </form>
+                {% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+            <div class="contexto-pie">
+              {% if administra %}<a href="/panel">{{ i.icono("panel") }}Panel</a><a href="/consorcios/nuevo">{{ i.icono("nuevo") }}Nuevo consorcio</a>{% endif %}
+              <a href="/consorcios">{{ i.icono("consorcios") }}Ver todos</a>
+            </div>
+          </div>
+        </details>
+        {% elif consorcio %}<span class="contexto" title="{{ consorcio }} · {{ rotulo_rol.get(identidad.rol, identidad.rol) }}"><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rotulo_rol.get(identidad.rol, identidad.rol) }}</span></span>
         {% elif plataforma %}<span class="contexto-plataforma">Equipo de plataforma</span>{% endif %}
         <span class="avatar">{{ i.icono("usuario") }}</span>
       </div>

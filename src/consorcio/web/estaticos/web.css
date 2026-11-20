@@ -164,6 +164,46 @@ code { font-family: ui-monospace, Consolas, monospace; }
 .contexto { display: inline-flex; }
 .contexto-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .contexto-rol { flex-shrink: 0; }
+
+/* Selector de consorcio: la píldora es el <summary> de un <details>; la lista cae bajo la barra */
+.contexto-menu { position: relative; min-width: 0; }
+.contexto-menu > summary.contexto {
+  display: flex; align-items: center; gap: 0; max-width: 100%; min-height: 0; list-style: none;
+  color: var(--texto); font-weight: 400; cursor: pointer;
+}
+.contexto-menu > summary::-webkit-details-marker { display: none; }
+.contexto-menu > summary .icono { width: 16px; height: 16px; margin-left: 6px; color: var(--suave); transition: transform .15s ease; }
+.contexto-menu[open] > summary .icono { transform: rotate(180deg); }
+.contexto-menu > summary:hover, .contexto-menu[open] > summary { border-color: var(--acento); }
+.contexto-menu > summary:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.contexto-lista {
+  position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(340px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 4px; padding: 10px;
+  border-radius: var(--radio); background: var(--superficie); border: 1px solid var(--borde);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+}
+.tema-claro .contexto-lista { box-shadow: 0 12px 32px rgba(20, 20, 20, .12); }
+.contexto-titulo { margin: 4px 8px 6px; color: var(--suave); font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.contexto-lista ul { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.contexto-lista form { margin: 0; }
+.contexto-opcion, .tema-claro button.contexto-opcion {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px;
+  padding: 8px 10px; border-radius: 12px; background: none; color: var(--texto); font: inherit; text-align: left; box-shadow: none;
+}
+button.contexto-opcion:hover, .tema-claro button.contexto-opcion:hover { filter: none; background: var(--menu-activo); }
+button.contexto-opcion:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.contexto-opcion[aria-current] { background: var(--menu-activo); }
+.contexto-opcion[aria-current] .icono { color: var(--acento); }
+.contexto-opcion-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.contexto-opcion-texto strong { font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contexto-opcion-texto small { color: var(--suave); font-size: .8rem; }
+.contexto-pie { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; padding: 10px 8px 4px; border-top: 1px solid var(--borde); }
+.contexto-pie a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: .85rem; font-weight: 600; }
+.contexto-pie .icono { width: 16px; height: 16px; }
+@media (max-width: 900px) {
+  .contexto-lista { position: fixed; top: var(--alto-barra); left: 10px; right: 10px; width: auto; max-height: calc(100dvh - var(--alto-barra) - 20px); overflow-y: auto; }
+  .contexto-pie a { min-height: 44px; }
+}
 .avatar {
   display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 99px;
   background: var(--crema); color: var(--tinta);
@@ -208,7 +248,7 @@ code { font-family: ui-monospace, Consolas, monospace; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .lateral, .area, .opcion-consorcio { transition: none; }
+  .lateral, .area, .opcion-consorcio, .contexto-menu > summary .icono { transition: none; }
 }
 
 /* ---- Pantallas sin sesión: recuadro de bienvenida a la izquierda y el formulario a la derecha ---- */
@@ -433,6 +473,26 @@ th { color: var(--suave); font-size: .72rem; font-weight: 600; letter-spacing: .
   background: var(--acento); color: var(--tinta); font-weight: 500;
 }
 .mensaje .pie { margin-top: 8px; }
+/* Pasar a la administración: un <details> bajo la respuesta; al enviarlo, htmx lo reemplaza por `.elevado` */
+.elevar { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--borde); }
+.elevar > summary { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; list-style: none; }
+.elevar > summary::-webkit-details-marker { display: none; }
+.elevar > summary .icono { width: 16px; height: 16px; }
+.elevar-form { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 0; }
+.elevar-form .pie { margin: 0; }
+.elevar-form textarea { resize: vertical; min-height: 64px; }
+.elevar-form button { align-self: flex-start; min-height: 40px; padding: 8px 16px; font-size: .9rem; }
+.elevado { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; color: var(--suave); font-size: .85rem; }
+.elevado .icono { width: 16px; height: 16px; margin-top: 1px; color: var(--verde); }
+
+/* Escribirle a la administración (Mis solicitudes): un formulario plegado bajo el encabezado */
+.escribir { margin: 0 0 20px; padding: 14px 18px; border-radius: var(--radio); background: var(--superficie); border: 1px solid var(--borde); }
+.escribir > summary { display: inline-flex; align-items: center; gap: 8px; list-style: none; }
+.escribir > summary::-webkit-details-marker { display: none; }
+.escribir-form { display: flex; flex-direction: column; gap: 12px; max-width: 640px; margin: 12px 0 4px; }
+.escribir-form .nota { margin: 0; }
+.escribir-form button { align-self: flex-start; }
+
 .voto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .voto > span { color: var(--suave); font-size: .85rem; margin-right: 2px; }
 .voto button {
