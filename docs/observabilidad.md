@@ -52,10 +52,11 @@ documentos reales con MLflow prendido tiene una copia de esos textos en su máqu
 
 ## El problema: quién lo puede ver
 
-- **Sin login.** El servidor MLflow de `docker-compose.yml` no pide usuario ni contraseña, y el puerto
-  está publicado en todas las interfaces (`"5000:5000"`). En una notebook conectada a una red
-  compartida, cualquiera de esa red puede abrirlo. SeaweedFS, que también corre sin autenticación, se
-  publica solo en `127.0.0.1`.
+- **Sin login.** El servidor MLflow de `docker-compose.yml` no pide usuario ni contraseña. Hasta el
+  20/11 el puerto estaba publicado en todas las interfaces (`"5000:5000"`), así que en una notebook
+  conectada a una red compartida cualquiera de esa red podía abrirlo. Ahora se publica solo en
+  `127.0.0.1`, como SeaweedFS, que también corre sin autenticación, y solo se abre desde la propia
+  máquina (o desde la pestaña Puertos del Codespace, que es privada).
 - **Cruza consorcios.** MLflow no sabe de consorcios: quien entra ve las trazas de todos.
 - **Contradice el CRM.** El CRM cruza consorcios y por eso muestra solo agregados: `turnos` no guarda
   texto y `crm.py` no importa `Mensaje`. MLflow guarda justamente ese texto, y más: las páginas de los
@@ -85,8 +86,8 @@ Verificado en la documentación de MLflow:
 | **B. Texto con datos tapados** (recomendada) | El mensaje y la respuesta, con DNI, CUIT, teléfonos y mails reemplazados, y sin la identidad completa. Más el acceso cerrado de A | Se puede seguir una conversación y ver por qué el router eligió un camino, sin datos personales | Una regla automática no detecta todo, por ejemplo los nombres en un acta. Hay que probar que también tapa las salidas y el resumen de la traza |
 | **C. Sin texto** | Solo la estructura: pasos, tiempos, tokens, etiquetas y sesión. El texto se lee en la web, que ya respeta el login y el consorcio | Sigue la misma regla que el CRM. No hay riesgo de datos personales | No se puede depurar un prompt desde MLflow: hay que cruzar con Postgres |
 
-En las tres, MLflow pasa a publicarse en `127.0.0.1:5000`, como SeaweedFS. Ese cambio no depende de la
-decisión.
+En las tres, MLflow se publica solo en `127.0.0.1:5000`, como SeaweedFS. Ese cambio no dependía de la
+decisión y ya está hecho (20/11).
 
 ## Para decidir en el grupo
 

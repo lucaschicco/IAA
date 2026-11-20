@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 RAIZ = Path(__file__).resolve().parents[1]
 
 # Grafos de LangGraph de juguete y un resumen de las trazas guardadas, que el guion imprime como última línea
@@ -178,3 +180,11 @@ def test_la_traza_del_turno_dice_de_que_conversacion_y_de_que_usuario_es(tmp_pat
         for texto, t in trazas.items()
     }
     assert asociadas == {"turno 1": ("conv-a", "7"), "turno 2": ("conv-a", "7"), "turno 3": ("conv-b", "8")}
+
+
+def test_mlflow_se_publica_solo_en_la_maquina_local():
+    """Sin login y con textos de todos los consorcios (docs/observabilidad.md): hasta el 20/11 cualquiera
+    en la misma red podía abrirlo. Adentro escucha en todas las interfaces para que la app lo alcance."""
+    mlflow = yaml.safe_load((RAIZ / "docker-compose.yml").read_text(encoding="utf-8"))["services"]["mlflow"]
+    assert mlflow["ports"] == ["127.0.0.1:5000:5000"]
+    assert "--host 0.0.0.0 --port 5000" in mlflow["command"]
