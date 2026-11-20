@@ -346,7 +346,9 @@ def esperado(sujeto: str | None, consorcio: str | None, ruta: str) -> set[int]:
         return {200} if sujeto == "demo-plataforma" else {404}
     if ruta in ("/panel", "/consorcios/nuevo"):
         return {200} if administra else {403}
-    if ruta in ("/chat", "/documentos", "/mis-solicitudes"):
+    if ruta in ("/chat", "/mis-solicitudes"):  # del vecino: la administración va a su bandeja (303)
+        return {303} if consorcio is None or rol == "administracion" else {200} if rol else {403}
+    if ruta == "/documentos":
         return {303} if consorcio is None else {200} if rol else {403}
     if ruta in ("/bandeja", "/revisar"):
         return {303} if consorcio is None else {200} if rol == "administracion" else {403}
@@ -369,8 +371,9 @@ def test_rutas_get_directas(actividad, sujeto):
                 problemas.append(f"{sujeto}@{consorcio} GET {ruta}: {r.status_code}, se esperaba {sorted(esperados)}")
             if r.status_code == 303 and sujeto is None and r.headers["location"] != "/entrar":
                 problemas.append(f"sin sesión GET {ruta} no manda a /entrar")
+            a_la_bandeja = consorcio is not None and ruta in ("/chat", "/mis-solicitudes")
             if r.status_code == 303 and sujeto and ruta not in ("/", "/consorcios") \
-                    and r.headers["location"] != "/consorcios":
+                    and r.headers["location"] != ("/bandeja" if a_la_bandeja else "/consorcios"):
                 problemas.append(f"{sujeto} GET {ruta}: 303 a {r.headers['location']}")
             if sujeto and r.status_code in (403, 404) and not leer(r.text).tiene_menu:
                 problemas.append(f"{sujeto}@{consorcio} GET {ruta}: página de error sin menú")

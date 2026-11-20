@@ -27,10 +27,15 @@
     <nav class="menu-principal">
       {% if identidad %}
       <div class="grupo">Consorcio</div>
+      {# Chat y Mis solicitudes son del vecino; la administración atiende desde la bandeja #}
+      {% if not identidad.es_administracion %}
       {{ item("/chat", "Chat", "chat", actual) }}
       {% block sub_chat %}{% endblock %}
+      {% endif %}
       {{ item("/documentos", "Documentos", "documentos", actual) }}
+      {% if not identidad.es_administracion %}
       {{ item("/mis-solicitudes", "Mis solicitudes", "solicitudes", actual) }}
+      {% endif %}
       {% endif %}
       {% if administra %}
       <div class="grupo">Administración</div>
@@ -62,7 +67,7 @@
         {% set rotulo_rol = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
         {% if selector %}
         {# Cambiar de consorcio sin salir de la pantalla: un <details> sin scripts; cada fila es un POST con destino #}
-        {% set destino = "/chat" if request.url.path == "/panel" else request.url.path %}
+        {% set destino = "" if request.url.path == "/panel" else request.url.path %}
         {% set rol_actual = rotulo_rol.get(identidad.rol, identidad.rol) if identidad else "" %}
         <details class="contexto-menu">
           {% if consorcio %}

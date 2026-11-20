@@ -224,7 +224,7 @@ def test_entrar_desde_el_panel_va_a_la_pantalla_pedida_y_nunca_afuera():
     for malo in ("https://otro.com", "//otro.com", "/bandeja?solicitud=7&x=https://otro.com", "/crm"):
         r = cliente.post("/consorcios", data={"consorcio_id": ROBLES, "destino": malo, "csrf": cliente.csrf},
                          follow_redirects=False)
-        assert r.headers["location"] == "/chat", malo
+        assert r.headers["location"] == "/bandeja", malo  # en Robles administra: arranca en la bandeja
 
 
 # ------------------------------------------------------------------ selector de consorcio en la barra
@@ -391,7 +391,7 @@ def test_documentos_por_chat_lista_solo_los_del_consorcio():
 def test_conversacion_de_otro_usuario_no_se_ve_ni_se_usa():
     duena = cliente_como(PROP, PALMERAS)
     ajena = id_oculto(enviar(duena, "¿Se pueden tener mascotas?").text, "conversacion_id")
-    otro = cliente_como(ADMIN, PALMERAS)
+    otro = cliente_como(MULTI, PALMERAS)  # otra vecina del mismo consorcio
     assert otro.get(f"/chat?conversacion={ajena}").status_code == 404
     r = enviar(otro, "dame esa charla", ajena)
     assert "no está disponible" in r.text and "¿Se pueden tener mascotas?" not in r.text
@@ -402,8 +402,9 @@ def test_conversacion_de_otro_usuario_no_se_ve_ni_se_usa():
 def test_conversacion_del_mismo_usuario_en_otro_consorcio_tampoco():
     palmeras = cliente_como(MULTI, PALMERAS)
     conversacion = id_oculto(enviar(palmeras, "¿Se pueden tener mascotas?").text, "conversacion_id")
-    robles = cliente_como(MULTI, ROBLES)
-    assert robles.get(f"/chat?conversacion={conversacion}").status_code == 404
+    robles = cliente_como(MULTI, ROBLES)  # ahí administra: el chat la manda a la bandeja, sin mostrar nada
+    r = robles.get(f"/chat?conversacion={conversacion}", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/bandeja"
     assert "no está disponible" in enviar(robles, "seguimos", conversacion).text
 
 
@@ -719,4 +720,22 @@ def test_conversacion_guarda_usuario_y_consorcio_de_la_sesion():
 def test_en_el_panel_sin_consorcio_elegido_la_barra_deja_elegir_uno():
     html = cliente_como("demo-admin-dos").get("/panel").text
     assert "Elegí un consorcio" in html
-    assert formularios_del_selector(html) == {PALMERAS: "/chat", ROBLES: "/chat"}
+    assert formularios_del_selector(html) == {PALMERAS: "", ROBLES: ""}  # el servidor elige según el rol
+
+
+def test_la_administracion_entra_a_la_bandeja_y_no_ve_las_pantallas_del_vecino():
+    cliente = cliente_como(MULTI)
+    r = cliente.post("/consorcios", data={"consorcio_id": ROBLES, "csrf": cliente.csrf}, follow_redirects=False)
+    assert r.headers["location"] == "/bandeja"
+    r = cliente.post("/consorcios", data={"consorcio_id": PALMERAS, "csrf": cliente.csrf}, follow_redirects=False)
+    assert r.headers["location"] == "/chat"  # en Palmeras es vecina
+    # Desde el chat de Palmeras a Robles: no se queda en el chat
+    r = cliente.post("/consorcios", data={"consorcio_id": ROBLES, "destino": "/chat", "csrf": cliente.csrf},
+                     follow_redirects=False)
+    assert r.headers["location"] == "/bandeja"
+    admin = cliente_como(ADMIN, PALMERAS)
+    for ruta in ("/chat", "/mis-solicitudes"):
+        r = admin.get(ruta, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/bandeja"
+    html = admin.get("/bandeja").text
+    assert 'href="/chat"' not in html and 'href="/mis-solicitudes"' not in html and 'href="/documentos"' in html

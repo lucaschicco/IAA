@@ -15,7 +15,11 @@
       {% else %}
       <h1>{% if total == 1 %}1 documento{% else %}{{ total }} documentos{% endif %} que el asistente puede consultar</h1>
       {% if grupos|length > 1 %}<p>En {{ grupos|length }} consorcios que administrás.<span class="solo-ancho"> Las cartas son los últimos de {{ consorcio }}.</span></p>{% endif %}
+      {% if identidad.es_administracion %}
+      <a href="#subir" class="boton">Subir un PDF {{ i.icono("flecha") }}</a>
+      {% else %}
       <a href="/chat" class="boton">Preguntar en el chat {{ i.icono("flecha") }}</a>
+      {% endif %}
       {% endif %}
     </div>
     {% if recientes %}

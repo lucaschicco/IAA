@@ -81,7 +81,7 @@
     <header>
       <span class="panel-fila-icono">{{ i.icono("edificio") }}</span>
       <h3>{{ c.nombre }}</h3>
-      {% call entrar(c.consorcio_id, "/chat", "secundario") %}Entrar {{ i.icono("flecha") }}{% endcall %}
+      {% call entrar(c.consorcio_id, "/bandeja", "secundario") %}Entrar {{ i.icono("flecha") }}{% endcall %}
     </header>
     <dl class="panel-datos">
       <div><dt>Pendientes</dt><dd>{{ c.total_pendientes }}</dd></div>

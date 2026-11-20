@@ -333,13 +333,21 @@ def consorcios_post(sesion: SesionActual, datos: Formulario) -> Response:
     roles = {m["consorcio_id"]: m["rol"] for m in membresias_de(sesion.sujeto_externo)}
     if elegido not in roles:
         raise HTTPException(status_code=403)
+    es_administracion = roles[elegido] == "administracion"
     destino = _campo(datos, "destino")
     if not DESTINO_VALIDO.fullmatch(destino):
-        destino = "/chat"
-    # Desde la barra se cambia de consorcio quedándose en la pantalla; si con el rol nuevo daría 403, al chat
-    if destino.split("?")[0] in SOLO_ADMINISTRACION and roles[elegido] != "administracion":
-        destino = "/chat"
+        destino = inicio_del_rol(es_administracion)
+    # Desde la barra se cambia de consorcio quedándose en la pantalla, salvo que con el rol nuevo no sea para vos:
+    # la administración no usa el chat ni Mis solicitudes, y un vecino no ve la bandeja ni Revisar
+    ruta = destino.split("?")[0]
+    if (ruta in SOLO_ADMINISTRACION and not es_administracion) or (ruta in SOLO_VECINOS and es_administracion):
+        destino = inicio_del_rol(es_administracion)
     return _elegir_consorcio(sesion, elegido, destino)
+
+
+def inicio_del_rol(es_administracion: bool) -> str:
+    """Dónde arranca cada uno dentro de un consorcio: la administración atiende, el vecino pregunta."""
+    return "/bandeja" if es_administracion else "/chat"
 
 
 # Desde el panel y desde la barra se entra a un consorcio directo a una pantalla: solo rutas propias, nunca
@@ -347,6 +355,7 @@ def consorcios_post(sesion: SesionActual, datos: Formulario) -> Response:
 DESTINO_VALIDO = re.compile(
     r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
 SOLO_ADMINISTRACION = {"/bandeja", "/revisar"}
+SOLO_VECINOS = {"/chat", "/mis-solicitudes"}
 
 
 @router.get("/panel")
@@ -368,7 +377,9 @@ def panel(request: Request, sesion: SesionActual) -> Response:
 
 @router.get("/chat")
 def chat(request: Request, sesion: SesionActual, identidad: Miembro, conversacion: str | None = None) -> Response:
-    """Una conversación ajena da lo mismo que una que no existe."""
+    """Una conversación ajena da lo mismo que una que no existe. El chat es del vecino: la administración va a su bandeja."""
+    if identidad.es_administracion:
+        return _ir_a("/bandeja")
     if conversacion and not conversacion_valida(identidad, conversacion):
         raise HTTPException(status_code=404)
     mensajes = [{**m, "acciones": _acciones(m["turno_id"], m["resultado"], m["solicitud_id"], m["feedback"])
@@ -522,6 +533,8 @@ def documentos_post(request: Request, identidad: Administrador, datos: Formulari
 @router.get("/mis-solicitudes")
 def solicitudes_propias(request: Request, sesion: SesionActual, identidad: Miembro, solicitud: str = "") -> Response:
     """Lista y detalle: `solicitud` elige cuál se ve al lado; sin ella (o si no es tuya), la más reciente."""
+    if identidad.es_administracion:
+        return _ir_a("/bandeja")
     return _pantalla_solicitudes(request, sesion, identidad, solicitud)
 
 
