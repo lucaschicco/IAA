@@ -18,8 +18,15 @@
       <small>{{ rotulo_rol.get(membresia.rol, membresia.rol) }}{% if membresia.consorcio_id == sesion.consorcio_id %} · actual{% endif %}</small>
     </button>
     {% endfor %}
+    {% if puede_crear %}
+    <a href="/consorcios/nuevo" class="opcion-consorcio opcion-nueva">
+      {{ i.icono("nuevo") }}
+      <strong>Nuevo consorcio</strong>
+      <small>Sumar un edificio</small>
+    </a>
+    {% endif %}
   </form>
-  <p class="nota">¿Falta un consorcio? Pedile una invitación a su administración.</p>
+  {% if not puede_crear %}<p class="nota">¿Falta un consorcio? Pedile una invitación a su administración.</p>{% endif %}
   {% else %}
   <p class="alerta">{{ i.icono("info") }}<span>Tu usuario no tiene ningún consorcio asignado. Pedile acceso a la administración.</span></p>
   {% endif %}

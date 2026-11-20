@@ -164,6 +164,13 @@ plataforma) en 1366, 820 y 390px: sin scroll horizontal en ninguna pantalla. Aju
 - `pointer: coarse`: pestañas, filtros de documentos, desplegables y subítems del menú con 44px.
 - Bandeja: el motivo se muestra en palabras ("sin respaldo en los documentos"), no el código.
 
+### Nuevo consorcio (`/consorcios/nuevo`)
+
+Solo para quien administra al menos un consorcio. En Consorcios aparece como una carta más, transparente con borde fino
+y un "+" naranja (`.opcion-nueva`), en lugar de la nota de la invitación. El formulario (nombre, dirección opcional) usa
+el mismo estilo que Ingresar. Al crear, entra a Documentos, que con el consorcio vacío dice "Todavía no hay documentos en
+…" y lleva a la carga.
+
 ## 7. Pendientes
 
 - Vecinos y unidades; "Olvidé mi contraseña"; etapas de progreso al cargar un PDF; tarjeta de expensas en el chat.

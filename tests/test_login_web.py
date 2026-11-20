@@ -61,7 +61,7 @@ def test_sin_selector_entrar_muestra_el_formulario_y_ningun_usuario_demo():
 def test_login_correcto_crea_sesion_del_proveedor_login():
     cliente = _cliente()
     r = entrar(cliente, ADMIN.upper(), CONTRASENA_DEMO)
-    assert r.status_code == 303 and r.headers["location"] == "/consorcios"
+    assert r.status_code == 303 and r.headers["location"] == "/"  # `/` decide: panel o elegir consorcio
     sesion = _sesion(cliente)
     assert (sesion.sujeto_externo, sesion.proveedor) == ("demo-admin-palmeras", "login")
 

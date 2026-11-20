@@ -8,9 +8,15 @@
   <section class="docs-portada">
     <div class="docs-portada-texto">
       <span>Biblioteca del consorcio</span>
+      {% if not recientes and identidad.es_administracion %}
+      <h1>Todavía no hay documentos en {{ consorcio }}</h1>
+      <p>Subí el reglamento, las actas y las liquidaciones: el asistente responde solo con lo que esté cargado.</p>
+      <a href="#subir" class="boton">Subir un PDF {{ i.icono("flecha") }}</a>
+      {% else %}
       <h1>{% if total == 1 %}1 documento{% else %}{{ total }} documentos{% endif %} que el asistente puede consultar</h1>
       {% if grupos|length > 1 %}<p>En {{ grupos|length }} consorcios que administrás.<span class="solo-ancho"> Las cartas son los últimos de {{ consorcio }}.</span></p>{% endif %}
       <a href="/chat" class="boton">Preguntar en el chat {{ i.icono("flecha") }}</a>
+      {% endif %}
     </div>
     {% if recientes %}
     <ol class="docs-cartas" aria-label="Los últimos documentos">
@@ -59,7 +65,7 @@
       {% endif %}
     </section>
 
-    <aside class="docs-costado">
+    <aside class="docs-costado" id="subir">
       {% if identidad.es_administracion %}
       <form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="docs-tarjeta docs-carga">
         {% include "_csrf.html" %}

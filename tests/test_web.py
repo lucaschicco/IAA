@@ -18,7 +18,7 @@ from consorcio.agente.semilla import PALMERAS, ROBLES
 from consorcio.almacen import postgres
 from consorcio.almacen.postgres import Conversacion, Documento, Solicitud, Turno, Usuario
 from consorcio.config import config
-from consorcio.identidad import resolver_identidad
+from consorcio.identidad import membresias_de, resolver_identidad
 from consorcio.web import rutas
 from consorcio.web.sesion import NOMBRE_COOKIE
 
@@ -113,6 +113,95 @@ def test_elegir_consorcio_y_cambiarlo_cambia_el_rol():
 def test_plataforma_sin_membresias_va_al_crm():
     r = cliente_como(PLATAFORMA).get("/consorcios", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/crm"
+
+
+@pytest.fixture
+def consorcios_nuevos():
+    """Borra al final los consorcios que crea el test: `limpio` no toca consorcios ni membresías."""
+    yield
+    with postgres.engine().begin() as con:
+        for tabla, columna in (("membresias", "consorcio_id"), ("consorcios", "id")):
+            con.execute(text(f"DELETE FROM {tabla} WHERE {columna} LIKE 'edificio-prueba%' OR {columna} = 'demo-palmeras-2'"))
+
+
+def test_la_administracion_ve_el_selector_aunque_tenga_un_solo_consorcio():
+    r = cliente_como(ADMIN).get("/consorcios", follow_redirects=False)
+    assert r.status_code == 200 and 'href="/consorcios/nuevo"' in r.text and "Pedile una invitación" not in r.text
+
+
+def test_un_vecino_no_puede_crear_consorcios():
+    assert 'href="/consorcios/nuevo"' in cliente_como(MULTI).get("/consorcios").text  # administra Robles
+    vecino = cliente_como(ROBLES_PROP)
+    assert vecino.get("/consorcios/nuevo").status_code == 403
+    r = vecino.post("/consorcios/nuevo", data={"nombre": "Edificio Prueba", "csrf": vecino.csrf}, follow_redirects=False)
+    assert r.status_code == 403
+
+
+def test_crear_consorcio_deja_a_quien_lo_crea_como_administracion(consorcios_nuevos):
+    cliente = cliente_como(ADMIN)
+    r = cliente.post("/consorcios/nuevo", data={"nombre": "  Edificio   Prueba ", "direccion": "Calle 1", "csrf": cliente.csrf},
+                     follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/documentos"
+    adoptar_cookie(cliente, r)
+    identidad = resolver_identidad(ADMIN, "edificio-prueba")
+    assert identidad.es_administracion
+    assert "Edificio Prueba" in cliente.get("/documentos").text
+    # Mismo nombre otra vez: otro consorcio, nunca el existente
+    r = cliente.post("/consorcios/nuevo", data={"nombre": "Edificio Prueba", "csrf": cliente.csrf}, follow_redirects=False)
+    assert r.status_code == 303
+    assert resolver_identidad(ADMIN, "edificio-prueba-2").es_administracion
+
+
+def test_crear_consorcio_no_se_suma_a_uno_existente(consorcios_nuevos):
+    """Un nombre cuyo slug coincide con un consorcio ajeno no da acceso a ese consorcio."""
+    cliente = cliente_como(MULTI)
+    r = cliente.post("/consorcios/nuevo", data={"nombre": "Demo Palmeras", "csrf": cliente.csrf}, follow_redirects=False)
+    assert r.status_code == 303
+    roles = {m["consorcio_id"]: m["rol"] for m in membresias_de(MULTI)}
+    assert roles[PALMERAS] == "propietario" and roles["demo-palmeras-2"] == "administracion"
+
+
+def test_crear_consorcio_valida_el_nombre():
+    cliente = cliente_como(ADMIN)
+    r = cliente.post("/consorcios/nuevo", data={"nombre": "ab", "csrf": cliente.csrf})
+    assert r.status_code == 422 and "entre 3 y 120" in r.text
+
+
+# ------------------------------------------------------------------ panel de la administración
+
+
+def test_la_administracion_arranca_en_el_panel_y_el_vecino_eligiendo_consorcio():
+    r = cliente_como(ADMIN).get("/", follow_redirects=False)
+    assert r.headers["location"] == "/panel"
+    r = cliente_como(PROP).get("/", follow_redirects=False)
+    assert r.headers["location"] == "/consorcios"
+    assert cliente_como(PROP).get("/panel").status_code == 403
+
+
+def test_el_panel_solo_suma_los_consorcios_que_administra():
+    vecino = cliente_como(PROP, PALMERAS)
+    enviar(vecino, "quiero hablar con una persona")
+    admin = cliente_como(ADMIN).get("/panel").text
+    assert "Para atender" in admin and "Edificio Las Palmeras" in admin and "/bandeja?solicitud=" in admin
+    multi = cliente_como(MULTI).get("/panel").text  # administra Robles; en Palmeras es propietaria
+    assert "Los Robles" in multi and "/bandeja?solicitud=" not in multi
+    assert 'value="demo-palmeras"' not in multi
+
+
+def test_el_panel_muestra_el_saldo_anterior_de_la_ultima_liquidacion():
+    html = cliente_como(ADMIN).get("/panel").text
+    assert "liquidación 2026-08" in html and "$ 100.000" in html and "1 con saldo del período anterior" in html
+
+
+def test_entrar_desde_el_panel_va_a_la_pantalla_pedida_y_nunca_afuera():
+    cliente = cliente_como(MULTI)
+    r = cliente.post("/consorcios", data={"consorcio_id": ROBLES, "destino": "/bandeja?solicitud=7", "csrf": cliente.csrf},
+                     follow_redirects=False)
+    assert r.headers["location"] == "/bandeja?solicitud=7"
+    for malo in ("https://otro.com", "//otro.com", "/bandeja?solicitud=7&x=https://otro.com", "/crm"):
+        r = cliente.post("/consorcios", data={"consorcio_id": ROBLES, "destino": malo, "csrf": cliente.csrf},
+                         follow_redirects=False)
+        assert r.headers["location"] == "/chat", malo
 
 
 def test_la_navegacion_depende_del_rol():

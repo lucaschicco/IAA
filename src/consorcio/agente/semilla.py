@@ -86,9 +86,12 @@ def _liquidacion(cid: str, periodo: str, factor: float) -> dict:
     cuota = edificio["base"] * factor
     unidades = edificio["unidades"]
     total = cuota * len(unidades)
+    # En la segunda liquidación la última unidad arrastra el mes anterior sin pagar, para que haya algo que cobrar
+    deuda = edificio["base"] if factor > 1 else 0.0
     filas = [
         {"uf": i, "piso_depto": depto, "propietario": f"Persona Inventada {i}", "porcentual": round(100 / len(unidades), 2),
-         "expensas_ordinarias": cuota, "total_expensa": cuota, "saldo_anterior": 0.0, "a_pagar": cuota, "pagina": 2}
+         "expensas_ordinarias": cuota, "total_expensa": cuota, "saldo_anterior": deuda if i == len(unidades) else 0.0,
+         "a_pagar": cuota + (deuda if i == len(unidades) else 0.0), "pagina": 2}
         for i, depto in enumerate(unidades, start=1)
     ]
     return {

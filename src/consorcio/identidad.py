@@ -9,6 +9,7 @@ unidad, porque así circula la liquidación. Lo que nunca se cruza es de un cons
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from sqlalchemy import select, text
@@ -23,6 +24,7 @@ from .almacen.postgres import (
     crear_tablas,
     engine,
 )
+from .texto import normalizar
 
 # El rol que manda cuando una persona tiene varios en el mismo consorcio
 PRIORIDAD_ROLES = {rol: i for i, rol in enumerate(ROLES)}  # administracion > consejo > propietario > inquilino
@@ -100,6 +102,39 @@ def membresias_de(sujeto_externo: str) -> list[dict]:
          for cid, (nombre, roles) in por_consorcio.items()),
         key=lambda m: m["nombre"],
     )
+
+
+class ConsorcioInvalido(ValueError):
+    """Nombre vacío o demasiado largo, o dirección demasiado larga."""
+
+
+def puede_crear_consorcio(sujeto_externo: str) -> bool:
+    """Crea consorcios quien ya administra alguno: una administración que suma un edificio a su cartera."""
+    return any(m["rol"] == "administracion" for m in membresias_de(sujeto_externo))
+
+
+def crear_consorcio(sujeto_externo: str, nombre: str, direccion: str = "") -> str:
+    """Crea un consorcio vacío con quien lo pide como su administración y devuelve el id.
+
+    Nunca toca un consorcio existente: si el slug del nombre ya está tomado se le agrega un número. Así nadie
+    se suma como administración de un consorcio ajeno eligiendo un nombre igual.
+    """
+    nombre, direccion = " ".join(nombre.split()), " ".join(direccion.split())
+    if not 3 <= len(nombre) <= 120 or len(direccion) > 200:
+        raise ConsorcioInvalido(nombre)
+    if not puede_crear_consorcio(sujeto_externo):
+        raise PermissionError(sujeto_externo)
+    base = re.sub(r"\s+", "-", normalizar(nombre))[:50].strip("-") or "consorcio"
+    with Session(engine()) as s, s.begin():
+        usuario_id = s.scalar(select(Usuario.id).where(Usuario.sujeto_externo == sujeto_externo, Usuario.activo))
+        s.execute(text("SELECT pg_advisory_xact_lock(hashtext('crear_consorcio'))"))  # dos altas con el mismo nombre
+        tomados = set(s.scalars(select(Consorcio.id).where(Consorcio.id.like(f"{base}%"))))
+        consorcio_id = base if base not in tomados else next(
+            f"{base}-{n}" for n in range(2, 10_000) if f"{base}-{n}" not in tomados)
+        s.add(Consorcio(id=consorcio_id, nombre=nombre, direccion=direccion or None))
+        s.flush()
+        s.add(Membresia(usuario_id=usuario_id, consorcio_id=consorcio_id, rol="administracion", unidad_id=None))
+    return consorcio_id
 
 
 def registrar_actividad(usuario_id: int, cada_segundos: int = 60) -> None:

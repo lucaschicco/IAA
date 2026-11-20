@@ -37,11 +37,22 @@ from ..agente.bandeja import (
 )
 from ..agente.grafo import atender
 from ..agente.memoria import conversacion_valida, conversaciones_de, historial
+from ..agente.panel import panel as datos_panel
 from ..almacen.postgres import MOTIVOS_REVISION, VEREDICTOS, listar_documentos
 from ..canales.formato import formatear_ingesta
 from ..canales.telegram import ruta_entrada
 from ..config import config
-from ..identidad import Identidad, es_plataforma, listar_usuarios_demo, membresias_de
+from ..identidad import (
+    ConsorcioInvalido,
+    Identidad,
+    SinMembresia,
+    crear_consorcio,
+    es_plataforma,
+    listar_usuarios_demo,
+    membresias_de,
+    puede_crear_consorcio,
+    resolver_identidad,
+)
 from ..ingesta.grafo import ingestar_pdf
 from .autenticacion import LoginFallido, datos_invitacion, proveedor_para, registrar
 from .sesion import (
@@ -133,17 +144,19 @@ def _id(valor: str) -> int:
     return int(valor)
 
 
-def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identidad | None = None, **datos) -> Response:
+def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identidad | None = None,
+           status_code: int = 200, **datos) -> Response:
     """Lo que el menú lateral y la barra superior necesitan en toda pantalla con sesión."""
     consorcio = next((m["nombre"] for m in membresias_de(sesion.sujeto_externo)
                       if identidad and m["consorcio_id"] == identidad.consorcio_id), None)
     por_atender = 0
     if identidad and identidad.es_administracion:
         por_atender = sum(s["estado"] == "pendiente" for s in listar_solicitudes(identidad))
+    administra = any(m["rol"] == "administracion" for m in membresias_de(sesion.sujeto_externo))
     return plantillas.TemplateResponse(request, plantilla, {
-        "sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion),
+        "sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion), "administra": administra,
         "plataforma": es_plataforma(sesion.sujeto_externo), "por_atender": por_atender, **datos,
-    })
+    }, status_code=status_code)
 
 
 def _ir_a(destino: str) -> RedirectResponse:
@@ -160,6 +173,9 @@ def salud() -> dict:
 
 @router.get("/")
 def inicio(sesion: SesionActual) -> Response:
+    """La administración arranca en su panel; el resto, eligiendo consorcio."""
+    if any(m["rol"] == "administracion" for m in membresias_de(sesion.sujeto_externo)):
+        return _ir_a("/panel")
     return _ir_a("/consorcios")
 
 
@@ -174,7 +190,7 @@ def _pantalla_previa(request: Request, plantilla: str, status_code: int = 200, *
 
 
 def _iniciar_sesion(sujeto: str, proveedor: str) -> Response:
-    respuesta = _ir_a("/consorcios")
+    respuesta = _ir_a("/")
     poner_cookie_sesion(respuesta, nueva_sesion(sujeto, proveedor))
     respuesta.delete_cookie(COOKIE_PREVIA, path="/")
     return respuesta
@@ -229,8 +245,8 @@ def salir() -> Response:
     return respuesta
 
 
-def _elegir_consorcio(sesion: Sesion, consorcio_id: str) -> Response:
-    respuesta = _ir_a("/chat")
+def _elegir_consorcio(sesion: Sesion, consorcio_id: str, destino: str = "/chat") -> Response:
+    respuesta = _ir_a(destino)
     poner_cookie_sesion(respuesta, replace(sesion, consorcio_id=consorcio_id))
     return respuesta
 
@@ -238,11 +254,33 @@ def _elegir_consorcio(sesion: Sesion, consorcio_id: str) -> Response:
 @router.get("/consorcios")
 def consorcios(request: Request, sesion: SesionActual) -> Response:
     membresias = membresias_de(sesion.sujeto_externo)
-    if len(membresias) == 1:
+    puede_crear = any(m["rol"] == "administracion" for m in membresias)
+    if len(membresias) == 1 and not puede_crear:
         return _elegir_consorcio(sesion, membresias[0]["consorcio_id"])
     if not membresias and es_plataforma(sesion.sujeto_externo):
         return _ir_a("/crm")
-    return pagina(request, "consorcios.html", sesion, membresias=membresias)
+    return pagina(request, "consorcios.html", sesion, membresias=membresias, puede_crear=puede_crear)
+
+
+@router.get("/consorcios/nuevo")
+def consorcio_nuevo(request: Request, sesion: SesionActual) -> Response:
+    if not puede_crear_consorcio(sesion.sujeto_externo):
+        raise HTTPException(status_code=403)
+    return pagina(request, "consorcio_nuevo.html", sesion)
+
+
+@router.post("/consorcios/nuevo", dependencies=POST_SESION)
+def consorcio_nuevo_post(request: Request, sesion: SesionActual, datos: Formulario) -> Response:
+    """Quien crea queda como administración y entra directo a cargar los documentos."""
+    nombre, direccion = _campo(datos, "nombre"), _campo(datos, "direccion")
+    try:
+        consorcio_id = crear_consorcio(sesion.sujeto_externo, nombre, direccion)
+    except PermissionError as e:
+        raise HTTPException(status_code=403) from e
+    except ConsorcioInvalido:
+        return pagina(request, "consorcio_nuevo.html", sesion, status_code=422, nombre=nombre[:120],
+                      direccion=direccion[:200], error="El nombre tiene que tener entre 3 y 120 letras.")
+    return _elegir_consorcio(sesion, consorcio_id, "/documentos")
 
 
 @router.post("/consorcios", dependencies=POST_SESION)
@@ -251,7 +289,26 @@ def consorcios_post(sesion: SesionActual, datos: Formulario) -> Response:
     elegido = _campo(datos, "consorcio_id")
     if elegido not in {m["consorcio_id"] for m in membresias_de(sesion.sujeto_externo)}:
         raise HTTPException(status_code=403)
-    return _elegir_consorcio(sesion, elegido)
+    destino = _campo(datos, "destino")
+    return _elegir_consorcio(sesion, elegido, destino if DESTINO_VALIDO.fullmatch(destino) else "/chat")
+
+
+# Desde el panel se entra a un consorcio directo a una pantalla: solo rutas propias, nunca una URL externa
+DESTINO_VALIDO = re.compile(r"/(chat|documentos|mis-solicitudes|bandeja|revisar)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
+
+
+@router.get("/panel")
+def panel(request: Request, sesion: SesionActual) -> Response:
+    datos = datos_panel(sesion.sujeto_externo)
+    if not datos["consorcios"]:
+        raise HTTPException(status_code=403)
+    identidad = None
+    if sesion.consorcio_id:
+        try:
+            identidad = resolver_identidad(sesion.sujeto_externo, sesion.consorcio_id)
+        except SinMembresia:
+            identidad = None
+    return pagina(request, "panel.html", sesion, identidad, **datos)
 
 
 # ------------------------------------------------------------------ chat

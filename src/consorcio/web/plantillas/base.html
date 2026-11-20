@@ -31,8 +31,11 @@
       {% block sub_chat %}{% endblock %}
       {{ item("/documentos", "Documentos", "documentos", actual) }}
       {{ item("/mis-solicitudes", "Mis solicitudes", "solicitudes", actual) }}
-      {% if identidad.es_administracion %}
+      {% endif %}
+      {% if administra %}
       <div class="grupo">Administración</div>
+      {{ item("/panel", "Panel", "panel", actual) }}
+      {% if identidad and identidad.es_administracion %}
       {{ item("/bandeja", "Bandeja", "bandeja", actual, por_atender) }}
       {{ item("/revisar", "Revisar respuestas", "revisar", actual) }}
       {% endif %}
