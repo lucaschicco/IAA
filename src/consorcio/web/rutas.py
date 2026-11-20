@@ -21,6 +21,7 @@ from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import FormData, UploadFile
 
+from ..agente import revision
 from ..agente.bandeja import (
     SinPermiso,
     SolicitudInexistente,
@@ -36,7 +37,7 @@ from ..agente.bandeja import (
 )
 from ..agente.grafo import atender
 from ..agente.memoria import conversacion_valida, conversaciones_de, historial
-from ..almacen.postgres import listar_documentos
+from ..almacen.postgres import MOTIVOS_REVISION, VEREDICTOS, listar_documentos
 from ..canales.formato import formatear_ingesta
 from ..canales.telegram import ruta_entrada
 from ..config import config
@@ -407,3 +408,28 @@ def bandeja_editar(solicitud_id: str, identidad: Administrador, datos: Formulari
 @router.post("/bandeja/{solicitud_id}/rechazar", dependencies=POST_ADMINISTRADOR)
 def bandeja_rechazar(solicitud_id: str, identidad: Administrador, datos: Formulario) -> Response:
     return _transicion(rechazar_reclamo, identidad, _id(solicitud_id), _obligatorio(datos, "respuesta"))
+
+
+# ------------------------------------------------------------------ revisión de respuestas
+
+
+@router.get("/revisar")
+def revisar_respuestas(request: Request, sesion: SesionActual, identidad: Administrador,
+                       ver: str = "pendientes") -> Response:
+    ver = "revisadas" if ver == "revisadas" else "pendientes"
+    return pagina(request, "revisar.html", sesion, identidad, ver=ver, respuestas=revision.listar(identidad, ver),
+                  motivos=MOTIVOS_REVISION, veredictos=VEREDICTOS)
+
+
+@router.post("/revisar/{turno_id}", dependencies=POST_ADMINISTRADOR)
+def revisar_post(turno_id: str, identidad: Administrador, datos: Formulario) -> Response:
+    try:
+        revision.revisar(identidad, _id(turno_id), _campo(datos, "veredicto"), _campo(datos, "motivo") or None,
+                         _campo(datos, "respuesta_correcta") or None)
+    except revision.RevisionInvalida as e:
+        raise HTTPException(status_code=422) from e
+    except revision.RespuestaInexistente as e:
+        raise HTTPException(status_code=404) from e
+    except SinPermiso as e:
+        raise HTTPException(status_code=403) from e
+    return _ir_a("/revisar?ver=revisadas" if _campo(datos, "ver") == "revisadas" else "/revisar")

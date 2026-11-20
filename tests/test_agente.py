@@ -639,7 +639,8 @@ def test_fallo_del_grafo_deja_turno_de_error_y_no_propaga(monkeypatch):
     assert r["resultado"] == "error" and r["mensaje"] == nodos.MENSAJE_ERROR
     assert contar(Turno) == 1 and turno(r["turno_id"]).error == "RuntimeError"
     assert set(r) == {"turno_id", "conversacion_id", "mensaje", "resultado", "intencion", "funcionalidad",
-                      "secciones", "solicitud_id", "verificada"}
+                      "secciones", "solicitud_id", "verificada", "certeza"}
+    assert r["certeza"] is None
 
 
 def test_fallo_al_registrar_deja_un_solo_turno(monkeypatch):
@@ -648,7 +649,8 @@ def test_fallo_al_registrar_deja_un_solo_turno(monkeypatch):
 
     class Falla(original):
         def commit(self):
-            if any(isinstance(o, Mensaje) for o in self.new):
+            # Los mensajes ya se enviaron (flush) para tener su id: falla el turno que los nombra
+            if any(isinstance(o, Turno) and o.mensaje_asistente_id for o in self.new):
                 raise RuntimeError("texto interno")
             super().commit()
 

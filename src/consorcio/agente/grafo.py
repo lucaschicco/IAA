@@ -29,7 +29,7 @@ from ..ingesta.skill import cargar_skill, version_skill
 from ..llm import Contador, invocar_estructurado
 from ..observabilidad import trazar_corrida
 from ..tope import tope_excedido
-from . import nodos
+from . import certeza, nodos
 from .esquemas import INTENCIONES, SalidaRouter
 from .memoria import conversacion_valida, ultimos_mensajes
 from .nodos import MENSAJE_ERROR, EstadoAgente
@@ -126,14 +126,23 @@ def nodo_registrar(estado: EstadoAgente) -> dict:
     uso = contador.resumen()
     consulta = estado.get("costo_consulta") or {}
     traza = estado.get("_traza")
+    senales = estado.get("senales_certeza") or {}
+    valor_certeza = certeza.calcular(estado.get("funcionalidad"), estado["resultado"], senales)
+    if valor_certeza is not None:
+        senales = {**senales, "version": certeza.VERSION}
     crear_tablas()
     with Session(engine()) as s:
         conversacion_id = None if invalida else _asegurar_conversacion(s, estado)
+        pregunta = respuesta = None
         if not invalida:
             if estado["entrada"]:
-                s.add(Mensaje(conversacion_id=conversacion_id, rol="usuario", texto=estado["entrada"][:config.agente_max_mensaje]))
+                pregunta = Mensaje(conversacion_id=conversacion_id, rol="usuario",
+                                   texto=estado["entrada"][:config.agente_max_mensaje])
+                s.add(pregunta)
                 s.flush()
-            s.add(Mensaje(conversacion_id=conversacion_id, rol="asistente", texto=estado["respuesta"]))
+            respuesta = Mensaje(conversacion_id=conversacion_id, rol="asistente", texto=estado["respuesta"])
+            s.add(respuesta)
+            s.flush()
         turno = Turno(
             usuario_id=identidad.usuario_id, consorcio_id=identidad.consorcio_id, rol=identidad.rol,
             canal=estado["canal"], origen=estado["origen"], conversacion_id=conversacion_id,
@@ -145,10 +154,18 @@ def nodo_registrar(estado: EstadoAgente) -> dict:
             costo_usd=_costo_turno(estado), segundos=round(time.perf_counter() - estado["_t0"], 3), modelo=config.modelo,
             skill_version=version_skill("agente"), error=estado.get("error"),
             mlflow_traza_id=traza.traza_id() if traza else None,
+            certeza=valor_certeza, senales_certeza=senales,
+            mensaje_usuario_id=pregunta.id if pregunta else None, mensaje_asistente_id=respuesta.id if respuesta else None,
         )
         s.add(turno)
         s.commit()
-        return {"turno_id": turno.id, "conversacion_id": conversacion_id}
+        turno_id = turno.id
+    if traza:
+        traza.registrar_metricas(
+            {"resultado": estado["resultado"], "certeza_nivel": certeza.nivel(valor_certeza) or "sin_certeza"},
+            {"certeza": valor_certeza},
+        )
+    return {"turno_id": turno_id, "conversacion_id": conversacion_id, "certeza": valor_certeza}
 
 
 def construir_grafo():
@@ -204,10 +221,11 @@ def atender(mensaje: str, identidad: Identidad, conversacion_id: str | None, can
         log.warning("falló el turno del agente: %s", error)
         turno_id = _turno_de_error(identidad, canal, origen, error, round(time.perf_counter() - t0, 3))
         return {"turno_id": turno_id, "conversacion_id": conversacion_id, "mensaje": MENSAJE_ERROR, "resultado": "error",
-                "intencion": None, "funcionalidad": None, "secciones": [], "solicitud_id": None, "verificada": False}
+                "intencion": None, "funcionalidad": None, "secciones": [], "solicitud_id": None, "verificada": False,
+                "certeza": None}
     return {
         "turno_id": final["turno_id"], "conversacion_id": final["conversacion_id"], "mensaje": final["respuesta"],
         "resultado": final["resultado"], "intencion": final.get("intencion"), "funcionalidad": final.get("funcionalidad"),
         "secciones": final.get("secciones") or [], "solicitud_id": final.get("solicitud_id"),
-        "verificada": bool(final.get("verificada")),
+        "verificada": bool(final.get("verificada")), "certeza": final.get("certeza"),
     }

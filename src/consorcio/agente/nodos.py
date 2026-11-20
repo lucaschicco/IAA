@@ -21,6 +21,7 @@ from ..consulta.grafo import preguntar
 from ..identidad import Identidad
 from ..llm import Contador
 from .bandeja import crear_solicitud
+from .certeza import senales_expensas, senales_reglamento
 
 log = logging.getLogger("consorcio.agente")
 
@@ -50,6 +51,8 @@ class EstadoAgente(TypedDict, total=False):
     consulta_id: int | None
     solicitud_id: int | None
     verificada: bool
+    senales_certeza: dict  # números y banderas, sin texto: van a `turnos`
+    certeza: float | None  # la calcula `registrar` (ver certeza.py)
     error: str | None  # solo el nombre de la excepción
     costo_consulta: dict
     turno_id: int
@@ -100,6 +103,7 @@ def nodo_reglamento(estado: EstadoAgente) -> dict:
         "secciones": [r["seccion_id"] for r in final.get("resultados", [])], "consulta_id": final.get("consulta_id"),
         "costo_consulta": {**(final.get("costo") or {}), "costo_usd": final.get("_costo_usd")},
         "seccion_citada": (final.get("fuente") or {}).get("seccion_id"), "verificada": bool(final.get("verificada")),
+        "senales_certeza": senales_reglamento(final.get("resultados", []), (final.get("respuesta") or {}).get("fuente")),
     }
     if not final.get("derivada"):
         return {**datos, "resultado": "respondida", "respuesta": formatear_respuesta(final)}
@@ -160,20 +164,22 @@ def nodo_expensas(estado: EstadoAgente) -> dict:
         filas = [f for uf in identidad.unidades for f in consultar_expensas("unidades", periodo, str(uf), consorcio_id=cid)]
     else:
         filas = consultar_expensas(que, periodo, _unidad(salida), salida.get("texto"), consorcio_id=cid)
-    return _respuesta_expensas(que, filas, supuesto)
+    return _respuesta_expensas(que, filas, supuesto, filtro_texto=que == "gastos" and bool(salida.get("texto")))
 
 
 def _unidad(salida: dict) -> str | None:
     return salida["unidad"].upper() if salida.get("unidad") else None
 
 
-def _respuesta_expensas(que: str, filas: list[dict], periodo_supuesto: str | None = None) -> dict:
+def _respuesta_expensas(que: str, filas: list[dict], periodo_supuesto: str | None = None,
+                        filtro_texto: bool = False) -> dict:
     if not filas:  # el texto de `formatear_expensas` menciona /expensas, y acá no hay comandos
         return {"resultado": "sin_datos", "respuesta": MENSAJE_SIN_EXPENSAS}
     texto = formatear_expensas(que, filas)
     if periodo_supuesto:
         texto = _recortar(f"Período {periodo_supuesto}, el último cargado.\n{texto}")
-    return {"resultado": "respondida", "respuesta": texto}
+    return {"resultado": "respondida", "respuesta": texto,
+            "senales_certeza": senales_expensas(bool(periodo_supuesto), filtro_texto, len(filas))}
 
 
 def nodo_documentos(estado: EstadoAgente) -> dict:

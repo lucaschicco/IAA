@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set rotulo_veredicto = {"correcta": "Correcta", "parcial": "Parcial", "incorrecta": "Incorrecta"} %}
+{% set rotulo_motivo = {"dato_incorrecto": "Dato incorrecto", "cita_incorrecta": "La cita no corresponde", "incompleta": "Incompleta", "debia_derivar": "Debía derivar", "derivo_sin_necesidad": "Derivó sin necesidad", "no_entendio": "No entendió la pregunta"} %}
+{% set rotulo_prioridad = {"feedback_negativo": "El vecino votó 👎", "certeza_baja": "Certeza baja", "derivada": "Derivada", "otra": ""} %}
+{% set rotulo_resultado = {"respondida": "Respondida", "sin_datos": "Sin datos", "derivada": "Derivada", "fuera_de_alcance": "Fuera de alcance"} %}
+{% set rotulo_rol = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
+{% block titulo %}Revisar respuestas{% endblock %}
+{% block contenido %}
+<h1>Revisar respuestas</h1>
+<p class="nota">Decí si el asistente respondió bien. Con esto se mide qué tan bien funciona y se calibra su certeza. No se muestra quién preguntó.</p>
+<nav class="pestanas" aria-label="Qué respuestas ver">
+  <a href="/revisar"{% if ver == "pendientes" %} aria-current="page"{% endif %}>Sin revisar</a>
+  <a href="/revisar?ver=revisadas"{% if ver == "revisadas" %} aria-current="page"{% endif %}>Revisadas</a>
+</nav>
+{% for r in respuestas %}
+<article class="tarjeta revision">
+  <header>
+    <strong>{{ rotulo_resultado.get(r.resultado, r.resultado) }}{% if r.intencion %} · {{ r.intencion }}{% endif %}</strong>
+    {% if r.nivel %}<span class="certeza certeza-{{ r.nivel }}" title="Certeza calculada: {{ '%.2f'|format(r.certeza) }}">Certeza {{ r.nivel }}</span>{% endif %}
+    {% if ver == "pendientes" and rotulo_prioridad[r.prioridad] %}<span class="estado estado-rechazada">{{ rotulo_prioridad[r.prioridad] }}</span>{% endif %}
+    {% if r.revision %}<span class="estado veredicto-{{ r.revision.veredicto }}">{{ rotulo_veredicto[r.revision.veredicto] }}{% if r.revision.motivo %} · {{ rotulo_motivo[r.revision.motivo] }}{% endif %}</span>{% endif %}
+    <span class="pie">{{ r.creado_en.strftime("%d/%m/%Y %H:%M") }} · rol de quien preguntó: {{ rotulo_rol.get(r.rol, r.rol) }}</span>
+  </header>
+  <p class="texto"><span class="pie">Pregunta</span>{{ r.pregunta or "(sin texto)" }}</p>
+  <p class="texto respuesta"><span class="pie">Respuesta del asistente</span>{{ r.respuesta }}</p>
+  {% if r.revision and r.revision.respuesta_correcta %}<p class="texto"><span class="pie">Lo que correspondía</span>{{ r.revision.respuesta_correcta }}</p>{% endif %}
+  <details{% if ver == "pendientes" %} open{% endif %}>
+    <summary>{{ "Revisar" if not r.revision else "Cambiar la revisión" }}</summary>
+    <form method="post" action="/revisar/{{ r.turno_id }}" class="pila">
+      {% include "_csrf.html" %}
+      <input type="hidden" name="ver" value="{{ ver }}">
+      <fieldset class="veredictos">
+        <legend>¿Cómo respondió?</legend>
+        {% for v in veredictos %}
+        <label><input type="radio" name="veredicto" value="{{ v }}" required{% if r.revision and r.revision.veredicto == v %} checked{% endif %}> {{ rotulo_veredicto[v] }}</label>
+        {% endfor %}
+      </fieldset>
+      <label class="campo">Motivo (si no fue correcta)
+        <select name="motivo">
+          <option value="">—</option>
+          {% for m in motivos %}<option value="{{ m }}"{% if r.revision and r.revision.motivo == m %} selected{% endif %}>{{ rotulo_motivo[m] }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="campo">Lo que correspondía responder (opcional)
+        <textarea name="respuesta_correcta" rows="2">{{ r.revision.respuesta_correcta if r.revision and r.revision.respuesta_correcta else "" }}</textarea>
+      </label>
+      <button type="submit">Guardar revisión</button>
+    </form>
+  </details>
+</article>
+{% else %}
+<p class="nota">{{ "No hay respuestas sin revisar." if ver == "pendientes" else "Todavía no revisaste ninguna." }}</p>
+{% endfor %}
+{% endblock %}

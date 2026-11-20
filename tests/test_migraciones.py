@@ -454,9 +454,52 @@ def test_0008_pasa_las_membresias_al_modelo_del_login(base_vacia):
             "LEFT JOIN unidades_funcionales u ON u.id = m.unidad_id")).all())
     assert filas == [(1, "propietario", 3), (1, "propietario", 7), (2, "administracion", None)]
     assert _escalar("SELECT rol FROM turnos") == "administracion"
+    command.upgrade(_alembic(), "head")  # el código solo lee una base en head
     assert resolver_identidad("prop", "a").unidades == (3, 7)
     assert resolver_identidad("admin", "a").es_administracion
     command.check(_alembic())
+
+
+def test_0009_turnos_anteriores_quedan_sin_certeza_ni_mensajes(base_vacia):
+    _base_con_membresias_0007()
+    command.upgrade(_alembic(), "0009_calidad")
+
+    assert _existe("revisiones")
+    assert _escalar("SELECT certeza IS NULL AND mensaje_asistente_id IS NULL FROM turnos") is True
+    assert _escalar("SELECT senales_certeza::text FROM turnos") == "{}"
+    command.check(_alembic())
+
+
+def test_0009_downgrade_y_upgrade_limpios(base_vacia):
+    _base_con_membresias_0007()
+    command.upgrade(_alembic(), "0009_calidad")
+    _ejecutar("INSERT INTO revisiones (turno_id, consorcio_id, revisor_id, veredicto, creado_en, actualizado_en) "
+              "SELECT id, consorcio_id, usuario_id, 'correcta', now(), now() FROM turnos")
+
+    command.downgrade(_alembic(), "0008_login")
+
+    assert not _existe("revisiones")
+    assert _escalar(
+        "SELECT count(*) FROM information_schema.columns WHERE table_name = 'turnos' "
+        "AND column_name IN ('certeza', 'senales_certeza', 'mensaje_usuario_id', 'mensaje_asistente_id')"
+    ) == 0
+    assert _escalar("SELECT count(*) FROM turnos") == 1
+    command.upgrade(_alembic(), "head")
+    command.check(_alembic())
+
+
+def test_0009_motivo_solo_si_la_respuesta_no_fue_correcta(base_vacia):
+    _base_con_membresias_0007()
+    command.upgrade(_alembic(), "0009_calidad")
+    insertar = ("INSERT INTO revisiones (turno_id, consorcio_id, revisor_id, veredicto, motivo, creado_en, actualizado_en) "
+                "SELECT id, consorcio_id, usuario_id, '{}', {}, now(), now() FROM turnos")
+    for veredicto, motivo in (("correcta", "'incompleta'"), ("incorrecta", "NULL"), ("dudosa", "NULL"),
+                              ("parcial", "'otro'")):
+        with pytest.raises(IntegrityError):
+            _ejecutar(insertar.format(veredicto, motivo))
+    _ejecutar(insertar.format("parcial", "'incompleta'"))
+    with pytest.raises(IntegrityError):  # una revisión por turno
+        _ejecutar(insertar.format("correcta", "NULL"))
 
 
 def test_0008_downgrade_y_upgrade_limpios(base_vacia):

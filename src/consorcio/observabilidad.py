@@ -224,6 +224,29 @@ def _etiquetar_traza(mlflow, etiquetas: dict[str, str]) -> None:
         log.debug("no se pudo etiquetar la traza: %s", e)
 
 
+def registrar_revision(traza_id: str | None, veredicto: str, motivo: str | None) -> bool:
+    """Cuelga la revisión de la administración de la traza del turno, como evaluación humana.
+
+    Solo veredicto y motivo: la respuesta correcta que escribe la administración es texto del consorcio y
+    no sale de Postgres. Si MLflow no está, la revisión ya quedó guardada igual: devuelve False y sigue."""
+    if not traza_id or not config.mlflow_tracking_uri or not _alcanzable(config.mlflow_tracking_uri):
+        return False
+    try:
+        from mlflow.entities import AssessmentSource, AssessmentSourceType
+
+        import mlflow
+
+        mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+        mlflow.log_feedback(
+            trace_id=traza_id, name="revision_administracion", value=veredicto, rationale=motivo,
+            source=AssessmentSource(source_type=AssessmentSourceType.HUMAN, source_id="administracion"),
+        )
+        return True
+    except Exception as e:  # p. ej. una traza que ya no existe: no es motivo para pausar MLflow
+        log.warning("no se pudo registrar la revisión en MLflow: %s", type(e).__name__)
+        return False
+
+
 def configurar_logging(nivel: int = logging.INFO) -> None:
     logging.basicConfig(level=nivel, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)

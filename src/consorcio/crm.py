@@ -2,7 +2,8 @@
 
 El CRM cruza consorcios a propósito: es la excepción autorizada a "nada cruza entre consorcios", solo
 con agregados y solo detrás de `exigir_plataforma`. Por eso acá no se lee el texto de nadie: ni
-`mensajes`, ni `mensaje`/`titulo`/`detalle` de `solicitudes`, ni nombres de usuarios o consorcios.
+`mensajes`, ni `mensaje`/`titulo`/`detalle` de `solicitudes`, ni `respuesta_correcta` de `revisiones`,
+ni nombres de usuarios o consorcios.
 
 Las evaluaciones no cuentan: `turnos` se filtra por `origen`, y `solicitudes`, que no tiene esa columna,
 por el turno que la creó. `gastos_modelo` tampoco la tiene: el costo de los turnos de evaluación se resta
@@ -24,14 +25,19 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import Float, Integer, cast, func, select
 from sqlalchemy.orm import Session
 
+from .agente import certeza
 from .agente.registro import FUNCIONALIDADES
+from .agente.revision import REVISABLES
 from .almacen.postgres import (
+    MOTIVOS_REVISION,
+    VEREDICTOS,
     Carga,
     Consorcio,
     Consulta,
     Documento,
     GastoModelo,
     Membresia,
+    Revision,
     Seccion,
     Solicitud,
     Turno,
@@ -255,6 +261,47 @@ def _feedback_positivo(s: Session, f: _Filtro, turnos: int) -> dict:
     return {"valor": _cociente(positivos, n), "positivos": positivos, "n": n, "cobertura": _cociente(n, turnos)}
 
 
+def _tasa(filas: list[tuple]) -> dict:
+    n = len(filas)
+    correctas = sum(1 for f in filas if f[0] == "correcta")
+    return {"n": n, "correctas": correctas, "tasa": _cociente(correctas, n)}
+
+
+def _calidad(s: Session, f: _Filtro) -> dict:
+    """Revisiones de la administración sobre los turnos del período, y la certeza calculada.
+
+    Solo veredicto, motivo, intención y certeza: `revisiones.respuesta_correcta` es texto del consorcio y
+    acá no se lee. `calibracion` compara, por nivel de certeza, cuántas revisadas resultaron correctas:
+    si el medidor sirve, la tasa baja de `alta` a `baja`."""
+    filas = s.execute(f.turnos(
+        select(Revision.veredicto, Revision.motivo, Turno.intencion, Turno.certeza)
+        .select_from(Revision).join(Turno, Turno.id == Revision.turno_id)
+    )).all()
+    revisables = s.scalar(f.turnos(
+        select(func.count()).select_from(Turno)
+        .where(Turno.resultado.in_(REVISABLES), Turno.mensaje_asistente_id.is_not(None))
+    ))
+    certezas = list(s.scalars(f.turnos(select(Turno.certeza).where(Turno.certeza.is_not(None)))))
+    por_intencion: dict[str, list] = {}
+    por_nivel: dict[str, list] = {n: [] for n in (*certeza.NIVELES, "sin_certeza")}
+    for fila in filas:
+        por_intencion.setdefault(fila.intencion or SIN_CLASIFICAR, []).append(fila)
+        por_nivel[certeza.nivel(fila.certeza) or "sin_certeza"].append(fila)
+    general = _tasa(filas)
+    return {
+        **general, "revisables": revisables, "cobertura": _cociente(general["n"], revisables),
+        "por_veredicto": {v: sum(1 for x in filas if x.veredicto == v) for v in VEREDICTOS},
+        "por_motivo": {m: sum(1 for x in filas if x.motivo == m) for m in MOTIVOS_REVISION if any(x.motivo == m for x in filas)},
+        "por_intencion": {k: _tasa(v) for k, v in sorted(por_intencion.items())},
+        "calibracion": {k: _tasa(v) for k, v in por_nivel.items()},
+        "certeza": {
+            "promedio": round(sum(certezas) / len(certezas), 3) if certezas else None,
+            "por_nivel": {n: sum(1 for c in certezas if certeza.nivel(c) == n) for n in certeza.NIVELES},
+            "version": certeza.VERSION,
+        },
+    }
+
+
 def _exactitud_evaluacion() -> dict:
     """La última corrida de `consorcio evaluar-consultas` sobre test. Mide `preguntar`, no el router.
     Solo vale la última: si no tiene generación, volver a una anterior mostraría un dato viejo como vigente."""
@@ -303,6 +350,7 @@ def panel(desde: datetime, hasta: datetime, consorcio_id: str | None = None) -> 
             "elevaciones": _elevaciones(s, f),
             "acciones": _acciones(s, f),
             "costos": _costos(s, f),
+            "calidad": _calidad(s, f),
             "acertadas": {
                 "cita_verificada": _cita_verificada(s, f),
                 "feedback_positivo": _feedback_positivo(s, f, preguntas["total"]),

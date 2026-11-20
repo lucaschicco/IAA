@@ -517,7 +517,8 @@ class Solicitud(Base):
 
 
 class Turno(Base):
-    """Una salida de `atender`. Sin columnas de texto libre: `error` es solo el nombre de la excepción."""
+    """Una salida de `atender`. Sin columnas de texto libre: `error` es solo el nombre de la excepción.
+    El texto queda en `mensajes`, y el turno solo apunta a él."""
 
     __tablename__ = "turnos"
     __table_args__ = (
@@ -554,7 +555,46 @@ class Turno(Base):
     feedback: Mapped[int | None] = mapped_column(SmallInteger)
     error: Mapped[str | None] = mapped_column(String(60))
     mlflow_traza_id: Mapped[str | None] = mapped_column(Text)
+    # De 0 a 1, solo en lo respondido (ver agente/certeza.py); las señales son números y banderas
+    certeza: Mapped[float | None] = mapped_column(Float)
+    senales_certeza: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'"))
+    # Para que la administración revise la pregunta y la respuesta. Si se borra la conversación, quedan NULL
+    mensaje_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("mensajes.id", ondelete="SET NULL"))
+    mensaje_asistente_id: Mapped[int | None] = mapped_column(ForeignKey("mensajes.id", ondelete="SET NULL"))
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
+VEREDICTOS = ("correcta", "parcial", "incorrecta")
+MOTIVOS_REVISION = ("dato_incorrecto", "cita_incorrecta", "incompleta", "debia_derivar", "derivo_sin_necesidad",
+                    "no_entendio")
+
+
+class Revision(Base):
+    """Lo que dice la administración de una respuesta del agente. Una por turno: revisar de nuevo pisa.
+
+    `respuesta_correcta` es texto libre del consorcio: lo ve solo su administración, nunca el CRM."""
+
+    __tablename__ = "revisiones"
+    __table_args__ = (
+        CheckConstraint("veredicto IN ('correcta', 'parcial', 'incorrecta')", name="ck_revisiones_veredicto"),
+        CheckConstraint(
+            "motivo IS NULL OR motivo IN ('dato_incorrecto', 'cita_incorrecta', 'incompleta', 'debia_derivar', "
+            "'derivo_sin_necesidad', 'no_entendio')",
+            name="ck_revisiones_motivo",
+        ),
+        CheckConstraint("(veredicto = 'correcta') = (motivo IS NULL)", name="ck_revisiones_motivo_si_hay_error"),
+        UniqueConstraint("turno_id", name="uq_revisiones_turno_id"),
+        Index("ix_revisiones_consorcio_creado", "consorcio_id", "creado_en"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    turno_id: Mapped[int] = mapped_column(ForeignKey("turnos.id", ondelete="CASCADE"))
+    consorcio_id: Mapped[str] = mapped_column(ForeignKey("consorcios.id"))
+    revisor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    veredicto: Mapped[str] = mapped_column(String(12))
+    motivo: Mapped[str | None] = mapped_column(String(30))
+    respuesta_correcta: Mapped[str | None] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
 
 
 class GastoModelo(Base):

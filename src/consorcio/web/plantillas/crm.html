@@ -193,6 +193,40 @@
             {{ anillo(exactitud.valor, "Exactitud en evaluación", nota) }}
           </div>
         </article>
+        {% set calidad = panel.calidad %}
+        <article id="revision">
+          <h2>Revisión de la administración</h2>
+          <p class="crm-nota">Lo que dijo la administración de cada consorcio sobre las respuestas del período. Sin texto: solo veredicto, motivo y certeza.</p>
+          <div class="crm-anillos">
+            {% set nota %}<p class="crm-nota">{{ calidad.correctas }} correctas de {{ calidad.n }} revisadas; cobertura: {{ porcentaje(calidad.cobertura) }} de {{ calidad.revisables }} respuestas.</p>{% endset %}
+            {{ anillo(calidad.tasa, "Correctas según la administración", nota) }}
+            {% set nota %}<p class="crm-nota">Promedio de las respuestas del período (fórmula v{{ calidad.certeza.version }}).</p>{% endset %}
+            {{ anillo(calidad.certeza.promedio, "Certeza calculada", nota) }}
+          </div>
+          <h3>Calibración del medidor de certeza</h3>
+          <p class="crm-nota">Si el medidor sirve, las de certeza alta son las que más aciertan.</p>
+          <table>
+            <thead><tr><th scope="col">Certeza</th><th scope="col">Respuestas</th><th scope="col">Revisadas</th><th scope="col">Correctas</th></tr></thead>
+            <tbody>
+              {% for nivel, fila in calidad.calibracion.items() %}
+                <tr><td>{{ nivel|replace("_", " ") }}</td><td>{{ calidad.certeza.por_nivel.get(nivel, "") }}</td><td>{{ fila.n }}</td><td>{{ porcentaje(fila.tasa) }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <h3>Por intención</h3>
+          {% if calidad.por_intencion %}
+          <table>
+            <thead><tr><th scope="col">Intención</th><th scope="col">Revisadas</th><th scope="col">Correctas</th></tr></thead>
+            <tbody>
+              {% for intencion, fila in calidad.por_intencion.items() %}
+                <tr><td>{{ intencion|replace("_", " ") }}</td><td>{{ fila.n }}</td><td>{{ porcentaje(fila.tasa) }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}<p class="crm-nota">sin revisiones</p>{% endif %}
+          <h3>Motivos de error</h3>
+          {{ barras(calidad.por_motivo) }}
+        </article>
       </section>
     </div>
 

@@ -27,7 +27,8 @@
       {% block sub_chat %}{% endblock %}
       {{ item("/documentos", "Documentos", "documentos", actual) }}
       {{ item("/mis-solicitudes", "Mis solicitudes", "solicitudes", actual) }}
-      {% if identidad.es_administracion %}{{ item("/bandeja", "Bandeja", "bandeja", actual, por_atender) }}{% endif %}
+      {% if identidad.es_administracion %}{{ item("/bandeja", "Bandeja", "bandeja", actual, por_atender) }}
+      {{ item("/revisar", "Revisar respuestas", "revisar", actual) }}{% endif %}
       {% endif %}
       {{ item("/consorcios", "Consorcios", "consorcios", actual) }}
       {% if plataforma %}{{ item("/crm", "CRM", "crm", actual) }}{% endif %}
