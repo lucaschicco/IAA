@@ -185,7 +185,7 @@ def test_el_panel_solo_suma_los_consorcios_que_administra():
     assert "Para atender" in admin and "Edificio Las Palmeras" in admin and "/bandeja?solicitud=" in admin
     multi = cliente_como(MULTI).get("/panel").text  # administra Robles; en Palmeras es propietaria
     assert "Los Robles" in multi and "/bandeja?solicitud=" not in multi
-    assert 'value="demo-palmeras"' not in multi
+    assert 'value="demo-palmeras"' not in multi.split("<main", 1)[1]  # en la barra sí: ahí es vecina
 
 
 def test_el_panel_muestra_el_saldo_anterior_de_la_ultima_liquidacion():
@@ -714,3 +714,9 @@ def test_conversacion_guarda_usuario_y_consorcio_de_la_sesion():
     with Session(postgres.engine()) as s:
         c = s.scalars(select(Conversacion)).one()
     assert (c.usuario_id, c.consorcio_id) == (usuario_id(MULTI), ROBLES)
+
+
+def test_en_el_panel_sin_consorcio_elegido_la_barra_deja_elegir_uno():
+    html = cliente_como("demo-admin-dos").get("/panel").text
+    assert "Elegí un consorcio" in html
+    assert formularios_del_selector(html) == {PALMERAS: "/chat", ROBLES: "/chat"}

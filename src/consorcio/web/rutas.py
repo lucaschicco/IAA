@@ -178,8 +178,8 @@ def _selector(membresias: list[dict], actual: str | None, administra: bool, pend
     """Los consorcios de la píldora de la barra: el actual primero y después por nombre, hasta `MAX_SELECTOR`
     (el resto, en "Ver todos"). Vacío si no hay nada que elegir: un vecino de un solo consorcio ve la píldora
     como texto."""
-    if actual is None or (len(membresias) < 2 and not administra):
-        return []
+    if len(membresias) < 2 and not administra:
+        return []  # sin consorcio elegido (p. ej. en el panel) igual se puede elegir uno desde la barra
     filas = sorted(membresias, key=lambda m: (m["consorcio_id"] != actual, m["nombre"]))[:MAX_SELECTOR]
     return [{**m, "actual": m["consorcio_id"] == actual,
              "pendientes": pendientes.get(m["consorcio_id"], 0) if m["rol"] == "administracion" else 0}

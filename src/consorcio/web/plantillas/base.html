@@ -60,11 +60,16 @@
       <label for="menu" class="boton-menu" aria-hidden="true">{{ i.icono("menu") }}<span>Menú</span></label>
       <div class="quien">
         {% set rotulo_rol = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
-        {% if consorcio and selector %}
+        {% if selector %}
         {# Cambiar de consorcio sin salir de la pantalla: un <details> sin scripts; cada fila es un POST con destino #}
-        {% set destino = request.url.path %}
+        {% set destino = "/chat" if request.url.path == "/panel" else request.url.path %}
+        {% set rol_actual = rotulo_rol.get(identidad.rol, identidad.rol) if identidad else "" %}
         <details class="contexto-menu">
-          <summary class="contexto" title="{{ consorcio }} · {{ rotulo_rol.get(identidad.rol, identidad.rol) }}"><span class="solo-lector">Cambiar de consorcio. Actual: </span><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rotulo_rol.get(identidad.rol, identidad.rol) }}</span>{{ i.icono("desplegar") }}</summary>
+          {% if consorcio %}
+          <summary class="contexto" title="{{ consorcio }} · {{ rol_actual }}"><span class="solo-lector">Cambiar de consorcio. Actual: </span><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rol_actual }}</span>{{ i.icono("desplegar") }}</summary>
+          {% else %}
+          <summary class="contexto"><span class="contexto-nombre">Elegí un consorcio</span>{{ i.icono("desplegar") }}</summary>
+          {% endif %}
           <div class="contexto-lista">
             <p class="contexto-titulo">Tus consorcios</p>
             <ul>
