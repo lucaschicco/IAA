@@ -605,7 +605,7 @@ th { color: var(--suave); font-size: .72rem; font-weight: 600; letter-spacing: .
 .consorcios { display: flex; flex-direction: column; align-items: center; gap: 36px; padding: 30px 0; text-align: center; }
 .consorcios h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); font-weight: 900; letter-spacing: -0.04em; }
 .consorcios .nota { max-width: 560px; margin: 8px auto 0; }
-.consorcios form { width: 100%; max-width: 980px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; margin: 0; }
+.consorcios-lista { width: 100%; max-width: 980px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; margin: 0; }
 .opcion-consorcio {
   flex-direction: column; align-items: stretch; justify-content: space-between; gap: 16px; min-height: 230px; padding: 24px;
   border-radius: 24px; text-align: left; background: var(--crema); color: var(--tinta); transition: transform .15s;
@@ -621,6 +621,42 @@ a.opcion-consorcio { display: flex; text-decoration: none; }
 .opcion-consorcio.opcion-nueva { background: transparent; color: var(--texto); box-shadow: inset 0 0 0 1.5px var(--borde); transform: none; }
 .opcion-consorcio.opcion-nueva:hover { box-shadow: inset 0 0 0 1.5px var(--naranja); }
 .opcion-nueva .icono { color: var(--naranja); }
+
+/* Ficha de cada consorcio, debajo de las cartas: desplegable, con pestañas hechas de radios */
+.fichas { width: 100%; max-width: 980px; display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.fichas h2 { font: 800 1.3rem/1.2 var(--titulos); letter-spacing: -0.02em; }
+.ficha { border-radius: 20px; background: var(--superficie); box-shadow: inset 0 0 0 1px var(--borde); }
+.ficha summary { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 12px 20px; cursor: pointer; list-style: none; }
+.ficha summary::-webkit-details-marker { display: none; }
+.ficha summary::after { content: "+"; width: 28px; height: 28px; display: grid; place-items: center; flex: none; border-radius: 99px; box-shadow: inset 0 0 0 1.5px var(--borde); color: var(--suave); }
+.ficha[open] summary::after { content: "−"; }
+.ficha-nombre { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; font: 700 1.05rem/1.2 var(--titulos); overflow-wrap: anywhere; }
+.ficha-nombre .icono { color: var(--naranja); flex: none; }
+.ficha-pestanas { display: flex; gap: 6px; padding: 0 20px 12px; overflow-x: auto; }
+.ficha-pestanas label { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 99px; box-shadow: inset 0 0 0 1.5px var(--borde); color: var(--suave); font-size: .88rem; font-weight: 600; cursor: pointer; }
+.ficha-pestanas label:hover { color: var(--texto); }
+.ficha-radio-documentos:checked ~ .ficha-pestanas .ficha-pestana-documentos,
+.ficha-radio-inquilinos:checked ~ .ficha-pestanas .ficha-pestana-inquilinos,
+.ficha-radio-integrantes:checked ~ .ficha-pestanas .ficha-pestana-integrantes,
+.ficha-radio-eventos:checked ~ .ficha-pestanas .ficha-pestana-eventos { background: var(--texto); color: var(--fondo); box-shadow: none; }
+.ficha-radio-documentos:focus-visible ~ .ficha-pestanas .ficha-pestana-documentos,
+.ficha-radio-inquilinos:focus-visible ~ .ficha-pestanas .ficha-pestana-inquilinos,
+.ficha-radio-integrantes:focus-visible ~ .ficha-pestanas .ficha-pestana-integrantes,
+.ficha-radio-eventos:focus-visible ~ .ficha-pestanas .ficha-pestana-eventos { outline: 2px solid var(--acento); outline-offset: 2px; }
+.ficha-panel { display: none; padding: 0 20px 18px; }
+.ficha-radio-documentos:checked ~ .ficha-paneles .ficha-panel-documentos,
+.ficha-radio-inquilinos:checked ~ .ficha-paneles .ficha-panel-inquilinos,
+.ficha-radio-integrantes:checked ~ .ficha-paneles .ficha-panel-integrantes,
+.ficha-radio-eventos:checked ~ .ficha-paneles .ficha-panel-eventos { display: block; }
+.ficha-lista { margin: 0; padding: 0; list-style: none; }
+.ficha-lista li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--borde); }
+.ficha-principal { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ficha-principal strong { font-weight: 600; overflow-wrap: anywhere; }
+.ficha-principal small { color: var(--suave); font-size: .82rem; }
+.ficha-unidad { flex: none; min-width: 52px; padding: 4px 10px; border-radius: 99px; background: var(--superficie-2); font-size: .82rem; font-weight: 700; text-align: center; }
+.ficha-vacio { margin: 0; padding: 12px 0; color: var(--suave); }
+.ficha-ir { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 6px; color: var(--enlace); font-weight: 600; text-decoration: none; }
+.ficha-entrar { margin: 0; }
 
 /* ---- Nuevo consorcio ---- */
 .consorcio-nuevo { display: flex; flex-direction: column; gap: 24px; max-width: 560px; margin: 0 auto; padding: 30px 0; }

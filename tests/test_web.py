@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session
 
 from consorcio.agente.semilla import PALMERAS, ROBLES
 from consorcio.almacen import postgres
-from consorcio.almacen.postgres import Conversacion, Documento, Solicitud, Turno, Usuario
+from consorcio.almacen.postgres import (
+    Conversacion,
+    Documento,
+    Solicitud,
+    Turno,
+    Usuario,
+    listar_documentos,
+)
 from consorcio.config import config
 from consorcio.identidad import membresias_de, resolver_identidad
 from consorcio.web import rutas
@@ -141,7 +148,7 @@ def test_crear_consorcio_deja_a_quien_lo_crea_como_administracion(consorcios_nue
     cliente = cliente_como(ADMIN)
     r = cliente.post("/consorcios/nuevo", data={"nombre": "  Edificio   Prueba ", "direccion": "Calle 1", "csrf": cliente.csrf},
                      follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/documentos"
+    assert r.status_code == 303 and r.headers["location"] == "/bandeja"  # como al entrar a cualquiera que administra
     adoptar_cookie(cliente, r)
     identidad = resolver_identidad(ADMIN, "edificio-prueba")
     assert identidad.es_administracion
@@ -651,13 +658,12 @@ def test_propietario_ve_la_lista_sin_formulario_de_carga():
     assert r.status_code == 200 and "Reglamento" in r.text and 'type="file"' not in r.text
 
 
-def test_administracion_de_varios_consorcios_ve_una_seccion_por_consorcio(monkeypatch):
+def test_documentos_muestra_solo_el_consorcio_elegido_aunque_administre_varios(monkeypatch):
     pedidos = []
     monkeypatch.setattr(rutas, "listar_documentos", lambda consorcio_id: pedidos.append(consorcio_id) or [])
     html = cliente_como("demo-admin-dos", ROBLES).get("/documentos").text
-    assert pedidos == [ROBLES, PALMERAS]  # el de la sesión primero
-    assert html.count('class="docs-grupo"') == 2
-    assert 'id="lista-documentos"' in html and 'id="lista-documentos-2"' in html  # la carga refresca solo el actual
+    assert pedidos == [ROBLES]
+    assert "docs-grupo" not in html and 'id="lista-documentos"' in html
 
 
 def test_en_los_que_no_administra_ve_solo_el_de_la_sesion(monkeypatch):
@@ -739,3 +745,35 @@ def test_la_administracion_entra_a_la_bandeja_y_no_ve_las_pantallas_del_vecino()
         assert r.status_code == 303 and r.headers["location"] == "/bandeja"
     html = admin.get("/bandeja").text
     assert 'href="/chat"' not in html and 'href="/mis-solicitudes"' not in html and 'href="/documentos"' in html
+
+
+def fichas_de(html: str) -> dict[str, str]:
+    """Nombre del consorcio -> HTML de su ficha en /consorcios."""
+    fichas = re.findall(r'<details class="ficha".*?</details>', html.split('class="fichas"', 1)[1], re.S)
+    return {re.search(r'class="ficha-nombre">.*?</svg>(.*?)</span>', f, re.S).group(1).strip(): f for f in fichas}
+
+
+def test_consorcios_tiene_una_ficha_por_consorcio_con_lo_que_corresponde_a_cada_rol():
+    fichas = fichas_de(cliente_como(MULTI, ROBLES).get("/consorcios").text)
+    assert len(fichas) == 2
+    robles = next(f for n, f in fichas.items() if "Robles" in n)  # administra: las cuatro secciones
+    palmeras = next(f for n, f in fichas.items() if "Palmeras" in n)  # vecina: sin datos de los demás vecinos
+    for seccion in ("Documentos", "Inquilinos", "Integrantes", "Eventos importantes"):
+        assert f">{seccion}</label>" in robles
+    assert ">Documentos</label>" in palmeras and ">Eventos importantes</label>" in palmeras
+    assert "Inquilinos" not in palmeras and "Integrantes" not in palmeras
+    assert " open" in robles.split(">", 1)[0]  # la del consorcio elegido arranca abierta
+
+
+def test_las_fichas_no_mezclan_consorcios():
+    fichas = fichas_de(cliente_como("demo-admin-dos").get("/consorcios").text)
+    robles = next(f for n, f in fichas.items() if "Robles" in n)
+    palmeras = next(f for n, f in fichas.items() if "Palmeras" in n)
+    docs_robles = {d["titulo"] for d in listar_documentos(ROBLES)}
+    docs_palmeras = {d["titulo"] for d in listar_documentos(PALMERAS)}
+    assert all(t in robles for t in docs_robles) and all(t in palmeras for t in docs_palmeras)
+    assert not any(t in robles for t in docs_palmeras - docs_robles)
+    # Integrantes: quien administra ve a los vecinos de ese consorcio y no a los del otro
+    assert "Pablo Propietario" in palmeras and "Pablo Propietario" not in robles
+    # Desde la ficha de otro consorcio se entra a sus documentos con un POST
+    assert 'name="destino" value="/documentos"' in robles or 'href="/documentos"' in robles

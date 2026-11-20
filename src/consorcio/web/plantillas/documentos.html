@@ -14,7 +14,6 @@
       <a href="#subir" class="boton">Subir un PDF {{ i.icono("flecha") }}</a>
       {% else %}
       <h1>{% if total == 1 %}1 documento{% else %}{{ total }} documentos{% endif %} que el asistente puede consultar</h1>
-      {% if grupos|length > 1 %}<p>En {{ grupos|length }} consorcios que administrás.<span class="solo-ancho"> Las cartas son los últimos de {{ consorcio }}.</span></p>{% endif %}
       {% if identidad.es_administracion %}
       <a href="#subir" class="boton">Subir un PDF {{ i.icono("flecha") }}</a>
       {% else %}
@@ -51,22 +50,8 @@
         </nav>
         {% endif %}
       </header>
-      {% if grupos|length > 1 %}
-      {# Una sección por consorcio administrado; la carga va siempre al de la sesión, que sale primero #}
-      {% for g in grupos %}
-      <details class="docs-grupo"{% if g.actual or g.documentos|length <= 6 %} open{% endif %}>
-        <summary>
-          <span class="docs-grupo-nombre">{{ i.icono("edificio") }}{{ g.nombre }}</span>
-          <span class="docs-grupo-datos">{% if g.actual %}<span class="chip chip-acento">actual</span>{% endif %}<span class="chip">{{ g.documentos|length }}</span></span>
-        </summary>
-        {% with documentos = g.documentos, lista_id = "" if g.actual else "lista-documentos-" ~ loop.index %}
-        {% include "_documentos.html" %}
-        {% endwith %}
-      </details>
-      {% endfor %}
-      {% else %}
+      {# Solo el consorcio elegido: los demás se ven en Consorcios #}
       {% with documentos = grupos[0].documentos if grupos else [] %}{% include "_documentos.html" %}{% endwith %}
-      {% endif %}
     </section>
 
     <aside class="docs-costado" id="subir">
@@ -77,7 +62,7 @@
           <h2>Subir un PDF</h2>
           <span class="chip">• Administración</span>
         </header>
-        <p class="nota">Va a <strong>{{ consorcio }}</strong>. Hasta {{ max_mb }} MB; si ya estaba cargado, no se duplica.{% if grupos|length > 1 %} Para otro consorcio, cambiá desde Consorcios.{% endif %}</p>
+        <p class="nota">Va a <strong>{{ consorcio }}</strong>. Hasta {{ max_mb }} MB; si ya estaba cargado, no se duplica. Para otro consorcio, cambiá desde la barra de arriba.</p>
         <label class="archivo"><span class="solo-lector">Archivo PDF</span><input type="file" name="archivo" accept="application/pdf,.pdf" required></label>
         <button type="submit">{{ i.icono("subir") }}Cargar</button>
         <span id="cargando" class="htmx-indicator"><span class="girando"></span>Procesando; un escaneado puede tardar varios minutos…</span>

@@ -46,6 +46,7 @@ from ..agente.bandeja import (
     registrar_feedback,
     resolver_derivacion,
 )
+from ..agente.ficha import ficha
 from ..agente.grafo import atender
 from ..agente.memoria import conversacion_valida, conversaciones_de, historial
 from ..agente.panel import panel as datos_panel
@@ -292,7 +293,8 @@ def consorcios(request: Request, sesion: SesionActual) -> Response:
         return _elegir_consorcio(sesion, membresias[0]["consorcio_id"])
     if not membresias and es_plataforma(sesion.sujeto_externo):
         return _ir_a("/crm")
-    return pagina(request, "consorcios.html", sesion, membresias=membresias, puede_crear=puede_crear)
+    fichas = {m["consorcio_id"]: ficha(resolver_identidad(sesion.sujeto_externo, m["consorcio_id"])) for m in membresias}
+    return pagina(request, "consorcios.html", sesion, membresias=membresias, puede_crear=puede_crear, fichas=fichas)
 
 
 @router.get("/consorcios/nuevo")
@@ -304,7 +306,7 @@ def consorcio_nuevo(request: Request, sesion: SesionActual) -> Response:
 
 @router.post("/consorcios/nuevo", dependencies=POST_SESION)
 def consorcio_nuevo_post(request: Request, sesion: SesionActual, datos: Formulario) -> Response:
-    """Quien crea queda como administración y entra directo a cargar los documentos."""
+    """Quien crea queda como administración y entra a su bandeja, como a cualquier consorcio que administra."""
     nombre, direccion = _campo(datos, "nombre"), _campo(datos, "direccion")
     administracion = _campo(datos, "administracion")
 
@@ -323,7 +325,7 @@ def consorcio_nuevo_post(request: Request, sesion: SesionActual, datos: Formular
         return de_nuevo("El nombre tiene que tener entre 3 y 120 letras.")
     except AdministracionInvalida:
         return de_nuevo("Elegí una de tus Administraciones.")
-    return _elegir_consorcio(sesion, consorcio_id, "/documentos")
+    return _elegir_consorcio(sesion, consorcio_id, inicio_del_rol(True))
 
 
 @router.post("/consorcios", dependencies=POST_SESION)
@@ -447,14 +449,8 @@ def chat_feedback(request: Request, identidad: Miembro, datos: Formulario) -> Re
 def documentos(request: Request, sesion: SesionActual, identidad: Miembro, tipo: str = "") -> Response:
     """`tipo` filtra la lista; uno que no existe deja la lista vacía y no es un error.
 
-    La administración ve una sección por cada consorcio que administra (el de la sesión primero) para revisar
-    rápido lo cargado en cada uno. Solo los que administra: en los demás es vecina y ve solo el de la sesión."""
-    membresias = membresias_de(sesion.sujeto_externo)
-    if identidad.es_administracion:
-        consorcios = [m for m in membresias if m["rol"] == "administracion"]
-        consorcios.sort(key=lambda m: m["consorcio_id"] != identidad.consorcio_id)
-    else:
-        consorcios = [m for m in membresias if m["consorcio_id"] == identidad.consorcio_id]
+    Solo el consorcio elegido, también para quien administra varios: los demás se ven en Consorcios."""
+    consorcios = [m for m in membresias_de(sesion.sujeto_externo) if m["consorcio_id"] == identidad.consorcio_id]
     grupos = [{**m, "actual": m["consorcio_id"] == identidad.consorcio_id,
                "documentos": listar_documentos(m["consorcio_id"])} for m in consorcios]
     tipos: dict[str, int] = {}
