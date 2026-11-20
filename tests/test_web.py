@@ -451,6 +451,22 @@ def test_propietario_ve_la_lista_sin_formulario_de_carga():
     assert r.status_code == 200 and "Reglamento" in r.text and 'type="file"' not in r.text
 
 
+def test_administracion_de_varios_consorcios_ve_una_seccion_por_consorcio(monkeypatch):
+    pedidos = []
+    monkeypatch.setattr(rutas, "listar_documentos", lambda consorcio_id: pedidos.append(consorcio_id) or [])
+    html = cliente_como("demo-admin-dos", ROBLES).get("/documentos").text
+    assert pedidos == [ROBLES, PALMERAS]  # el de la sesión primero
+    assert html.count('class="docs-grupo"') == 2
+    assert 'id="lista-documentos"' in html and 'id="lista-documentos-2"' in html  # la carga refresca solo el actual
+
+
+def test_en_los_que_no_administra_ve_solo_el_de_la_sesion(monkeypatch):
+    pedidos = []
+    monkeypatch.setattr(rutas, "listar_documentos", lambda consorcio_id: pedidos.append(consorcio_id) or [])
+    html = cliente_como(MULTI, ROBLES).get("/documentos").text  # administra Robles, es propietaria en Palmeras
+    assert pedidos == [ROBLES] and "docs-grupo" not in html
+
+
 def test_administrador_ve_el_formulario_de_carga():
     assert 'type="file"' in cliente_como(ADMIN, PALMERAS).get("/documentos").text
 

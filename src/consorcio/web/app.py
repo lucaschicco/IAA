@@ -42,7 +42,11 @@ class Cabeceras:
     async def __call__(self, scope, receive, send) -> None:
         async def enviar(mensaje) -> None:
             if mensaje["type"] == "http.response.start":
-                mensaje["headers"] = [*mensaje.get("headers", []), *CABECERAS]
+                extra = CABECERAS
+                # Los estáticos se revalidan siempre (ETag): sin esto el navegador sigue con el CSS viejo tras un cambio
+                if scope.get("path", "").startswith("/estaticos/"):
+                    extra = [*CABECERAS, (b"cache-control", b"no-cache")]
+                mensaje["headers"] = [*mensaje.get("headers", []), *extra]
             await send(mensaje)
 
         await self.app(scope, receive, enviar if scope["type"] == "http" else send)

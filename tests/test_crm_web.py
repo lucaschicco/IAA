@@ -131,8 +131,26 @@ def test_turnos_de_evaluacion_no_aparecen():
     assert _valor_de(cliente_como(PLATAFORMA).get("/crm").text, "turnos en el período") == 2
 
 
+VISTAS = ("resumen", "calidad", "uso")
+
+
+def _todas(cliente) -> str:
+    """El CRM está partido en vistas: lo que vale para toda la pantalla se mira en las tres."""
+    return "".join(cliente.get("/crm", params={"vista": v}).text for v in VISTAS)
+
+
+def test_vista_desconocida_422():
+    assert cliente_como(PLATAFORMA).get("/crm", params={"vista": "otra"}).status_code == 422
+
+
+def test_cada_vista_conserva_el_filtro():
+    html = cliente_como(PLATAFORMA).get("/crm", params={"vista": "uso", "dias": "7"}).text
+    assert '<input type="hidden" name="vista" value="uso">' in html
+    assert 'href="/crm?vista=calidad&amp;dias=7&amp;consorcio="' in html
+
+
 def test_rotulos_obligatorios():
-    html = cliente_como(PLATAFORMA).get("/crm").text
+    html = cliente_como(PLATAFORMA).get("/crm", params={"vista": "calidad"}).text
     assert "Es espera, no esfuerzo humano." in html
     assert "no el router" in html
     assert "Telegram no pasa por el router" in html and "su gasto sí entra en el tope" in html
@@ -140,7 +158,7 @@ def test_rotulos_obligatorios():
 
 
 def test_sin_archivo_de_evaluacion_y_sin_turnos():
-    html = cliente_como(PLATAFORMA).get("/crm").text
+    html = _todas(cliente_como(PLATAFORMA))
     assert "sin corrida" in html
     assert "sin datos" in html
     assert "0.0 %" not in html  # sin casos no hay porcentaje, ni siquiera cero
@@ -149,18 +167,18 @@ def test_sin_archivo_de_evaluacion_y_sin_turnos():
 def test_con_datos_muestra_la_evaluacion_y_cada_indicador_por_separado(base):
     (base / "2026-10-26-consultas-test.json").write_text(
         json.dumps({"particion": "test", "generacion": {"n": 13, "tasa_correctas": 0.615}}), encoding="utf-8")
-    html = cliente_como(PLATAFORMA).get("/crm").text
+    html = cliente_como(PLATAFORMA).get("/crm", params={"vista": "calidad"}).text
     assert "61.5 %" in html
     assert "2026-10-26-consultas-test.json" in html
     assert "sin corrida" not in html
 
 
 def test_aviso_de_modelos_sin_precio():
-    assert "subestimado" not in cliente_como(PLATAFORMA).get("/crm").text
+    assert "subestimado" not in _todas(cliente_como(PLATAFORMA))
     with Session(postgres.engine()) as s:
         s.add(GastoModelo(consorcio_id=None, nodo="n", modelo="modelo-nuevo", tokens_entrada=7, tokens_salida=3, costo_usd=None))
         s.commit()
-    html = cliente_como(PLATAFORMA).get("/crm").text
+    html = cliente_como(PLATAFORMA).get("/crm", params={"vista": "uso"}).text
     assert "el gasto está subestimado" in html
     assert "<td>modelo-nuevo</td><td>1</td><td>10</td>" in html
 
@@ -192,7 +210,7 @@ def test_html_sin_textos_ni_nombres():
         s.flush()
         s.add(Mensaje(conversacion_id="d" * 32, rol="usuario", texto=TEXTO_PRIVADO))
         s.commit()
-    html = cliente_como(PLATAFORMA).get("/crm").text
+    html = _todas(cliente_como(PLATAFORMA))
     assert TEXTO_PRIVADO not in html
     assert nombres and nombres_consorcio
     assert not [n for n in nombres + nombres_consorcio if n in html]
@@ -213,8 +231,9 @@ def test_id_de_consorcio_sale_escapado():
             s.commit()
 
 
-def test_html_sin_recursos_externos_ni_scripts_ni_estilos_en_linea():
-    html = cliente_como(PLATAFORMA).get("/crm").text
+@pytest.mark.parametrize("vista", VISTAS)
+def test_html_sin_recursos_externos_ni_scripts_ni_estilos_en_linea(vista):
+    html = cliente_como(PLATAFORMA).get("/crm", params={"vista": vista}).text
     # El único script es el htmx vendorizado de `base.html`, que el CRM no usa
     assert re.findall(r"<script\b[^>]*>", html.lower()) == ['<script src="/estaticos/htmx.min.js" defer>']
     assert not re.search(r"""(src|href)=["'](https?:)?//""", html)

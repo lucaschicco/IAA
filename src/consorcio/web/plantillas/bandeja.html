@@ -1,62 +1,86 @@
 {% extends "base.html" %}
+{% import "_iconos.html" as i %}
 {% block titulo %}Bandeja{% endblock %}
+{% block tema %}claro{% endblock %}
+{% set rotulo_motivo = {"pedido_usuario": "lo pidió el vecino", "sin_respaldo": "sin respaldo en los documentos", "cita_no_verificada": "cita no verificada", "router_invalido": "no se entendió la pregunta", "error_funcionalidad": "error del asistente"} %}
 {% block contenido %}
-<h1>Bandeja</h1>
-<p class="nota">Nada se ejecuta sin una decisión tuya.</p>
-<h2>Pendientes</h2>
-{% for s in pendientes %}
-<article class="tarjeta">
-  <header>
-    <strong>{{ s.titulo }}</strong>
-    <span class="pie">{{ "Reclamo" if s.tipo == "reclamo" else "Derivación" }} · {{ s.motivo }} · {{ s.autor_nombre }}</span>
-  </header>
-  <p class="texto">{{ s.detalle }}</p>
-  <p class="texto nota">Mensaje original: {{ s.mensaje }}</p>
-  {% if s.tipo == "derivacion" %}
-  <form method="post" action="/bandeja/{{ s.id }}/resolver" class="pila">
-    {% include "_csrf.html" %}
-    <textarea name="respuesta" rows="2" required aria-label="Respuesta"></textarea>
-    <button type="submit">Responder y resolver</button>
-  </form>
-  {% else %}
-  <div class="decision">
-  <form method="post" action="/bandeja/{{ s.id }}/aprobar" class="pila">
-    {% include "_csrf.html" %}
-    <textarea name="respuesta" rows="2" aria-label="Respuesta (opcional)" placeholder="Respuesta (opcional)"></textarea>
-    <button type="submit">Aprobar</button>
-  </form>
-  <form method="post" action="/bandeja/{{ s.id }}/rechazar" class="pila">
-    {% include "_csrf.html" %}
-    <textarea name="respuesta" rows="2" required aria-label="Motivo del rechazo" placeholder="Motivo del rechazo"></textarea>
-    <button type="submit" class="secundario">Rechazar</button>
-  </form>
+<div class="ancho">
+<header class="encabezado">
+  <div>
+    <h1>Bandeja</h1>
+    <p class="nota">Nada se ejecuta sin una decisión tuya.</p>
   </div>
-  <details>
-    <summary>Editar y aprobar</summary>
-    <form method="post" action="/bandeja/{{ s.id }}/editar" class="pila">
+  <nav class="pestanas" aria-label="Qué solicitudes ver">
+    <a href="/bandeja"{% if ver == "pendientes" %} aria-current="page"{% endif %}>Pendientes · {{ pendientes }}</a>
+    <a href="/bandeja?ver=resueltas"{% if ver == "resueltas" %} aria-current="page"{% endif %}>Resueltas · {{ resueltas }}</a>
+  </nav>
+</header>
+{% if lista %}
+<div class="dos-paneles{% if request.query_params.get("solicitud") %} con-eleccion{% endif %}">
+  <ul class="lista">
+    {% for s in lista %}
+    <li><a href="/bandeja?{% if ver == 'resueltas' %}ver=resueltas&amp;{% endif %}solicitud={{ s.id }}" class="lista-item"{% if s.id == elegida.id %} aria-current="true"{% endif %}>
+      <span class="fila"><span class="chip">{{ "Reclamo" if s.tipo == "reclamo" else "Derivación" }}</span><span class="pie">{{ s.creado_en.strftime("%d/%m %H:%M") }}</span></span>
+      <strong>{{ s.titulo_final or s.titulo }}</strong>
+      <span class="pie">{{ s.autor_nombre }}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+  {% set s = elegida %}
+  <article class="detalle">
+    <a href="/bandeja{% if ver == 'resueltas' %}?ver=resueltas{% endif %}" class="volver-lista">{{ i.icono("flecha") }}Volver a la lista</a>
+    <div class="detalle-cabeza">
+      <div class="autor">
+        <span aria-hidden="true">{{ (s.autor_nombre or "?")[:1]|upper }}</span>
+        <span><strong>{{ s.autor_nombre }}</strong><small>{{ "Reclamo" if s.tipo == "reclamo" else "Derivación" }}{% if s.motivo != "reclamo" %} · {{ rotulo_motivo.get(s.motivo, s.motivo) }}{% endif %} · {{ s.creado_en.strftime("%d/%m/%Y %H:%M") }}</small></span>
+      </div>
+      {% include "_estado.html" %}
+    </div>
+    <h2>{{ s.titulo_final or s.titulo }}</h2>
+    <div class="dos-cajas">
+      <div class="caja"><span class="pie">Lo que armó el asistente</span><p class="texto">{{ s.detalle_final or s.detalle }}</p></div>
+      <div class="caja caja-borde"><span class="pie">Mensaje original</span><p class="texto">{{ s.mensaje }}</p></div>
+    </div>
+    {% if s.estado != "pendiente" %}
+    {% if s.respuesta %}<div class="caja"><span class="pie">Respuesta</span><p class="texto">{{ s.respuesta }}</p></div>{% endif %}
+    {% if s.resuelta_en %}<p class="pie">Resuelta el {{ s.resuelta_en.strftime("%d/%m/%Y %H:%M") }}</p>{% endif %}
+    {% elif s.tipo == "derivacion" %}
+    <form method="post" action="/bandeja/{{ s.id }}/resolver" class="pila decision">
       {% include "_csrf.html" %}
-      <input type="text" name="titulo" value="{{ s.titulo }}" required aria-label="Título">
-      <textarea name="detalle" rows="4" required aria-label="Detalle">{{ s.detalle }}</textarea>
-      <textarea name="respuesta" rows="2" aria-label="Respuesta (opcional)" placeholder="Respuesta (opcional)"></textarea>
-      <button type="submit">Guardar y aprobar</button>
+      <label class="campo">Respuesta al vecino <textarea name="respuesta" rows="3" required></textarea></label>
+      <div class="acciones"><button type="submit">{{ i.icono("listo") }}Responder y resolver</button></div>
     </form>
-  </details>
-  {% endif %}
-</article>
+    {% else %}
+    <div class="decision">
+      <form method="post" action="/bandeja/{{ s.id }}/aprobar" class="pila">
+        {% include "_csrf.html" %}
+        <label class="campo">Respuesta al vecino (opcional) <textarea name="respuesta" rows="2"></textarea></label>
+        <div class="acciones"><button type="submit">{{ i.icono("listo") }}Aprobar</button></div>
+      </form>
+      <details>
+        <summary>Editar y aprobar</summary>
+        <form method="post" action="/bandeja/{{ s.id }}/editar" class="pila">
+          {% include "_csrf.html" %}
+          <label class="campo">Título <input type="text" name="titulo" value="{{ s.titulo }}" required></label>
+          <label class="campo">Detalle <textarea name="detalle" rows="4" required>{{ s.detalle }}</textarea></label>
+          <label class="campo">Respuesta al vecino (opcional) <textarea name="respuesta" rows="2"></textarea></label>
+          <div class="acciones"><button type="submit" class="secundario">Guardar y aprobar</button></div>
+        </form>
+      </details>
+      <details>
+        <summary>Rechazar</summary>
+        <form method="post" action="/bandeja/{{ s.id }}/rechazar" class="pila">
+          {% include "_csrf.html" %}
+          <label class="campo">Motivo del rechazo <textarea name="respuesta" rows="2" required></textarea></label>
+          <div class="acciones"><button type="submit" class="peligro">{{ i.icono("cruz") }}Rechazar</button></div>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+  </article>
+</div>
 {% else %}
-<p class="nota">No hay nada pendiente.</p>
-{% endfor %}
-<h2>Resueltas</h2>
-{% for s in resueltas %}
-<article class="tarjeta">
-  <header>
-    <strong>{{ s.titulo_final or s.titulo }}</strong>
-    {% include "_estado.html" %}
-  </header>
-  {% if s.respuesta %}<p class="texto respuesta">{{ s.respuesta }}</p>{% endif %}
-  <p class="pie">{{ s.autor_nombre }} · {{ s.resuelta_en.strftime("%d/%m/%Y %H:%M") }}</p>
-</article>
-{% else %}
-<p class="nota">Todavía no se resolvió ninguna.</p>
-{% endfor %}
+<p class="vacio">{{ "No hay nada pendiente." if ver == "pendientes" else "Todavía no se resolvió ninguna." }}</p>
+{% endif %}
+</div>
 {% endblock %}

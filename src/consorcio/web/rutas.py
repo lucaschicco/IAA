@@ -266,6 +266,8 @@ def chat(request: Request, sesion: SesionActual, identidad: Miembro, conversacio
         request, "chat.html", sesion, identidad, conversacion_id=conversacion or "",
         conversaciones=conversaciones_de(identidad), mensajes=historial(identidad, conversacion) if conversacion else [],
         max_mensaje=config.agente_max_mensaje,
+        # la columna de la derecha: lo último del vecino y del consorcio, para tenerlo a mano
+        solicitudes=mis_solicitudes(identidad, limite=3), documentos=listar_documentos(identidad.consorcio_id)[:3],
     )
 
 
@@ -296,9 +298,31 @@ def chat_feedback(request: Request, identidad: Miembro, datos: Formulario) -> Re
 
 
 @router.get("/documentos")
-def documentos(request: Request, sesion: SesionActual, identidad: Miembro) -> Response:
-    return pagina(request, "documentos.html", sesion, identidad, max_mb=config.web_max_mb_pdf,
-                   documentos=listar_documentos(identidad.consorcio_id))
+def documentos(request: Request, sesion: SesionActual, identidad: Miembro, tipo: str = "") -> Response:
+    """`tipo` filtra la lista; uno que no existe deja la lista vacía y no es un error.
+
+    La administración ve una sección por cada consorcio que administra (el de la sesión primero) para revisar
+    rápido lo cargado en cada uno. Solo los que administra: en los demás es vecina y ve solo el de la sesión."""
+    membresias = membresias_de(sesion.sujeto_externo)
+    if identidad.es_administracion:
+        consorcios = [m for m in membresias if m["rol"] == "administracion"]
+        consorcios.sort(key=lambda m: m["consorcio_id"] != identidad.consorcio_id)
+    else:
+        consorcios = [m for m in membresias if m["consorcio_id"] == identidad.consorcio_id]
+    grupos = [{**m, "actual": m["consorcio_id"] == identidad.consorcio_id,
+               "documentos": listar_documentos(m["consorcio_id"])} for m in consorcios]
+    tipos: dict[str, int] = {}
+    for g in grupos:
+        for d in g["documentos"]:
+            tipos[d["tipo"] or "otro"] = tipos.get(d["tipo"] or "otro", 0) + 1
+    total = sum(len(g["documentos"]) for g in grupos)
+    actuales = next((g["documentos"] for g in grupos if g["actual"]), [])
+    if tipo:
+        for g in grupos:
+            g["documentos"] = [d for d in g["documentos"] if (d["tipo"] or "otro") == tipo]
+    return pagina(request, "documentos.html", sesion, identidad, max_mb=config.web_max_mb_pdf, grupos=grupos,
+                  total=total, tipos=dict(sorted(tipos.items())), tipo=tipo,
+                  recientes=[d for d in actuales if d["activo"]][:3])
 
 
 def _guardar_pdf(archivo: UploadFile) -> Path:
@@ -361,18 +385,28 @@ def documentos_post(request: Request, identidad: Administrador, datos: Formulari
 
 
 @router.get("/mis-solicitudes")
-def solicitudes_propias(request: Request, sesion: SesionActual, identidad: Miembro) -> Response:
-    return pagina(request, "mis_solicitudes.html", sesion, identidad, solicitudes=mis_solicitudes(identidad))
+def solicitudes_propias(request: Request, sesion: SesionActual, identidad: Miembro, solicitud: str = "") -> Response:
+    """Lista y detalle: `solicitud` elige cuál se ve al lado; sin ella (o si no es tuya), la más reciente."""
+    solicitudes = mis_solicitudes(identidad)
+    return pagina(request, "mis_solicitudes.html", sesion, identidad, solicitudes=solicitudes,
+                  elegida=_elegida(solicitudes, "id", solicitud))
 
 
 @router.get("/bandeja")
-def bandeja(request: Request, sesion: SesionActual, identidad: Administrador) -> Response:
+def bandeja(request: Request, sesion: SesionActual, identidad: Administrador,
+            ver: str = "pendientes", solicitud: str = "") -> Response:
+    ver = "resueltas" if ver == "resueltas" else "pendientes"
     solicitudes = listar_solicitudes(identidad)
-    return pagina(
-        request, "bandeja.html", sesion, identidad,
-        pendientes=[s for s in solicitudes if s["estado"] == "pendiente"],
-        resueltas=[s for s in solicitudes if s["estado"] != "pendiente"],
-    )
+    pendientes = [s for s in solicitudes if s["estado"] == "pendiente"]
+    resueltas = [s for s in solicitudes if s["estado"] != "pendiente"]
+    lista = resueltas if ver == "resueltas" else pendientes
+    return pagina(request, "bandeja.html", sesion, identidad, ver=ver, lista=lista,
+                  pendientes=len(pendientes), resueltas=len(resueltas), elegida=_elegida(lista, "id", solicitud))
+
+
+def _elegida(filas: list[dict], clave: str, valor: str) -> dict | None:
+    """La fila pedida por la URL, o la primera. Solo busca en `filas`, que ya vienen filtradas por permiso."""
+    return next((f for f in filas if str(f[clave]) == valor), filas[0] if filas else None)
 
 
 def _transicion(funcion, *args) -> Response:
@@ -415,10 +449,11 @@ def bandeja_rechazar(solicitud_id: str, identidad: Administrador, datos: Formula
 
 @router.get("/revisar")
 def revisar_respuestas(request: Request, sesion: SesionActual, identidad: Administrador,
-                       ver: str = "pendientes") -> Response:
+                       ver: str = "pendientes", turno: str = "") -> Response:
     ver = "revisadas" if ver == "revisadas" else "pendientes"
-    return pagina(request, "revisar.html", sesion, identidad, ver=ver, respuestas=revision.listar(identidad, ver),
-                  motivos=MOTIVOS_REVISION, veredictos=VEREDICTOS)
+    respuestas = revision.listar(identidad, ver)
+    return pagina(request, "revisar.html", sesion, identidad, ver=ver, respuestas=respuestas,
+                  elegida=_elegida(respuestas, "turno_id", turno), motivos=MOTIVOS_REVISION, veredictos=VEREDICTOS)
 
 
 @router.post("/revisar/{turno_id}", dependencies=POST_ADMINISTRADOR)

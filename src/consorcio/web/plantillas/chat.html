@@ -3,30 +3,56 @@
 {% block titulo %}Chat{% endblock %}
 {% block sub_chat %}{% include "_lista_conversaciones.html" %}{% endblock %}
 {% block clase_main %}pagina-chat{% endblock %}
+{% set SUGERENCIAS = ["¿Puedo tener mascotas?", "¿Cuánto pago de expensas este mes?", "Mostrame los documentos del consorcio"] %}
 {% block contenido %}
 <div class="chat">
   <header class="chat-cabecera">
-    <span class="chat-icono">{{ i.icono("chat") }}</span>
     <div>
-      <h1>Asistente del consorcio</h1>
-      <p>Responde citando la fuente. Lo que no puede resolver pasa a la administración.</p>
+      <span>Asistente del consorcio</span>
+      <h1>¿En qué te ayudo hoy?</h1>
     </div>
+    <a href="/chat" class="boton secundario">{{ i.icono("nuevo") }}Nueva conversación</a>
   </header>
   <div id="mensajes" class="mensajes">
     {% for m in mensajes %}
     <div class="mensaje {{ m.rol }}"><div class="texto">{{ m.texto }}</div></div>
     {% else %}
-    <p class="nota chat-vacio">Preguntá por el reglamento, las expensas o los documentos, o dejá un reclamo.</p>
+    <div class="chat-vacio">
+      <p>Preguntá por el reglamento, las expensas o los documentos, o dejá un reclamo. Las respuestas citan la fuente; lo que no puede resolver pasa a la administración.</p>
+      <form class="sugerencias" hx-post="/chat/mensaje" hx-target="#mensajes" hx-swap="beforeend scroll:bottom" hx-include="#conversacion_id" hx-indicator="#pensando" hx-disabled-elt="find button">
+        {% include "_csrf.html" %}
+        {% for s in SUGERENCIAS %}<button type="submit" name="mensaje" value="{{ s }}">{{ s }}</button>{% endfor %}
+      </form>
+    </div>
     {% endfor %}
   </div>
   <form hx-post="/chat/mensaje" hx-target="#mensajes" hx-swap="beforeend scroll:bottom" hx-indicator="#pensando" hx-disabled-elt="find button" class="envio">
     {% include "_csrf.html" %}
     {% include "_conversacion.html" %}
-    <span id="pensando" class="htmx-indicator">Pensando…</span>
+    <span id="pensando" class="htmx-indicator"><span class="girando"></span>Pensando…</span>
     <div class="envio-fila">
       {% include "_caja_mensaje.html" %}
-      <button type="submit">{{ i.icono("enviar") }}<span>Enviar</span></button>
+      <button type="submit" aria-label="Enviar" title="Enviar">{{ i.icono("flecha") }}</button>
     </div>
+    <p class="envio-pie">Las respuestas salen de los documentos del consorcio. Si no está claro, lo deriva a la administración.</p>
   </form>
 </div>
+<aside class="chat-costado" aria-label="Lo tuyo">
+  <section class="costado-tarjeta">
+    <header><h2>Mis solicitudes</h2><a href="/mis-solicitudes">Ver todas</a></header>
+    {% for s in solicitudes %}
+    <a href="/mis-solicitudes?solicitud={{ s.id }}" class="costado-item"><strong>{{ s.titulo_final or s.titulo }}</strong>{% include "_estado.html" %}</a>
+    {% else %}
+    <p class="nota">Los reclamos que hagas desde el chat aparecen acá.</p>
+    {% endfor %}
+  </section>
+  <section class="costado-tarjeta">
+    <header><h2>Documentos</h2><a href="/documentos">Ver todos</a></header>
+    {% for d in documentos %}
+    <a href="/documentos" class="costado-item"><strong>{{ d.titulo or d.archivo }}</strong><span class="pie">{{ (d.tipo or "documento")|replace("_", " ") }}{% if d.paginas %} · {{ d.paginas }} págs.{% endif %}</span></a>
+    {% else %}
+    <p class="nota">Todavía no hay documentos en este consorcio.</p>
+    {% endfor %}
+  </section>
+</aside>
 {% endblock %}

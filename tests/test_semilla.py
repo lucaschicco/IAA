@@ -51,8 +51,8 @@ def conteos() -> dict[str, int]:
 
 def test_dos_veces_deja_los_mismos_conteos(base):
     antes = conteos()
-    assert antes["consorcios"] == 2 and antes["documentos"] == 8 and antes["usuarios"] == 5
-    assert antes["membresias"] == 5 and antes["unidades_funcionales"] == 8 and antes["liquidaciones"] == 4
+    assert antes["consorcios"] == 2 and antes["documentos"] == 8 and antes["usuarios"] == 6
+    assert antes["membresias"] == 7 and antes["unidades_funcionales"] == 8 and antes["liquidaciones"] == 4
     sembrar_demo()
     assert conteos() == antes
 
@@ -113,7 +113,7 @@ def test_listar_usuarios_demo_nunca_trae_usuarios_reales(base):
         s.commit()
     try:
         sujetos = [u["sujeto_externo"] for u in identidad.listar_usuarios_demo()]
-        assert sujetos == ["demo-admin-palmeras", "demo-multi", "demo-plataforma", "demo-prop-palmeras", "demo-prop-robles"]
+        assert sujetos == ["demo-admin-dos", "demo-admin-palmeras", "demo-multi", "demo-plataforma", "demo-prop-palmeras", "demo-prop-robles"]
     finally:
         with postgres.engine().begin() as con:
             con.execute(text("DELETE FROM usuarios WHERE sujeto_externo IN ('persona-real', 'xdemo-casi')"))

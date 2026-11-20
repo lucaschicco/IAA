@@ -249,7 +249,7 @@ def test_el_crm_mide_aciertos_y_calibracion_sin_leer_texto(monkeypatch):
 def test_la_pantalla_del_crm_muestra_la_seccion(monkeypatch):
     tid = respondida_reglamento(monkeypatch)["turno_id"]
     revision.revisar(admin(), tid, "incorrecta", "no_entendio", "SECRETO-DEL-CONSORCIO")
-    pagina = cliente_como("demo-plataforma").get("/crm")
+    pagina = cliente_como("demo-plataforma").get("/crm", params={"vista": "calidad"})
     assert pagina.status_code == 200 and "Revisión de la administración" in pagina.text
     assert "Calibración del medidor de certeza" in pagina.text and "SECRETO-DEL-CONSORCIO" not in pagina.text
 

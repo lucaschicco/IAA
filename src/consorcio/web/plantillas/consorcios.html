@@ -1,15 +1,27 @@
 {% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% set rotulo_rol = {"administracion": "Administración", "consejo": "Consejo", "propietario": "Propietario", "inquilino": "Inquilino"} %}
 {% block titulo %}Consorcios{% endblock %}
 {% block contenido %}
-<h1>Consorcios</h1>
-{% if membresias %}
-<form method="post" action="/consorcios" class="pila elecciones">
-  {% include "_csrf.html" %}
-  {% for membresia in membresias %}
-  <button type="submit" name="consorcio_id" value="{{ membresia.consorcio_id }}">{{ membresia.nombre }} · {{ membresia.rol }}</button>
-  {% endfor %}
-</form>
-{% else %}
-<p class="aviso">Tu usuario no tiene ningún consorcio asignado. Pedile acceso a la administración.</p>
-{% endif %}
+<div class="consorcios">
+  <div>
+    <h1>¿A qué consorcio entrás?</h1>
+    <p class="nota">Cada consorcio tiene sus documentos y sus conversaciones. Podés cambiar cuando quieras desde el menú.</p>
+  </div>
+  {% if membresias %}
+  <form method="post" action="/consorcios">
+    {% include "_csrf.html" %}
+    {% for membresia in membresias %}
+    <button type="submit" name="consorcio_id" value="{{ membresia.consorcio_id }}" class="opcion-consorcio">
+      {{ i.icono("edificio") }}
+      <strong>{{ membresia.nombre }}</strong>
+      <small>{{ rotulo_rol.get(membresia.rol, membresia.rol) }}{% if membresia.consorcio_id == sesion.consorcio_id %} · actual{% endif %}</small>
+    </button>
+    {% endfor %}
+  </form>
+  <p class="nota">¿Falta un consorcio? Pedile una invitación a su administración.</p>
+  {% else %}
+  <p class="alerta">{{ i.icono("info") }}<span>Tu usuario no tiene ningún consorcio asignado. Pedile acceso a la administración.</span></p>
+  {% endif %}
+</div>
 {% endblock %}

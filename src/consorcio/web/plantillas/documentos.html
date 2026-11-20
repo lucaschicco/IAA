@@ -1,16 +1,88 @@
 {% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% set ICONO_TIPO = {"reglamento": "libro", "liquidacion": "recibo", "acta": "documento", "comunicado": "campana", "factura": "recibo"} %}
 {% block titulo %}Documentos{% endblock %}
 {% block contenido %}
-<h1>Documentos</h1>
-<p class="nota">Lo que el asistente puede consultar en este consorcio.</p>
-{% if identidad.es_administracion %}
-<form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="tarjeta carga">
-  {% include "_csrf.html" %}
-  <label class="archivo">PDF, hasta {{ max_mb }} MB <input type="file" name="archivo" accept="application/pdf,.pdf" required></label>
-  <button type="submit">Cargar</button>
-  <span id="cargando" class="htmx-indicator">Procesando; un escaneado puede tardar varios minutos…</span>
-</form>
-<div id="resultado-carga"></div>
-{% endif %}
-{% include "_documentos.html" %}
+<div class="ancho docs">
+  {# Arriba, como en el resto de la app: el recuadro marrón con el titular y los últimos documentos como cartas #}
+  <section class="docs-portada">
+    <div class="docs-portada-texto">
+      <span>Biblioteca del consorcio</span>
+      <h1>{% if total == 1 %}1 documento{% else %}{{ total }} documentos{% endif %} que el asistente puede consultar</h1>
+      {% if grupos|length > 1 %}<p>En {{ grupos|length }} consorcios que administrás.<span class="solo-ancho"> Las cartas son los últimos de {{ consorcio }}.</span></p>{% endif %}
+      <a href="/chat" class="boton">Preguntar en el chat {{ i.icono("flecha") }}</a>
+    </div>
+    {% if recientes %}
+    <ol class="docs-cartas" aria-label="Los últimos documentos">
+      {% for d in recientes %}
+      <li class="docs-carta">
+        <span class="docs-carta-numero">0{{ loop.index }}</span>
+        <strong>{{ (d.titulo or d.archivo)|truncate(42) }}</strong>
+        {{ i.icono(ICONO_TIPO.get(d.tipo, "documento")) }}
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+  </section>
+
+  <div class="docs-cuerpo">
+    <section class="docs-panel">
+      <header class="docs-panel-cabeza">
+        <div>
+          <span class="pie">Todo lo cargado</span>
+          <h2>Documentos</h2>
+        </div>
+        {% if tipos %}
+        <nav class="docs-filtros" aria-label="Filtrar por tipo">
+          <a href="/documentos"{% if not tipo %} aria-current="page"{% endif %}>Todos</a>
+          {% for t, n in tipos.items() %}
+          <a href="/documentos?tipo={{ t|urlencode }}"{% if t == tipo %} aria-current="page"{% endif %}>{{ t|replace("_", " ")|capitalize }} <span>{{ n }}</span></a>
+          {% endfor %}
+        </nav>
+        {% endif %}
+      </header>
+      {% if grupos|length > 1 %}
+      {# Una sección por consorcio administrado; la carga va siempre al de la sesión, que sale primero #}
+      {% for g in grupos %}
+      <details class="docs-grupo"{% if g.actual or g.documentos|length <= 6 %} open{% endif %}>
+        <summary>
+          <span class="docs-grupo-nombre">{{ i.icono("edificio") }}{{ g.nombre }}</span>
+          <span class="docs-grupo-datos">{% if g.actual %}<span class="chip chip-acento">actual</span>{% endif %}<span class="chip">{{ g.documentos|length }}</span></span>
+        </summary>
+        {% with documentos = g.documentos, lista_id = "" if g.actual else "lista-documentos-" ~ loop.index %}
+        {% include "_documentos.html" %}
+        {% endwith %}
+      </details>
+      {% endfor %}
+      {% else %}
+      {% with documentos = grupos[0].documentos if grupos else [] %}{% include "_documentos.html" %}{% endwith %}
+      {% endif %}
+    </section>
+
+    <aside class="docs-costado">
+      {% if identidad.es_administracion %}
+      <form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="docs-tarjeta docs-carga">
+        {% include "_csrf.html" %}
+        <header>
+          <h2>Subir un PDF</h2>
+          <span class="chip">• Administración</span>
+        </header>
+        <p class="nota">Va a <strong>{{ consorcio }}</strong>. Hasta {{ max_mb }} MB; si ya estaba cargado, no se duplica.{% if grupos|length > 1 %} Para otro consorcio, cambiá desde Consorcios.{% endif %}</p>
+        <label class="archivo"><span class="solo-lector">Archivo PDF</span><input type="file" name="archivo" accept="application/pdf,.pdf" required></label>
+        <button type="submit">{{ i.icono("subir") }}Cargar</button>
+        <span id="cargando" class="htmx-indicator"><span class="girando"></span>Procesando; un escaneado puede tardar varios minutos…</span>
+        <div id="resultado-carga"></div>
+      </form>
+      {% endif %}
+      <section class="docs-tarjeta">
+        <header><h2>Cómo se usan</h2></header>
+        <ol class="docs-pasos">
+          <li><span>1</span>El asistente busca en estos documentos cuando preguntás en el chat.</li>
+          <li><span>2</span>Cada respuesta cita la sección de donde sale.</li>
+          <li><span>3</span>Si no está acá, pasa la consulta a la administración.</li>
+        </ol>
+      </section>
+    </aside>
+  </div>
+</div>
 {% endblock %}

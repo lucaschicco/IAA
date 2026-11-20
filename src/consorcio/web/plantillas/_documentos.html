@@ -1,20 +1,21 @@
-<div id="lista-documentos" class="tabla-marco"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% import "_iconos.html" as i %}
+{% set ICONO_TIPO = {"reglamento": "libro", "liquidacion": "recibo", "acta": "documento", "comunicado": "campana", "factura": "recibo"} %}
+<div id="{{ lista_id or 'lista-documentos' }}"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% if documentos %}
-  <table>
-    <thead><tr><th>Título</th><th>Archivo</th><th>Tipo</th><th>Páginas</th><th>Buscador</th></tr></thead>
-    <tbody>
-      {% for d in documentos %}
-      <tr>
-        <td>{{ d.titulo or "Sin título" }}</td>
-        <td>{{ d.archivo }}</td>
-        <td>{{ (d.tipo or "—")|replace("_", " ") }}</td>
-        <td>{{ d.paginas or "—" }}</td>
-        <td>{{ "Sí" if d.activo else "No" }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <ul class="docs-lista">
+    {% for d in documentos %}
+    <li class="docs-fila{% if not d.activo %} inactivo{% endif %}">
+      <span class="docs-icono" aria-hidden="true">{{ i.icono(ICONO_TIPO.get(d.tipo, "documento")) }}</span>
+      <div class="docs-fila-texto">
+        <strong>{{ d.titulo or "Sin título" }}</strong>
+        <span>{{ d.archivo }}</span>
+      </div>
+      <span class="docs-fila-datos">{{ (d.tipo or "—")|replace("_", " ")|capitalize }}{% if d.paginas %} · {{ d.paginas }} págs.{% endif %}</span>
+      {% if not d.activo %}<span class="chip">fuera del buscador</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
   {% else %}
-  <p class="nota">Todavía no hay documentos en este consorcio.</p>
+  <p class="docs-vacio">Todavía no hay documentos en este consorcio.</p>
   {% endif %}
 </div>

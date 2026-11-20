@@ -20,6 +20,7 @@ def ver_crm(
     sesion: Annotated[Sesion, Depends(exigir_plataforma)],
     dias: Literal["7", "30", "90"] = "30",  # como texto: un Literal de enteros rechaza todo lo que llega por query
     consorcio: str | None = None,
+    vista: Literal["resumen", "calidad", "uso"] = "resumen",
 ):
     consorcios = crm.consorcios()
     if consorcio and consorcio not in consorcios:
@@ -28,4 +29,4 @@ def ver_crm(
     datos = crm.panel(hasta - timedelta(days=int(dias)), hasta, consorcio or None)
     # `filtro` y no `consorcio`: ese nombre es el del consorcio de la sesión en el encabezado de `base.html`
     return pagina(request, "crm.html", sesion, panel=datos, dias=dias, filtro=consorcio or "", consorcios=consorcios,
-                  hoy=hasta.strftime("%d/%m/%Y"))
+                  hoy=hasta.strftime("%d/%m/%Y"), vista=vista)

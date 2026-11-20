@@ -1,3 +1,4 @@
+{% import "_iconos.html" as i %}
 <div class="mensaje usuario"><div class="texto">{{ pregunta }}</div></div>
 <div class="mensaje asistente">
   <div class="texto">{{ turno.mensaje }}</div>
@@ -6,8 +7,9 @@
   <form class="voto" hx-post="/chat/feedback" hx-swap="outerHTML">
     {% include "_csrf.html" %}
     <input type="hidden" name="turno_id" value="{{ turno.turno_id }}">
-    <button type="submit" name="valor" value="1" class="enlace">Me sirvió</button>
-    <button type="submit" name="valor" value="-1" class="enlace">No me sirvió</button>
+    <span>¿Te sirvió?</span>
+    <button type="submit" name="valor" value="1" aria-label="Me sirvió" title="Me sirvió">{{ i.icono("pulgar-arriba") }}</button>
+    <button type="submit" name="valor" value="-1" aria-label="No me sirvió" title="No me sirvió">{{ i.icono("pulgar-abajo") }}</button>
   </form>
   {% endif %}
 </div>

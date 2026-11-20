@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ingresar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0e0e0e}
+a{color:#ff7a4d}a:hover{color:#ffa07f}
+.lbl{font:500 13px/1 'Inter',sans-serif;color:#bdb7af}
+.inp{width:100%;box-sizing:border-box;background:#1f1f1f;border:1.5px solid #2e2e2e;border-radius:14px;padding:15px 16px;color:#f5f1eb;font:400 15px 'Inter',sans-serif;outline:none}
+.inp:focus{border-color:#ff5b24}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0e0e0e; color: #f5f1eb; font-family: 'Inter', sans-serif; padding: 20px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 20px;">
+
+  <!-- Panel de bienvenida -->
+  <section style="flex: 999 1 560px; min-width: 0; background: #3a2016; border-radius: 28px; padding: 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 40px; overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 36px; height: 36px; border-radius: 10px; background: #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0e0e0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5.5L12 3l8 2.5V21"/><path d="M2.5 21h19M10 21v-4.5h4V21"/></svg></div>
+      <span style="font: 800 24px/1 'Inter Tight', sans-serif; color: #ff5b24;">[marca]</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 16px; max-width: 620px;">
+      <span style="font: 500 16px 'Inter', sans-serif; color: #f2c9b6;">El asistente de tu edificio</span>
+      <h1 style="margin: 0; font: 900 64px/0.96 'Inter Tight', sans-serif; letter-spacing: -0.04em; color: #fff7f2;">Preguntá lo que quieras sobre tu consorcio</h1>
+      <p style="margin: 0; font: 400 16px/1.5 'Inter', sans-serif; color: #f2c9b6; max-width: 480px;">Respuestas con la cita del reglamento, tus expensas al día y los documentos del edificio. Si hace falta, lo pasa a la administración.</p>
+    </div>
+    <div style="margin-top: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 640px;">
+      <div style="background: #f6f2ec; color: #141414; border-radius: 20px; padding: 18px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between; transform: rotate(-4deg);">
+        <span style="font: 600 12px 'Inter', sans-serif; color: #5c544c;">01</span>
+        <svg viewBox="0 0 80 60" width="100%" height="70" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10h22a6 6 0 0 1 6 6v36a5 5 0 0 0-5-5H14Z"/><path d="M66 10H46a6 6 0 0 0-6 6v36a5 5 0 0 1 5-5h21Z" fill="#ff5b24"/><path d="M20 20h14M20 28h14M20 36h10"/></svg>
+        <span style="font: 700 17px/1.1 'Inter Tight', sans-serif;">¿Puedo tener mascotas?</span>
+      </div>
+      <div style="background: #ff5b24; color: #141414; border-radius: 20px; padding: 18px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between; transform: translateY(-14px);">
+        <span style="font: 600 12px 'Inter', sans-serif;">02</span>
+        <svg viewBox="0 0 80 60" width="100%" height="70" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="8" width="52" height="46" rx="6"/><path d="M22 20h36M22 30h20M22 40h28"/><path d="M50 30h8M54 40h4"/></svg>
+        <span style="font: 700 17px/1.1 'Inter Tight', sans-serif;">¿Cuánto pago este mes?</span>
+      </div>
+      <div style="background: #f6f2ec; color: #141414; border-radius: 20px; padding: 18px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between; transform: rotate(4deg);">
+        <span style="font: 600 12px 'Inter', sans-serif; color: #5c544c;">03</span>
+        <svg viewBox="0 0 80 60" width="100%" height="70" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 8c-9 0-15 7-15 15v9l-5 8h40l-5-8v-9c0-8-6-15-15-15Z"/><path d="M34 46a6 6 0 0 0 12 0"/><circle cx="58" cy="14" r="5" fill="#ff5b24"/></svg>
+        <span style="font: 700 17px/1.1 'Inter Tight', sans-serif;">Se rompió el portón</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Formulario -->
+  <section style="flex: 1 1 380px; max-width: 520px; background: #151515; border-radius: 28px; padding: 48px 44px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 28px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <h2 style="margin: 0; font: 800 36px/1 'Inter Tight', sans-serif; letter-spacing: -0.03em;">Ingresar</h2>
+      <p style="margin: 0; font: 400 15px/1.5 'Inter', sans-serif; color: #a8a29b;">Con el mail que registraste en tu consorcio.</p>
+    </div>
+    <form style="display: flex; flex-direction: column; gap: 18px;">
+      <label style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">Mail</span><input class="inp" type="email" autocomplete="email" placeholder="nombre@correo.com"></label>
+      <label style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">Contraseña</span><input class="inp" type="password" autocomplete="current-password" value="contraseña"></label>
+      <div role="alert" style="display: flex; gap: 10px; align-items: flex-start; background: #2a1712; border: 1px solid #5a2a1c; border-radius: 14px; padding: 12px 14px; font: 400 13px/1.45 'Inter', sans-serif; color: #ffb39a;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 1px;"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>
+        <span>Mail o contraseña incorrectos. Después de 5 intentos fallidos la cuenta se bloquea por un rato.</span>
+      </div>
+      <button type="submit" style="margin-top: 6px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 0; border-radius: 99px; padding: 16px 20px; background: #ff5b24; color: #0e0e0e; font: 700 15px 'Inter', sans-serif; cursor: pointer;">Entrar <span aria-hidden="true">→</span></button>
+    </form>
+    <div style="border-top: 1px solid #2a2a2a; padding-top: 22px; display: flex; flex-direction: column; gap: 8px;">
+      <span style="font: 600 15px 'Inter', sans-serif;">¿Te llegó una invitación?</span>
+      <p style="margin: 0; font: 400 14px/1.5 'Inter', sans-serif; color: #a8a29b;">La administración te manda un enlace para crear tu cuenta. <a href="#">Registrarme con mi invitación</a></p>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

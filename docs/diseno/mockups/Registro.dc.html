@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Crear cuenta</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0e0e0e}
+a{color:#ff7a4d}a:hover{color:#ffa07f}
+.lbl{font:500 13px/1 'Inter',sans-serif;color:#bdb7af}
+.inp{width:100%;box-sizing:border-box;background:#1f1f1f;border:1.5px solid #2e2e2e;border-radius:14px;padding:15px 16px;color:#f5f1eb;font:400 15px 'Inter',sans-serif;outline:none}
+.inp:focus{border-color:#ff5b24}
+.ok{display:flex;align-items:center;gap:8px;font:500 13px 'Inter',sans-serif}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0e0e0e; color: #f5f1eb; font-family: 'Inter', sans-serif; padding: 20px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 20px;">
+
+  <section style="flex: 999 1 560px; min-width: 0; background: #3a2016; border-radius: 28px; padding: 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 36px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 36px; height: 36px; border-radius: 10px; background: #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0e0e0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5.5L12 3l8 2.5V21"/><path d="M2.5 21h19M10 21v-4.5h4V21"/></svg></div>
+      <span style="font: 800 24px/1 'Inter Tight', sans-serif; color: #ff5b24;">[marca]</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px; max-width: 600px;">
+      <span style="font: 500 16px 'Inter', sans-serif; color: #f2c9b6;">Te invitaron</span>
+      <h1 style="margin: 0; font: 900 60px/0.96 'Inter Tight', sans-serif; letter-spacing: -0.04em; color: #fff7f2;">Sumate a tu consorcio</h1>
+    </div>
+
+    <!-- Tarjeta de invitación -->
+    <div style="max-width: 520px; background: #f6f2ec; color: #141414; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 18px; transform: rotate(-1.5deg);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font: 600 12px 'Inter', sans-serif; letter-spacing: .08em; color: #5c544c;">INVITACIÓN</span>
+        <span style="padding: 6px 12px; border-radius: 99px; background: #ff5b24; font: 700 12px 'Inter', sans-serif;">Propietario</span>
+      </div>
+      <div style="font: 800 30px/1.05 'Inter Tight', sans-serif; letter-spacing: -0.02em;">Consorcio Mercedes 274</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border-top: 1.5px dashed #c9bfb2; padding-top: 16px;">
+        <div><div style="font: 500 12px 'Inter', sans-serif; color: #5c544c;">Para</div><div style="font: 600 15px 'Inter', sans-serif;">marta@correo.com</div></div>
+        <div><div style="font: 500 12px 'Inter', sans-serif; color: #5c544c;">Vence</div><div style="font: 600 15px 'Inter', sans-serif;">26/11/2026</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top: auto; display: flex; gap: 12px; align-items: flex-start; max-width: 520px; color: #f2c9b6; font: 400 14px/1.5 'Inter', sans-serif;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 1px;"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+      <span>¿Ya tenés cuenta con este mail por otro consorcio? Escribí tu contraseña de siempre y se suma este consorcio a tu cuenta.</span>
+    </div>
+  </section>
+
+  <section style="flex: 1 1 380px; max-width: 520px; background: #151515; border-radius: 28px; padding: 48px 44px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 26px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <h2 style="margin: 0; font: 800 36px/1 'Inter Tight', sans-serif; letter-spacing: -0.03em;">Crear cuenta</h2>
+      <p style="margin: 0; font: 400 15px/1.5 'Inter', sans-serif; color: #a8a29b;">Un paso y ya podés preguntarle al asistente.</p>
+    </div>
+    <form style="display: flex; flex-direction: column; gap: 16px;">
+      <label style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">Mail</span><input class="inp" type="email" value="marta@correo.com" readonly style="color: #a8a29b; background: #191919;"></label>
+      <label style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">Nombre</span><input class="inp" type="text" autocomplete="name" value="Marta"></label>
+      <label style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">Contraseña</span><input class="inp" type="password" autocomplete="new-password" value="contraseña1"></label>
+      <label style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">Repetir la contraseña</span><input class="inp" type="password" autocomplete="new-password" value="contraseña" style="border-color: #8a3a1f;"></label>
+      <div style="display: flex; flex-direction: column; gap: 8px;" aria-live="polite">
+        <span class="ok" style="color: #7fd49b;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Al menos 10 caracteres</span>
+        <span class="ok" style="color: #ff9b73;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>Las dos contraseñas coinciden</span>
+      </div>
+      <button type="submit" style="margin-top: 4px; border: 0; border-radius: 99px; padding: 16px 20px; background: #ff5b24; color: #0e0e0e; font: 700 15px 'Inter', sans-serif; cursor: pointer;">Crear cuenta →</button>
+    </form>
+    <p style="margin: 0; font: 400 14px 'Inter', sans-serif; color: #a8a29b;">¿Ya tenés cuenta? <a href="Login.dc.html">Ingresar</a></p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

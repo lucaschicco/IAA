@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CRM · Resumen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f3eee7}
+a{color:#c2410c}a:hover{color:#9a3412}
+.card{background:#fffdfa;border:1px solid #e3dbd0;border-radius:18px;padding:20px;box-sizing:border-box;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ct{margin:0;font:600 14px/1.2 'Inter Tight',sans-serif;color:#141414}
+.hd{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.big{font:700 36px/1 'Inter Tight',sans-serif;color:#141414;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.sub{margin:0;font:400 13px/1.45 'Inter',sans-serif;color:#5f574e}
+.up{color:#15803d;font-weight:600}.down{color:#b91c1c;font-weight:600}
+.nav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:#4a433c;text-decoration:none;font:500 14px/1 'Inter',sans-serif}
+.nav:hover{background:#f3eee7;color:#141414}
+.nav.on{color:#141414;font-weight:600;box-shadow:inset 3px 0 0 #ff5b24;background:#fff4ee}
+.sn{padding:8px 12px 8px 44px;color:#5f574e;text-decoration:none;font:500 13px 'Inter',sans-serif;border-radius:10px;display:block}
+.sn:hover{color:#141414}.sn.on{color:#c2410c;font-weight:600}
+.k{font:600 11px/1 'Inter',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7a7168;padding:0 12px 6px}
+.fl{display:flex;align-items:center;gap:8px;background:#fffdfa;border:1.5px solid #141414;border-radius:99px;padding:8px 14px;font:500 13px 'Inter',sans-serif;color:#141414}
+.hb{display:grid;grid-template-columns:96px minmax(0,1fr) 34px;gap:9px 10px;align-items:center;font:500 13px/1.2 'Inter',sans-serif;color:#3b352f}
+.hb b{text-align:right;color:#141414;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:99px;background:#efe8de;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:#ff5b24}
+.leg{display:inline-flex;align-items:center;gap:6px;font:500 12px 'Inter',sans-serif;color:#5f574e}
+.leg i{width:8px;height:8px;border-radius:99px;display:inline-block}
+.tb{width:100%;border-collapse:collapse;font:500 13px/1.2 'Inter',sans-serif;color:#3b352f}
+.tb th{font:600 11px/1 'Inter',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7a7168;text-align:left;padding:0 0 10px}
+.tb td{padding:10px 0;border-top:1px solid #efe8de;font-variant-numeric:tabular-nums}
+.tb .r{text-align:right}
+.pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:99px;font:600 12px/1 'Inter',sans-serif;border:1.5px solid}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f3eee7; color: #141414; font-family: 'Inter', sans-serif; display: flex; flex-wrap: wrap; box-sizing: border-box;">
+
+  <!-- NAVEGACIÓN -->
+  <aside style="flex: 1 1 230px; max-width: 250px; background: #fffdfa; border-right: 1px solid #e3dbd0; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; border: 2px solid #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V9l8-5 8 5v12"/><path d="M10 21v-6h4v6"/></svg></span>
+      <span style="font: 800 20px/1 'Inter Tight', sans-serif;">[marca]</span>
+    </div>
+    <nav aria-label="Secciones" style="display: flex; flex-direction: column; gap: 2px;">
+      <div class="k">Vecinos</div>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8 8 0 0 1-11.7 7.1L4 20l1.4-5A8 8 0 1 1 21 11.5Z"/></svg>Chat</a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>Documentos</a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 11h6M9 15.5h4"/></svg>Mis solicitudes</a>
+      <div class="k" style="margin-top: 14px;">Administración</div>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13.5 6.3 6A2 2 0 0 1 8.2 4.5h7.6A2 2 0 0 1 17.7 6l2.3 7.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg><span style="flex: 1;">Bandeja</span><span class="pill" style="border-color: #ff5b24; color: #c2410c; padding: 3px 8px;">13</span></a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg>Revisar respuestas</a>
+      <div class="k" style="margin-top: 14px;">Plataforma</div>
+      <a class="nav on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>CRM</a>
+      <a class="sn on" href="Main.dc.html">Resumen</a>
+      <a class="sn" href="Calidad.dc.html">Calidad</a>
+      <a class="sn" href="Uso.dc.html">Uso y costos</a>
+    </nav>
+    <a class="nav" href="#" style="margin-top: auto;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4M8 8l-4 4 4 4"/></svg>Salir</a>
+  </aside>
+
+  <main style="flex: 999 1 640px; min-width: 0; padding: 22px 26px 30px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px;">
+    <!-- FILTROS -->
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+      <h1 style="margin: 0 auto 0 0; font: 800 26px/1 'Inter Tight', sans-serif; letter-spacing: -0.02em;">Resumen</h1>
+      <label class="fl" style="border-color: #d9d0c4; min-width: 220px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" aria-label="Buscar" placeholder="Buscar métrica" style="border: 0; outline: none; background: transparent; font: 400 13px 'Inter', sans-serif; flex: 1; min-width: 0;"></label>
+      <label class="fl">Consorcio <select style="border: 0; background: transparent; font: 600 13px 'Inter', sans-serif; color: #141414;"><option>Todos</option><option>mercedes-274</option></select></label>
+      <label class="fl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><select aria-label="Período" style="border: 0; background: transparent; font: 600 13px 'Inter', sans-serif; color: #141414;"><option>21/10 – 19/11</option><option>Últimos 7 días</option></select></label>
+      <span style="width: 38px; height: 38px; border-radius: 99px; border: 2px solid #141414; display: flex; align-items: center; justify-content: center; font: 700 13px 'Inter Tight', sans-serif;" aria-label="Equipo de plataforma">EP</span>
+    </header>
+
+    <!-- FILA 1: KPIs + gráfico principal -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <section class="card" style="flex: 1;">
+          <h2 class="ct">Turnos</h2>
+          <div class="big">412</div>
+          <p class="sub"><span class="up">▲ 18 %</span> contra el mes anterior</p>
+        </section>
+        <section class="card" style="flex: 1;">
+          <h2 class="ct">Usuarios activos</h2>
+          <div class="big">37</div>
+          <p class="sub">3 conectados · 12 hoy</p>
+        </section>
+      </div>
+      <section class="card" style="grid-column: span 3;">
+        <div class="hd"><h2 class="ct">Turnos por día</h2><div style="display: flex; gap: 14px;"><span class="leg"><i style="background: #ff5b24;"></i>turnos</span><span class="leg"><i style="background: #141414;"></i>derivados</span></div></div>
+        <div style="display: flex; gap: 12px;">
+          <div style="display: flex; flex-direction: column; justify-content: space-between; height: 220px;" class="sub"><span>60</span><span>40</span><span>20</span><span>0</span></div>
+          <svg viewBox="0 0 800 220" width="100%" height="220" preserveAspectRatio="none" role="img" aria-label="Turnos por día del 21/10 al 19/11, en subida, con pico de 52 el 17/11">
+            <path d="M0 55H800M0 110H800M0 165H800" stroke="#efe8de" stroke-width="1"/>
+            <path d="M0 170 L28 160 L55 175 L83 150 L110 140 L138 195 L166 200 L193 145 L221 128 L248 140 L276 120 L303 130 L331 190 L359 192 L386 118 L414 108 L441 128 L469 98 L497 110 L524 185 L552 188 L579 100 L607 86 L634 104 L662 30 L690 70 L717 180 L745 182 L772 76 L800 90 L800 220 L0 220Z" fill="#ff5b24" fill-opacity="0.12"/>
+            <path d="M0 170 L28 160 L55 175 L83 150 L110 140 L138 195 L166 200 L193 145 L221 128 L248 140 L276 120 L303 130 L331 190 L359 192 L386 118 L414 108 L441 128 L469 98 L497 110 L524 185 L552 188 L579 100 L607 86 L634 104 L662 30 L690 70 L717 180 L745 182 L772 76 L800 90" fill="none" stroke="#ff5b24" stroke-width="2.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+            <path d="M0 210 L83 206 L166 214 L248 204 L331 212 L414 200 L497 204 L579 196 L662 190 L745 210 L800 198" fill="none" stroke="#141414" stroke-width="1.8" stroke-dasharray="4 5" vector-effect="non-scaling-stroke"/>
+          </svg>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding-left: 30px;" class="sub"><span>21/10</span><span>28/10</span><span>04/11</span><span>11/11</span><span>19/11</span></div>
+      </section>
+    </div>
+
+    <!-- FILA 2: KPI anillo + tabla + dos chicas -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;">
+      <section class="card" style="align-items: center;">
+        <h2 class="ct" style="align-self: flex-start;">Respondidas</h2>
+        <div style="width: 150px; height: 150px; border-radius: 99px; background: conic-gradient(#15803d 0 72.3%, #ff5b24 0 83.5%, #141414 0 91%, #d9d0c4 0); display: flex; align-items: center; justify-content: center;" role="img" aria-label="72 % respondidas, 11 % derivadas, 8 % reclamos, 9 % otras"><div style="width: 124px; height: 124px; border-radius: 99px; background: #fffdfa; display: flex; flex-direction: column; align-items: center; justify-content: center;"><span class="big" style="font-size: 30px;">72 %</span><span class="sub">298 de 412</span></div></div>
+        <div style="display: grid; grid-template-columns: repeat(2, auto); gap: 6px 16px;"><span class="leg"><i style="background: #15803d;"></i>respondidas</span><span class="leg"><i style="background: #ff5b24;"></i>derivadas 46</span><span class="leg"><i style="background: #141414;"></i>reclamos 31</span><span class="leg"><i style="background: #d9d0c4;"></i>otras 37</span></div>
+      </section>
+      <section class="card" style="grid-column: span 2;">
+        <div class="hd"><h2 class="ct">Por consorcio</h2><a href="Uso.dc.html" class="sub" style="color: #c2410c; font-weight: 600;">Ver uso →</a></div>
+        <table class="tb">
+          <thead><tr><th scope="col">Consorcio</th><th scope="col" class="r">Turnos</th><th scope="col" class="r">Usuarios</th><th scope="col" class="r">Correctas</th><th scope="col" class="r">Pendientes</th></tr></thead>
+          <tbody>
+            <tr><td><span class="leg"><i style="background: #ff5b24;"></i>mercedes-274</span></td><td class="r">268</td><td class="r">22</td><td class="r"><span class="up">81 %</span></td><td class="r">9</td></tr>
+            <tr><td><span class="leg"><i style="background: #141414;"></i>demo-palmeras</span></td><td class="r">96</td><td class="r">9</td><td class="r"><span class="up">75 %</span></td><td class="r">3</td></tr>
+            <tr><td><span class="leg"><i style="background: #15803d;"></i>demo-robles</span></td><td class="r">48</td><td class="r">6</td><td class="r"><span class="down">58 %</span></td><td class="r">1</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <section class="card">
+          <h2 class="ct">Funcionalidades</h2>
+          <div class="hb">
+            <span>Reglamento</span><div class="bar"><i style="width: 100%;"></i></div><b>173</b>
+            <span>Expensas</span><div class="bar"><i style="width: 70%;"></i></div><b>121</b>
+            <span>Documentos</span><div class="bar"><i style="width: 22%;"></i></div><b>38</b>
+          </div>
+        </section>
+        <section class="card" style="border: 2px solid #141414;">
+          <div class="hd"><h2 class="ct">Tope mensual</h2><span class="sub">US$ 0,74 / 20</span></div>
+          <div style="height: 12px; border-radius: 99px; border: 1.5px solid #141414; padding: 2px; box-sizing: border-box;"><div style="width: 3.7%; min-width: 8px; height: 100%; border-radius: 99px; background: #ff5b24;"></div></div>
+        </section>
+      </div>
+    </div>
+    <p class="sub" style="text-align: right;">Datos de ejemplo</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

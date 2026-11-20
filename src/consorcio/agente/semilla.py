@@ -37,6 +37,7 @@ USUARIOS = [
     ("demo-prop-palmeras", "Pablo Propietario (demo)", False, [(PALMERAS, "propietario", (3,))]),
     ("demo-prop-robles", "Rita Propietaria (demo)", False, [(ROBLES, "propietario", (1,))]),
     ("demo-multi", "Marta Multiconsorcio (demo)", False, [(PALMERAS, "propietario", (5,)), (ROBLES, "administracion", ())]),
+    ("demo-admin-dos", "Daniela Administradora (demo)", False, [(PALMERAS, "administracion", ()), (ROBLES, "administracion", ())]),
     ("demo-plataforma", "Equipo de plataforma (demo)", True, []),
 ]
 

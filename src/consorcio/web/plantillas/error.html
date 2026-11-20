@@ -1,7 +1,30 @@
 {% extends "base.html" %}
+{% import "_iconos.html" as i %}
 {% block titulo %}No se pudo completar{% endblock %}
+{% block bienvenida %}
+<div class="bienvenida-texto">
+  <span>Algo no salió</span>
+  <h1>Esta puerta no lleva a ningún lado</h1>
+</div>
+{% endblock %}
 {% block contenido %}
-<h1>No se pudo completar</h1>
+{% if sesion %}
+<div class="error-pagina">
+  <div class="error-texto">
+    <span class="chip chip-rojo">No se pudo completar</span>
+    <h1>Esta puerta no lleva a ningún lado</h1>
+    {% include "_error.html" %}
+    <div class="acciones">
+      <a href="/consorcios" class="boton">Volver al inicio {{ i.icono("flecha") }}</a>
+    </div>
+  </div>
+  <div class="error-dibujo" aria-hidden="true">{{ i.icono("puerta") }}</div>
+</div>
+{% else %}
+<div>
+  <h1>No se pudo completar</h1>
+</div>
 {% include "_error.html" %}
-<p><a href="/consorcios">Volver al inicio</a></p>
+<a href="/entrar" class="boton">Ir a ingresar</a>
+{% endif %}
 {% endblock %}
