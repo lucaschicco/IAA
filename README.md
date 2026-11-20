@@ -79,6 +79,8 @@ El diagrama es el diseño completo. Hoy funcionan por la web el router, reglamen
 - [x] CRM para el equipo de plataforma → `/crm` (01/11)
 - [x] Tope de gasto mensual en la aplicación (01/11); falta contrastarlo con una factura real
 - [x] Login real con mail, contraseña e invitaciones, sobre el código de Lucas → `auth/` (09/11); falta la pantalla para invitar y cargar unidades
+- [x] Medidor de certeza por respuesta y pantalla para que la administración revise respuestas → `/revisar`; calibración en el CRM (19/11)
+- [ ] Juez automático (otro modelo que revisa si la respuesta se apoya en la fuente) y casos de prueba a partir de las revisiones
 
 **Cierre**
 - [ ] Correr la evaluación sobre el set de test
