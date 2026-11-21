@@ -37,8 +37,10 @@ así que la diferencia mide solo el router.
 ## Set
 
 `datos/evaluacion/mensajes_agente.csv`. Las columnas se explican en `datos/evaluacion/LEEME.md`. Hoy
-tiene 12 mensajes. La meta es llegar a unos 36 (18 dev y 18 test), parejos entre los 6 caminos y
-entre directos e indirectos. Faltan:
+tiene 12 mensajes, todos en dev. El 21/11 se probaron a mano en la web, también los 6 que eran de test,
+y un mensaje que ya se vio no sirve para el número final. La meta es llegar a unos 36: 18 en dev (los 12
+de hoy y 6 nuevos) y 18 en un test nuevo, parejos entre los 6 caminos y entre directos e indirectos.
+Faltan:
 
 - conversaciones de varios mensajes (el router ve los últimos 6 de la charla);
 - otros roles: administración, consejo e inquilino;
@@ -97,8 +99,8 @@ Haiku 5.5 y Gemini 2.5 Flash, como en la evaluación de consultas.
 3. Las dos configuraciones corren con el mismo modelo, la misma base de demo y en el mismo orden.
 4. Dev se corre todas las veces que haga falta. Cada cambio al prompt del router
    (`skills/agente/SKILL.md`) o a las reglas del baseline se anota en `docs/bitacora.md`.
-5. Test se corre una vez por configuración, con las versiones finales. Lo que salga se informa, gane
-   quien gane.
+5. Test se corre una vez por configuración, con las versiones finales. Antes no se prueba, ni siquiera a
+   mano en la web. Lo que salga se informa, gane quien gane.
 6. Los turnos se guardan con `origen='evaluacion'`, así no cuentan en el CRM.
 7. El modelo de mentira (`LLM_PROVIDER=fake`) sirve para probar que el comando anda. Sus números no
    son resultados.

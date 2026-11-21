@@ -24,8 +24,8 @@ camino correcto y termina como corresponde. Está escrito sobre los datos invent
 sembrar-demo` (`src/consorcio/agente/semilla.py`), así que no tiene datos personales y cualquiera lo puede
 reproducir sin `datos/` ni el volcado de la base. Columnas:
 
-- `id` y `particion`: `dev` para iterar, `test` solo para el número final. De cada tipo, uno de cada estilo
-  queda en cada partición, y la partición no se mueve.
+- `id` y `particion`: `dev` para iterar, `test` solo para el número final. En cada partición, cada camino
+  tiene mensajes directos e indirectos.
 - `consorcio` y `usuario`: `consorcio` es el edificio y `usuario`, el `sujeto_externo` del usuario demo que
   escribe. El rol y las unidades salen de la semilla: Pablo (`demo-prop-palmeras`) es propietario de la UF 3.
 - `mensaje`: tal como lo escribiría un vecino.
@@ -43,6 +43,8 @@ reproducir sin `datos/` ni el volcado de la base. Columnas:
 - `nota`: por qué está el caso, para quien revise las etiquetas.
 
 Las etiquetas se fijan y se revisan a mano antes de correr con un modelo real, y no se cambian mirando los
-resultados de `test`. Hoy hay 12 mensajes, 2 por camino. Falta llevarlo a unos 36, con conversaciones de
-más de un mensaje ("¿y en julio?"), otros roles y más casos en los que los datos no deben cruzar de
-consorcio. El comando que lo corre todavía no existe.
+resultados de `test`. Los mensajes de `test` no se prueban antes de la corrida final, ni siquiera a mano en
+la web: el 21/11 se probaron así los 12 primeros, también los 6 de `test`, y por eso pasaron todos a `dev`.
+Hoy hay 12 mensajes, 2 por camino, todos en `dev`. Falta llevarlo a unos 36 (18 en `dev` y 18 en un `test`
+nuevo), con conversaciones de más de un mensaje ("¿y en julio?"), otros roles y más casos en los que los
+datos no deben cruzar de consorcio. El comando que lo corre todavía no existe.
