@@ -43,6 +43,7 @@
       {% if identidad and identidad.es_administracion %}
       {{ item("/bandeja", "Bandeja", "bandeja", actual, por_atender) }}
       {{ item("/revisar", "Revisar respuestas", "revisar", actual) }}
+      {{ item("/invitaciones", "Invitar", "usuarios", actual) }}
       {% endif %}
       {% endif %}
       {% if plataforma %}
@@ -64,11 +65,11 @@
     <header class="barra">
       <label for="menu" class="boton-menu" aria-hidden="true">{{ i.icono("menu") }}<span>Menú</span></label>
       <div class="quien">
-        {% set rotulo_rol = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
+        {% set rol_barra = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
         {% if selector %}
         {# Cambiar de consorcio sin salir de la pantalla: un <details> sin scripts; cada fila es un POST con destino #}
         {% set destino = "" if request.url.path == "/panel" else request.url.path %}
-        {% set rol_actual = rotulo_rol.get(identidad.rol, identidad.rol) if identidad else "" %}
+        {% set rol_actual = rol_barra.get(identidad.rol, identidad.rol) if identidad else "" %}
         <details class="contexto-menu">
           {% if consorcio %}
           <summary class="contexto" title="{{ consorcio }} · {{ rol_actual }}"><span class="solo-lector">Cambiar de consorcio. Actual: </span><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rol_actual }}</span>{{ i.icono("desplegar") }}</summary>
@@ -81,13 +82,13 @@
               {% for m in selector %}
               <li>
                 {% if m.actual %}
-                <span class="contexto-opcion" aria-current="true"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rotulo_rol.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span>{{ i.icono("listo") }}</span>
+                <span class="contexto-opcion" aria-current="true"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rol_barra.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span>{{ i.icono("listo") }}</span>
                 {% else %}
                 <form method="post" action="/consorcios">
                   {% include "_csrf.html" %}
                   <input type="hidden" name="consorcio_id" value="{{ m.consorcio_id }}">
                   <input type="hidden" name="destino" value="{{ destino }}">
-                  <button type="submit" class="contexto-opcion"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rotulo_rol.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span></button>
+                  <button type="submit" class="contexto-opcion"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rol_barra.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span></button>
                 </form>
                 {% endif %}
               </li>
@@ -99,7 +100,7 @@
             </div>
           </div>
         </details>
-        {% elif consorcio %}<span class="contexto" title="{{ consorcio }} · {{ rotulo_rol.get(identidad.rol, identidad.rol) }}"><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rotulo_rol.get(identidad.rol, identidad.rol) }}</span></span>
+        {% elif consorcio %}<span class="contexto" title="{{ consorcio }} · {{ rol_barra.get(identidad.rol, identidad.rol) }}"><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rol_barra.get(identidad.rol, identidad.rol) }}</span></span>
         {% elif plataforma %}<span class="contexto-plataforma">Equipo de plataforma</span>{% endif %}
         <span class="avatar">{{ i.icono("usuario") }}</span>
       </div>

@@ -996,6 +996,16 @@ def listar_documentos(consorcio_id: str | None = None) -> list[dict]:
         return [_fila_documento(d) for d in s.scalars(q).all()]
 
 
+def unidades_de(consorcio_id: str) -> list[dict]:
+    """Piso y depto de las unidades funcionales cargadas en el consorcio."""
+    cid = exigir_consorcio(consorcio_id)
+    crear_tablas()
+    with Session(engine()) as s:
+        filas = s.execute(select(UnidadFuncional.piso, UnidadFuncional.depto)
+                          .where(UnidadFuncional.consorcio_id == cid).order_by(UnidadFuncional.id)).all()
+    return [{"piso": p, "depto": d} for p, d in filas]
+
+
 def listar_documentos_de_todos_los_consorcios() -> list[dict]:
     """Cruza consorcios a propósito (con el suyo en cada fila): solo para la CLI de administración."""
     crear_tablas()

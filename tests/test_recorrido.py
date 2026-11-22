@@ -350,7 +350,7 @@ def esperado(sujeto: str | None, consorcio: str | None, ruta: str) -> set[int]:
         return {303} if consorcio is None or rol == "administracion" else {200} if rol else {403}
     if ruta == "/documentos":
         return {303} if consorcio is None else {200} if rol else {403}
-    if ruta in ("/bandeja", "/revisar"):
+    if ruta in ("/bandeja", "/revisar", "/invitaciones"):
         return {303} if consorcio is None else {200} if rol == "administracion" else {403}
     return {200, 303, 403, 404}
 

@@ -122,3 +122,43 @@ def aceptar_invitacion(con, token: str, nombre: str, contrasena: str) -> dict:
     )
     con.execute("UPDATE invitaciones SET usada_en = now() WHERE id = %s", (invitacion["id"],))
     return {"id": usuario["id"], "sujeto_externo": usuario["sujeto_externo"]}
+
+
+def unidad_para(con, consorcio_id: str, piso: str, depto: str) -> int:
+    """La unidad funcional con ese piso y depto en el consorcio; si no está cargada, la crea. Así un consorcio
+    nuevo, sin liquidaciones todavía, puede invitar a sus vecinos."""
+    piso, depto = piso.strip().upper(), depto.strip().upper()
+    if not piso or not depto or len(piso) > 20 or len(depto) > 20:
+        raise PedidoInvalido("Indicá piso y departamento de la unidad")
+    fila = con.execute(
+        "SELECT id FROM unidades_funcionales WHERE consorcio_id = %s AND upper(piso) = %s AND upper(depto) = %s "
+        "ORDER BY id LIMIT 1", (consorcio_id, piso, depto)).fetchone()
+    if fila:
+        return fila["id"]
+    return con.execute("INSERT INTO unidades_funcionales (consorcio_id, piso, depto) VALUES (%s, %s, %s) RETURNING id",
+                       (consorcio_id, piso, depto)).fetchone()["id"]
+
+
+def anular_pendientes(con, consorcio_id: str, email: str) -> int:
+    """Una invitación nueva para el mismo mail deja sin efecto las anteriores sin usar: queda un solo link vivo."""
+    return con.execute(
+        "UPDATE invitaciones SET vence_en = now() WHERE consorcio_id = %s AND lower(email) = %s "
+        "AND usada_en IS NULL AND vence_en > now()", (consorcio_id, email.strip().lower())).rowcount
+
+
+def anular_invitacion(con, consorcio_id: str, invitacion_id: int) -> bool:
+    """Vence ya una invitación sin usar del consorcio. False si no existe, es de otro consorcio o ya no servía."""
+    return con.execute(
+        "UPDATE invitaciones SET vence_en = now() WHERE id = %s AND consorcio_id = %s "
+        "AND usada_en IS NULL AND vence_en > now()", (invitacion_id, consorcio_id)).rowcount == 1
+
+
+def listar_invitaciones(con, consorcio_id: str, limite: int = 50) -> list[dict]:
+    """Las invitaciones del consorcio, las más nuevas primero, con su estado. Nunca el token: solo está su hash."""
+    return con.execute(
+        """SELECT i.id, i.email, i.rol, i.creada_en, i.vence_en, i.usada_en, u.piso, u.depto,
+                  CASE WHEN i.usada_en IS NOT NULL THEN 'usada'
+                       WHEN i.vence_en > now() THEN 'pendiente' ELSE 'vencida' END AS estado
+           FROM invitaciones i LEFT JOIN unidades_funcionales u ON u.id = i.unidad_id
+           WHERE i.consorcio_id = %s ORDER BY i.creada_en DESC, i.id DESC LIMIT %s""",
+        (consorcio_id, limite)).fetchall()

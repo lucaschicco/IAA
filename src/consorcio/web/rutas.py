@@ -50,7 +50,8 @@ from ..agente.ficha import ficha
 from ..agente.grafo import atender
 from ..agente.memoria import conversacion_valida, conversaciones_de, historial
 from ..agente.panel import panel as datos_panel
-from ..almacen.postgres import MOTIVOS_REVISION, VEREDICTOS, listar_documentos
+from ..almacen.postgres import MOTIVOS_REVISION, VEREDICTOS, listar_documentos, unidades_de
+from ..auth.config import DIAS_INVITACION
 from ..canales.formato import formatear_ingesta
 from ..canales.telegram import ruta_entrada
 from ..config import config
@@ -68,6 +69,7 @@ from ..identidad import (
     resolver_identidad,
 )
 from ..ingesta.grafo import ingestar_pdf
+from . import invitaciones as invitaciones_web
 from .autenticacion import LoginFallido, datos_invitacion, proveedor_para, registrar
 from .sesion import (
     COOKIE_PREVIA,
@@ -355,8 +357,8 @@ def inicio_del_rol(es_administracion: bool) -> str:
 # Desde el panel y desde la barra se entra a un consorcio directo a una pantalla: solo rutas propias, nunca
 # una URL externa
 DESTINO_VALIDO = re.compile(
-    r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
-SOLO_ADMINISTRACION = {"/bandeja", "/revisar"}
+    r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel|invitaciones)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
+SOLO_ADMINISTRACION = {"/bandeja", "/revisar", "/invitaciones"}
 SOLO_VECINOS = {"/chat", "/mis-solicitudes"}
 
 
@@ -635,3 +637,45 @@ def revisar_post(turno_id: str, identidad: Administrador, datos: Formulario) -> 
     except SinPermiso as e:
         raise HTTPException(status_code=403) from e
     return _ir_a("/revisar?ver=revisadas" if _campo(datos, "ver") == "revisadas" else "/revisar")
+
+
+# ------------------------------------------------------------------ invitaciones
+
+
+def _pantalla_invitar(request: Request, sesion: Sesion, identidad: Identidad, status_code: int = 200,
+                      **datos) -> Response:
+    return pagina(request, "invitaciones.html", sesion, identidad, status_code=status_code,
+                  roles=invitaciones_web.ROLES_INVITABLES, dias=DIAS_INVITACION,
+                  lista=invitaciones_web.invitaciones(identidad), unidades=unidades_de(identidad.consorcio_id),
+                  **datos)
+
+
+@router.get("/invitaciones")
+def invitaciones(request: Request, sesion: SesionActual, identidad: Administrador) -> Response:
+    return _pantalla_invitar(request, sesion, identidad)
+
+
+@router.post("/invitaciones", dependencies=POST_ADMINISTRADOR)
+def invitaciones_post(request: Request, sesion: SesionActual, identidad: Administrador, datos: Formulario) -> Response:
+    """El link se muestra en esta misma respuesta y nunca más: a la base va solo el hash del token."""
+    email, rol = _campo(datos, "email")[:320], _campo(datos, "rol")
+    piso, depto = _campo(datos, "piso")[:20], _campo(datos, "depto")[:20]
+    try:
+        token, vence_en = invitaciones_web.invitar(identidad, email, rol, piso, depto)
+    except invitaciones_web.InvitacionRechazada as e:
+        return _pantalla_invitar(request, sesion, identidad, 422, error=str(e), email=email, rol=rol,
+                                 piso=piso, depto=depto)
+    con_unidad = rol in invitaciones_web.CON_UNIDAD
+    creada = {"email": email.lower(), "rol": rol, "vence_en": vence_en,
+              "unidad": f"{piso.upper()}-{depto.upper()}" if con_unidad else ""}
+    link = str(request.url_for("registro").include_query_params(token=token))
+    respuesta = _pantalla_invitar(request, sesion, identidad, 201, link=link, creada=creada)
+    respuesta.headers["Cache-Control"] = "no-store"  # el link no tiene que quedar en ninguna caché
+    return respuesta
+
+
+@router.post("/invitaciones/{invitacion_id}/anular", dependencies=POST_ADMINISTRADOR)
+def invitaciones_anular(invitacion_id: str, identidad: Administrador) -> Response:
+    if not invitaciones_web.anular(identidad, _id(invitacion_id)):
+        raise HTTPException(status_code=404)
+    return _ir_a("/invitaciones")

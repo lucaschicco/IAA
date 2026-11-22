@@ -71,6 +71,15 @@
             {% for m in f.inquilinos %}<li><span class="ficha-unidad">{{ m.unidad }}</span><span class="ficha-principal"><strong>{{ m.nombre }}</strong><small>{{ rotulo_rol.get(m.rol, m.rol) }}</small></span></li>{% endfor %}
           </ul>
           {% else %}<p class="ficha-vacio">Todavía no se sumó ningún vecino a la app.</p>{% endif %}
+          {% if membresia.consorcio_id == sesion.consorcio_id %}<a href="/invitaciones" class="ficha-ir">Invitar a alguien {{ i.icono("flecha") }}</a>
+          {% else %}
+          <form method="post" action="/consorcios" class="ficha-entrar">
+            {% include "_csrf.html" %}
+            <input type="hidden" name="consorcio_id" value="{{ membresia.consorcio_id }}">
+            <input type="hidden" name="destino" value="/invitaciones">
+            <button type="submit" class="enlace ficha-ir">Invitar a alguien {{ i.icono("flecha") }}</button>
+          </form>
+          {% endif %}
         </div>
         <div class="ficha-panel ficha-panel-integrantes">
           <ul class="ficha-lista">
