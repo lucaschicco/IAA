@@ -678,7 +678,8 @@ def test_sin_base_atender_no_propaga(monkeypatch):
 
 
 def _mlflow_de_mentira() -> tuple[SimpleNamespace, list[bool]]:
-    """Como el real: un `start_run` con otro activo y sin `nested` lanza excepción."""
+    """Como el real: un `start_run` con otro activo y sin `nested` lanza excepción, y la última traza
+    terminada no es la abierta (el turno tiene que anotar la abierta, `traza-1`)."""
     activos: list[str] = []
     anidados: list[bool] = []
 
@@ -689,10 +690,13 @@ def _mlflow_de_mentira() -> tuple[SimpleNamespace, list[bool]]:
         activos.append(run_name)
 
     nada = lambda *a, **k: None  # noqa: E731
+    actualizaciones: list[dict] = []  # cada `update_current_trace`
     return SimpleNamespace(
         set_tracking_uri=nada, set_experiment=nada, set_tags=nada, log_metrics=nada, set_trace_tag=nada,
         langchain=SimpleNamespace(autolog=nada), start_run=start_run, active_run=lambda: activos[-1] if activos else None,
-        end_run=lambda status=None: activos.pop(), get_last_active_trace_id=lambda: "traza-1",
+        end_run=lambda status=None: activos.pop(), get_active_trace_id=lambda: "traza-1",
+        get_last_active_trace_id=lambda thread_local=False: "traza-anterior",
+        update_current_trace=lambda **k: actualizaciones.append(k), actualizaciones=actualizaciones,
     ), anidados
 
 
@@ -709,6 +713,24 @@ def test_la_consulta_queda_anidada_en_la_traza_del_turno(monkeypatch):
     assert r["resultado"] == "respondida" and anidados == [False, True]
     assert turno(r["turno_id"]).mlflow_traza_id == "traza-1"
     assert observabilidad._skill_de("agente") == "agente" and observabilidad._skill_de("consulta") == "consulta"
+
+
+def test_la_traza_del_turno_lleva_la_conversacion_y_el_numero_de_usuario(monkeypatch):
+    """Para la vista Sessions de MLflow: la conversación como sesión y el usuario por su número interno,
+    nunca por su nombre ni su mail. En el primer mensaje la conversación recién nace al registrar."""
+    mlflow, _ = _mlflow_de_mentira()
+    monkeypatch.setitem(sys.modules, "mlflow", mlflow)
+    monkeypatch.setattr(observabilidad, "_autolog_prendido", False)
+    monkeypatch.setattr(config, "mlflow_tracking_uri", "http://mlflow-de-mentira")
+    monkeypatch.setattr(observabilidad, "_alcanzable", lambda _uri: True)
+    monkeypatch.setattr(config, "fake_guionado", True)
+
+    primero = atender("¿se permiten mascotas?", yo(), None, "web")
+    segundo = atender("¿y los ruidos?", yo(), primero["conversacion_id"], "web")
+
+    assert primero["conversacion_id"] and segundo["conversacion_id"] == primero["conversacion_id"]
+    esperado = {"session_id": primero["conversacion_id"], "user": str(yo().usuario_id)}
+    assert mlflow.actualizaciones == [esperado, esperado]
 
 
 @pytest.mark.parametrize("metodo", ["end_run", "log_metrics", "set_tags"])
@@ -742,6 +764,7 @@ def mlflow_contado(monkeypatch):
     monkeypatch.setitem(sys.modules, "mlflow", mlflow)
     monkeypatch.setattr(observabilidad, "_autolog_prendido", False)
     monkeypatch.setattr(observabilidad, "_mlflow_caido_hasta", 0.0)
+    monkeypatch.setattr(observabilidad, "_configurado_para", None)
     monkeypatch.setattr(config, "mlflow_tracking_uri", "http://mlflow-caido:5000")
     monkeypatch.setattr(config, "fake_guionado", True)
     return mlflow, llamadas
@@ -795,6 +818,17 @@ def test_puerto_abierto_con_servidor_colgado_tampoco_se_reintenta(monkeypatch, m
     atender("hola", yo(), None, "web")
     atender("hola", yo(), None, "web")
     assert llamadas == ["set_experiment"]
+
+
+def test_la_consulta_anidada_no_vuelve_a_configurar_mlflow(monkeypatch, mlflow_contado):
+    """`set_experiment` reinicia el proveedor de trazas: llamado por la consulta con la traza del turno
+    abierta, la dejaba "In progress" sin el span raíz (16/11). Se configura una vez por proceso."""
+    _, llamadas = mlflow_contado
+    monkeypatch.setattr(observabilidad.socket, "create_connection", _puerto_abierto)
+    primero = atender("¿se permiten mascotas?", yo(), None, "web")
+    segundo = atender("¿se permiten mascotas?", yo(), None, "web")
+    assert primero["resultado"] == segundo["resultado"] == "respondida"
+    assert llamadas == ["set_experiment"]  # solo el primer turno; ni su consulta ni el segundo turno
 
 
 def test_un_uri_local_de_mlflow_no_necesita_sondeo():

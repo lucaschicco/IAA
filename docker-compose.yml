@@ -80,6 +80,8 @@ services:
       timeout: 5s
       retries: 10
 
+  # Trazas y métricas (docs/observabilidad.md). Sin login y con textos de todos los consorcios: el puerto se
+  # publica solo en la máquina local. La app lo alcanza igual por la red de Compose (http://mlflow:5000).
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     container_name: consorcio-mlflow
@@ -92,7 +94,7 @@ services:
       --backend-store-uri sqlite:////mlflow/mlflow.db
       --artifacts-destination /mlflow/mlartifacts
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./mlflow:/mlflow
 

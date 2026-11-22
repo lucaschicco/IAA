@@ -15,3 +15,36 @@ cocheras, 7 de las actas, 2 de las convocatorias, 2 de la liquidación de febrer
 de copropiedad y 2 "trampa". Ampliar cuando se revisen a mano las transcripciones del reglamento y las actas.
 
 Las preguntas son de Mercedes 274: `evaluar-consultas` corre sobre el consorcio `CONSORCIO_POR_DEFECTO` (`mercedes-274`) salvo que se pase `--consorcio`. Si se agregan preguntas de otro consorcio, agregar una columna `consorcio` al CSV.
+
+## Mensajes del agente
+
+`mensajes_agente.csv`: mensajes de vecinos para evaluar el agente completo (`atender`). `preguntas.csv` mide
+solo `preguntar`, el camino de reglamento, y el router nunca se evaluó. Este set mide si cada mensaje va al
+camino correcto y termina como corresponde. Está escrito sobre los datos inventados de `consorcio
+sembrar-demo` (`src/consorcio/agente/semilla.py`), así que no tiene datos personales y cualquiera lo puede
+reproducir sin `datos/` ni el volcado de la base. Columnas:
+
+- `id` y `particion`: `dev` para iterar, `test` solo para el número final. En cada partición, cada camino
+  tiene mensajes directos e indirectos.
+- `consorcio` y `usuario`: `consorcio` es el edificio y `usuario`, el `sujeto_externo` del usuario demo que
+  escribe. El rol y las unidades salen de la semilla: Pablo (`demo-prop-palmeras`) es propietario de la UF 3.
+- `mensaje`: tal como lo escribiría un vecino.
+- `intencion_esperada`: uno de los seis caminos del router, `reglamento`, `expensas`, `documentos`,
+  `reclamo`, `derivar` y `fuera_de_alcance`.
+- `resultado_esperado`: cómo debería terminar el turno, con el vocabulario de `turnos.resultado`
+  (`respondida`, `derivada`, `reclamo_pendiente`, `fuera_de_alcance`, `sin_datos`). Se mide aparte de la
+  intención: un pedido que el router manda a reglamento puede terminar bien derivado igual.
+- `debe_contener`: texto que tiene que aparecer en la respuesta, con la cita incluida (se compara sin
+  acentos ni mayúsculas). Los importes van como los escribe la respuesta (`110.000,00`) y salen de la
+  semilla, no de una corrida. Vacío: alcanza con el resultado.
+- `estilo`: `directo` si nombra el tema con la palabra más obvia (expensas, reclamo, documentos) e
+  `indirecto` si dice lo mismo sin ella. Un router por palabras clave debería acertar los directos y fallar
+  los indirectos. Por eso se informan por separado.
+- `nota`: por qué está el caso, para quien revise las etiquetas.
+
+Las etiquetas se fijan y se revisan a mano antes de correr con un modelo real, y no se cambian mirando los
+resultados de `test`. Los mensajes de `test` no se prueban antes de la corrida final, ni siquiera a mano en
+la web: el 21/11 se probaron así los 12 primeros, también los 6 de `test`, y por eso pasaron todos a `dev`.
+Hoy hay 12 mensajes, 2 por camino, todos en `dev`. Falta llevarlo a unos 36 (18 en `dev` y 18 en un `test`
+nuevo), con conversaciones de más de un mensaje ("¿y en julio?"), otros roles y más casos en los que los
+datos no deben cruzar de consorcio. El comando que lo corre todavía no existe.
