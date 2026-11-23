@@ -36,18 +36,20 @@ así que la diferencia mide solo el router.
 
 ## Set
 
-`datos/evaluacion/mensajes_agente.csv`. Las columnas se explican en `datos/evaluacion/LEEME.md`. Hoy
-tiene 12 mensajes, todos en dev. El 21/11 se probaron a mano en la web, también los 6 que eran de test,
-y un mensaje que ya se vio no sirve para el número final. La meta es llegar a unos 36: 18 en dev (los 12
-de hoy y 6 nuevos) y 18 en un test nuevo, parejos entre los 6 caminos y entre directos e indirectos.
-Faltan:
+`datos/evaluacion/mensajes_agente.csv`. Las columnas se explican en `datos/evaluacion/LEEME.md`. Tiene
+36 mensajes: 18 en dev y 18 en test, con 3 por camino en test (8 directos y 10 indirectos). Los 12
+primeros se probaron a mano en la web el 21/11, también los 6 que eran de test; como un mensaje ya visto
+no sirve para el número final, pasaron a dev, y el test se escribió nuevo el 23/11. Además de los seis
+caminos, cubre:
 
-- conversaciones de varios mensajes (el router ve los últimos 6 de la charla);
-- otros roles: administración, consejo e inquilino;
-- más casos de aislamiento entre consorcios;
-- saludos ("Hola", "Gracias"). El 21/11, con el router de la demo, "Hola" fue a reglamento, no
-  encontró respaldo y dejó una solicitud en la bandeja: cada derivación crea una (`nodos._derivar`).
-  `skills/agente/SKILL.md` no dice nada de saludos.
+- una conversación de dos mensajes ("¿y en julio?"), porque el router ve los últimos 6 de la charla;
+- la administración consultando otra unidad, y una usuaria con roles distintos en los dos edificios. La
+  demo no tiene usuarios de consejo ni inquilinos, así que esos roles no se miden;
+- casos de aislamiento: preguntas cuya respuesta cambia de un edificio a otro (horarios de ruidos,
+  cocheras, actas, importes), con la respuesta que delataría el cruce en la nota;
+- un saludo. El 21/11, con el router de la demo, "Hola" fue a reglamento, no encontró respaldo y dejó
+  una solicitud en la bandeja: cada derivación crea una (`nodos._derivar`). `skills/agente/SKILL.md` no
+  dice nada de saludos.
 
 Los datos son los de `consorcio sembrar-demo`: inventados, sin datos personales y reproducibles. Como
 la demo tiene 4 documentos cortos, este set mide el router y los caminos, no la búsqueda.

@@ -27,7 +27,12 @@ reproducir sin `datos/` ni el volcado de la base. Columnas:
 - `id` y `particion`: `dev` para iterar, `test` solo para el número final. En cada partición, cada camino
   tiene mensajes directos e indirectos.
 - `consorcio` y `usuario`: `consorcio` es el edificio y `usuario`, el `sujeto_externo` del usuario demo que
-  escribe. El rol y las unidades salen de la semilla: Pablo (`demo-prop-palmeras`) es propietario de la UF 3.
+  escribe. El rol y las unidades salen de la semilla: Pablo (`demo-prop-palmeras`) es propietario de la UF 3
+  de Las Palmeras, Ana (`demo-admin-palmeras`) es su administradora, Rita (`demo-prop-robles`) es propietaria
+  de la UF 1 de Los Robles y Marta (`demo-multi`) es propietaria en Las Palmeras y administradora en Los
+  Robles. La demo no tiene usuarios de consejo ni inquilinos, así que esos roles no se miden.
+- `conversacion`: vacía, el mensaje va en una conversación nueva. Con un valor (`d1`), los mensajes que lo
+  comparten van en la misma conversación, en orden de `id`: así se mide la memoria del router.
 - `mensaje`: tal como lo escribiría un vecino.
 - `intencion_esperada`: uno de los seis caminos del router, `reglamento`, `expensas`, `documentos`,
   `reclamo`, `derivar` y `fuera_de_alcance`.
@@ -45,6 +50,8 @@ reproducir sin `datos/` ni el volcado de la base. Columnas:
 Las etiquetas se fijan y se revisan a mano antes de correr con un modelo real, y no se cambian mirando los
 resultados de `test`. Los mensajes de `test` no se prueban antes de la corrida final, ni siquiera a mano en
 la web: el 21/11 se probaron así los 12 primeros, también los 6 de `test`, y por eso pasaron todos a `dev`.
-Hoy hay 12 mensajes, 2 por camino, todos en `dev`. Falta llevarlo a unos 36 (18 en `dev` y 18 en un `test`
-nuevo), con conversaciones de más de un mensaje ("¿y en julio?"), otros roles y más casos en los que los
-datos no deben cruzar de consorcio. El comando que lo corre todavía no existe.
+Hay 36 mensajes, 18 en `dev` y 18 en `test` (3 por camino). Las etiquetas de los 12 primeros las revisó Jess
+el 23/11; las de los 24 nuevos, escritos ese día, se revisan antes de la primera corrida con un modelo.
+Además de los seis caminos, el set cubre una conversación de dos mensajes ("¿y en julio?"), un saludo, la
+administración consultando otra unidad y casos en los que los datos no deben cruzar de consorcio: la
+`nota` dice qué respuesta delataría el cruce. El comando que lo corre todavía no existe.

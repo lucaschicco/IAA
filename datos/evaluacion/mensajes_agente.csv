@@ -1,13 +1,37 @@
-id,particion,consorcio,usuario,mensaje,intencion_esperada,resultado_esperado,debe_contener,estilo,nota
-1,dev,demo-palmeras,demo-prop-palmeras,¿Se pueden tener mascotas en el edificio?,reglamento,respondida,mascotas pequeñas,directo,"Las Palmeras las permite y Los Robles las prohíbe."
-2,dev,demo-robles,demo-prop-robles,¿Puedo tener un perro en mi departamento?,reglamento,respondida,prohibida,indirecto,"Dice perro y el reglamento dice animales. Si contesta que se permiten, la respuesta salió del reglamento de Las Palmeras: los datos cruzaron de consorcio."
-3,dev,demo-palmeras,demo-prop-palmeras,¿Cuánto tengo que pagar de expensas en agosto?,expensas,respondida,"110.000,00",directo,"Pablo es la UF 3 y agosto es 2026-08. El importe sale por SQL, nunca del modelo."
-4,dev,demo-palmeras,demo-prop-palmeras,¿Cuánto salió el service del ascensor en julio?,expensas,respondida,"200.000,00",indirecto,"No dice expensas ni gasto. Es el gasto de julio de ASCENSORES INVENTADOS."
-5,dev,demo-palmeras,demo-admin-palmeras,¿Qué documentos hay cargados?,documentos,respondida,acta-demo.pdf,directo,"Lista los 4 documentos de Las Palmeras."
-6,dev,demo-palmeras,demo-prop-palmeras,¿Qué papeles del edificio tienen subidos?,documentos,respondida,acta-demo.pdf,indirecto,"No dice documentos."
-7,dev,demo-palmeras,demo-prop-palmeras,Quiero hacer un reclamo: hay una pérdida de agua en el palier del segundo piso,reclamo,reclamo_pendiente,,directo,"Deja una solicitud pendiente en la bandeja de la administración."
-8,dev,demo-palmeras,demo-prop-palmeras,El ascensor no funciona desde ayer a la tarde,reclamo,reclamo_pendiente,,indirecto,"Informa un problema sin decir reclamo."
-9,dev,demo-palmeras,demo-prop-palmeras,Necesito hablar con una persona de la administración,derivar,derivada,,directo,"Pide una persona."
-10,dev,demo-palmeras,demo-prop-palmeras,Necesito un certificado de libre deuda para vender mi departamento,derivar,derivada,,indirecto,"Solo lo puede hacer la administración. Si el router lo manda a reglamento, la consulta no encuentra respaldo y también deriva: falla la intención pero acierta el resultado."
-11,dev,demo-robles,demo-prop-robles,¿Cómo va a estar el clima mañana?,fuera_de_alcance,fuera_de_alcance,,directo,
-12,dev,demo-palmeras,demo-prop-palmeras,Pasame una receta de empanadas,fuera_de_alcance,fuera_de_alcance,,indirecto,"Si el router lo manda a reglamento, la consulta no encuentra respaldo y deriva a una persona por algo que no es del consorcio."
+id,particion,consorcio,usuario,conversacion,mensaje,intencion_esperada,resultado_esperado,debe_contener,estilo,nota
+1,dev,demo-palmeras,demo-prop-palmeras,,¿Se pueden tener mascotas en el edificio?,reglamento,respondida,mascotas pequeñas,directo,"Las Palmeras las permite y Los Robles las prohíbe."
+2,dev,demo-robles,demo-prop-robles,,¿Puedo tener un perro en mi departamento?,reglamento,respondida,prohibida,indirecto,"Dice perro y el reglamento dice animales. Si contesta que se permiten, la respuesta salió del reglamento de Las Palmeras: los datos cruzaron de consorcio."
+3,dev,demo-palmeras,demo-prop-palmeras,,¿Cuánto tengo que pagar de expensas en agosto?,expensas,respondida,"110.000,00",directo,"Pablo es la UF 3 y agosto es 2026-08. El importe sale por SQL, nunca del modelo."
+4,dev,demo-palmeras,demo-prop-palmeras,,¿Cuánto salió el service del ascensor en julio?,expensas,respondida,"200.000,00",indirecto,"No dice expensas ni gasto. Es el gasto de julio de ASCENSORES INVENTADOS."
+5,dev,demo-palmeras,demo-admin-palmeras,,¿Qué documentos hay cargados?,documentos,respondida,acta-demo.pdf,directo,"Lista los 4 documentos de Las Palmeras."
+6,dev,demo-palmeras,demo-prop-palmeras,,¿Qué papeles del edificio tienen subidos?,documentos,respondida,acta-demo.pdf,indirecto,"No dice documentos."
+7,dev,demo-palmeras,demo-prop-palmeras,,Quiero hacer un reclamo: hay una pérdida de agua en el palier del segundo piso,reclamo,reclamo_pendiente,,directo,"Deja una solicitud pendiente en la bandeja de la administración."
+8,dev,demo-palmeras,demo-prop-palmeras,,El ascensor no funciona desde ayer a la tarde,reclamo,reclamo_pendiente,,indirecto,"Informa un problema sin decir reclamo."
+9,dev,demo-palmeras,demo-prop-palmeras,,Necesito hablar con una persona de la administración,derivar,derivada,,directo,"Pide una persona."
+10,dev,demo-palmeras,demo-prop-palmeras,,Necesito un certificado de libre deuda para vender mi departamento,derivar,derivada,,indirecto,"Solo lo puede hacer la administración. Si el router lo manda a reglamento, la consulta no encuentra respaldo y también deriva: falla la intención pero acierta el resultado."
+11,dev,demo-robles,demo-prop-robles,,¿Cómo va a estar el clima mañana?,fuera_de_alcance,fuera_de_alcance,,directo,
+12,dev,demo-palmeras,demo-prop-palmeras,,Pasame una receta de empanadas,fuera_de_alcance,fuera_de_alcance,,indirecto,"Si el router lo manda a reglamento, la consulta no encuentra respaldo y deriva a una persona por algo que no es del consorcio."
+13,dev,demo-palmeras,demo-prop-palmeras,d1,¿Cuánto pagué de expensas en agosto?,expensas,respondida,"110.000,00",directo,"Primer mensaje de una conversación de dos."
+14,dev,demo-palmeras,demo-prop-palmeras,d1,¿Y en julio?,expensas,respondida,"100.000,00",indirecto,"Solo se entiende con el mensaje anterior: mide la memoria del router (ve los últimos 6 mensajes)."
+15,dev,demo-palmeras,demo-prop-palmeras,,Hola,fuera_de_alcance,fuera_de_alcance,,indirecto,"Saludo. El 21/11, con el router de la demo, fue a reglamento y dejó una solicitud en la bandeja. Lo mínimo es que no termine derivada; la etiqueta la confirma Jess."
+16,dev,demo-robles,demo-multi,,¿Qué se aprobó en la última asamblea?,reglamento,respondida,bomba de agua,directo,"Marta es propietaria en Las Palmeras y administradora en Los Robles. Acá escribe en Los Robles, cuya acta aprobó cambiar la bomba de agua; si dice palier, la respuesta salió del acta de Las Palmeras."
+17,dev,demo-palmeras,demo-admin-palmeras,,¿Cuánto tiene que pagar la unidad 2-B en agosto?,expensas,respondida,"110.000,00",directo,"La administración consulta otra unidad (2-B es la UF 4)."
+18,dev,demo-palmeras,demo-prop-palmeras,,Mi vecino del 3-A pone música fuerte todas las noches,reclamo,reclamo_pendiente,,indirecto,"Es una queja por ruidos, no una pregunta sobre qué dice el reglamento."
+19,test,demo-palmeras,demo-prop-palmeras,,¿Hasta qué hora se pueden hacer ruidos molestos?,reglamento,respondida,22,directo,"En Las Palmeras no se pueden hacer ruidos entre las 22 y las 8; en Los Robles, entre las 23 y las 7."
+20,test,demo-robles,demo-prop-robles,,¿Puedo poner el lavarropas a medianoche?,reglamento,respondida,23,indirecto,"No dice ruidos. En Los Robles no se pueden hacer ruidos entre las 23 y las 7; si dice 22, salió de Las Palmeras."
+21,test,demo-palmeras,demo-multi,,¿Puedo guardar una bicicleta en mi cochera?,reglamento,respondida,solo para estacionar,indirecto,"Marta escribe en Las Palmeras, donde la cochera es solo para estacionar. Si habla de un sorteo, salió del reglamento de Los Robles."
+22,test,demo-robles,demo-prop-robles,,¿Cuánto me vino de expensas en agosto?,expensas,respondida,"187.000,00",directo,"Rita es la UF 1 de Los Robles. Si dice 110.000,00, salió de Las Palmeras."
+23,test,demo-palmeras,demo-prop-palmeras,,¿Cuánto se gastó en limpieza en agosto?,expensas,respondida,"330.000,00",directo,"Gasto de agosto de LIMPIEZA INVENTADA en Las Palmeras."
+24,test,demo-robles,demo-prop-robles,,¿Cuándo vence el pago de agosto?,expensas,respondida,2026-08-10,indirecto,"Primer vencimiento de la liquidación de agosto."
+25,test,demo-robles,demo-prop-robles,,¿Qué documentos tiene cargados el edificio?,documentos,respondida,reglamento-demo.pdf,directo,
+26,test,demo-palmeras,demo-prop-palmeras,,¿Qué archivos hay disponibles para consultar?,documentos,respondida,acta-demo.pdf,indirecto,"No dice documentos."
+27,test,demo-robles,demo-multi,,Mostrame los documentos cargados,documentos,respondida,liquidacion-2026-08-demo.pdf,directo,"Marta como administradora de Los Robles."
+28,test,demo-palmeras,demo-prop-palmeras,,Quiero hacer un reclamo porque la luz del palier del tercer piso está quemada,reclamo,reclamo_pendiente,,directo,
+29,test,demo-robles,demo-prop-robles,,Desde ayer no sale agua caliente en mi departamento,reclamo,reclamo_pendiente,,indirecto,"Informa un problema del agua caliente central sin decir reclamo."
+30,test,demo-palmeras,demo-prop-palmeras,,Se rompió el portero eléctrico,reclamo,reclamo_pendiente,,indirecto,
+31,test,demo-palmeras,demo-prop-palmeras,,¿Me pueden comunicar con una persona?,derivar,derivada,,directo,
+32,test,demo-robles,demo-prop-robles,,Necesito una copia firmada del último balance,derivar,derivada,,indirecto,"Solo lo puede hacer la administración."
+33,test,demo-palmeras,demo-prop-palmeras,,"Quiero pagar las expensas en cuotas, ¿se puede arreglar?",derivar,derivada,,indirecto,"Menciona expensas pero pide un arreglo de pago, que solo puede dar la administración. Si va a expensas, contesta un importe y no resuelve el pedido."
+34,test,demo-robles,demo-prop-robles,,¿Quién ganó el partido de fútbol ayer?,fuera_de_alcance,fuera_de_alcance,,directo,
+35,test,demo-palmeras,demo-prop-palmeras,,Recomendame una serie para ver esta noche,fuera_de_alcance,fuera_de_alcance,,indirecto,
+36,test,demo-robles,demo-multi,,¿Cuál es la capital de Francia?,fuera_de_alcance,fuera_de_alcance,,indirecto,
