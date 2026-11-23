@@ -69,6 +69,7 @@ El diagrama es el diseño completo. Hoy funcionan por la web el router, reglamen
 - [x] Registrar reclamos como solicitudes pendientes de aprobación (01/11)
 - [ ] Buscar proveedores: fuera de esta etapa
 - [x] Router que decide qué herramienta usar → `agente/` (01/11); hoy atiende a la web, Telegram sigue congelado
+- [x] Set de 36 mensajes para evaluar el router (`datos/evaluacion/mensajes_agente.csv`) y comando que lo compara contra un router por palabras clave → `consorcio evaluar-agente` (23/11); falta la corrida con un modelo real
 
 **5. Carga de facturas y bandeja de aprobación**
 - [ ] Leer una factura y extraer sus datos: fuera de esta etapa
@@ -154,6 +155,11 @@ make expensas QUE=gastos TEXTO=limpieza
 make evaluar-consultas PARTICION=dev
 # Con un modelo real y el consorcio por defecto, deja docs/evaluaciones/<fecha>-consultas-test.json: es lo que muestra el CRM
 make evaluar-consultas PARTICION=test CON_MODELO=1
+
+# Evaluación del agente (plan en docs/evaluaciones/2026-11-21-plan-agente.md): el router del modelo contra uno por
+# palabras clave, sobre los datos de sembrar-demo. DETALLE=1 muestra cada mensaje; test solo con TEST_FINAL=1
+make sembrar-demo
+make evaluar-agente PARTICION=dev
 
 make psql      # consola de Postgres        http://localhost:5000  MLflow
 ```
