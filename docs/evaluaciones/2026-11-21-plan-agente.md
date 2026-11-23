@@ -116,6 +116,9 @@ porque no tiene precio; con un modelo con precio, hay que mirar el gasto del mes
 
 ## Qué falta para correrla
 
-- Completar el set y revisar sus etiquetas (22 a 24/11).
-- El comando `consorcio evaluar-agente` y el baseline, probados con el modelo de mentira (23/11).
-- La clave de Ollama: corrida en dev el 28/11 y en test el 29/11.
+- ~~Completar el set y revisar sus etiquetas~~: hecho el 23/11, 36 mensajes revisados por Jess.
+- ~~El comando `consorcio evaluar-agente` y el baseline~~: hecho el 23/11
+  (`2026-11-23-spec-evaluar-agente.md`), con sus tests en verde y una corrida con el modelo de mentira
+  en el Codespace.
+- La clave de Ollama: corrida en dev el 28/11 y en test el 29/11 (`make evaluar-agente PARTICION=test
+  TEST_FINAL=1`).

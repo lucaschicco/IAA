@@ -50,8 +50,8 @@ reproducir sin `datos/` ni el volcado de la base. Columnas:
 Las etiquetas se fijan y se revisan a mano antes de correr con un modelo real, y no se cambian mirando los
 resultados de `test`. Los mensajes de `test` no se prueban antes de la corrida final, ni siquiera a mano en
 la web: el 21/11 se probaron así los 12 primeros, también los 6 de `test`, y por eso pasaron todos a `dev`.
-Hay 36 mensajes, 18 en `dev` y 18 en `test` (3 por camino). Las etiquetas de los 12 primeros las revisó Jess
-el 23/11; las de los 24 nuevos, escritos ese día, se revisan antes de la primera corrida con un modelo.
+Hay 36 mensajes, 18 en `dev` y 18 en `test` (3 por camino). Jess revisó las etiquetas de los 36 el 23/11:
+desde ahí, etiquetas y partición quedan fijas.
 Además de los seis caminos, el set cubre una conversación de dos mensajes ("¿y en julio?"), un saludo, la
 administración consultando otra unidad y casos en los que los datos no deben cruzar de consorcio: la
 `nota` dice qué respuesta delataría el cruce. El comando que lo corre todavía no existe.
