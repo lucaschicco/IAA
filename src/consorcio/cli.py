@@ -8,6 +8,8 @@
   consorcio expensas [resumen|rubros|gastos|unidades] [--periodo 2026-07] [--unidad 5-D] [--texto limpieza]
   consorcio evaluar-consultas <preguntas.csv> [--particion dev|test|todas] [--k 3] [--con-modelo]
                            (con modelo real sobre test, guarda docs/evaluaciones/<fecha>-consultas-test.json para el CRM)
+  consorcio evaluar-agente <mensajes_agente.csv> [--particion dev|test] [--router modelo|palabras|ambos] [--test-final]
+                           (sobre los datos de sembrar-demo; test pide --test-final; con modelo real guarda el JSON)
   consorcio documentos [--desactivar X | --activar X]   # lista lo que hay en Postgres; X: id o parte del nombre
   consorcio consorcios [--asignar-chat ID --a CONSORCIO] [--crear ID --nombre "..."]   # bases y chats
   consorcio consultas [--consorcio ID] [--origen telegram|cli|evaluacion|web] [--ultimas 20]   # qué se preguntó y qué se contestó
@@ -81,6 +83,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--con-modelo", action="store_true", help="también responde cada pregunta (gasta tokens)")
     p.add_argument("--sin-detalle", action="store_true")
     _arg_consorcio(p)
+    _args_modelo(p)
+
+    p = sub.add_parser("evaluar-agente", help="el set de mensajes por el agente, con el router del modelo y el de palabras clave")
+    p.add_argument("csv")
+    p.add_argument("--particion", choices=["dev", "test"], default="dev")
+    p.add_argument("--router", choices=["modelo", "palabras", "ambos"], default="ambos")
+    p.add_argument("--test-final", action="store_true", help="necesario para correr test: se corre una vez y a propósito")
+    p.add_argument("--sin-detalle", action="store_true")
     _args_modelo(p)
 
     p = sub.add_parser("documentos", help="lista los documentos guardados en Postgres")
@@ -168,6 +178,23 @@ def main(argv: list[str] | None = None) -> int:
             res["retrieval"].pop("detalle", None)
             if "generacion" in res:
                 res["generacion"].pop("detalle", None)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "evaluar-agente":
+        from .agente.evaluar import EvaluacionNoPermitida, evaluar_agente, guardar_evaluacion_agente
+
+        try:
+            res = evaluar_agente(args.csv, args.particion, args.router, args.test_final)
+        except EvaluacionNoPermitida as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        ruta = guardar_evaluacion_agente(res)
+        if ruta:
+            print(f"guardada: {ruta}", file=sys.stderr)  # stdout queda como JSON puro
+        if args.sin_detalle:
+            for resumen in res["routers"].values():
+                resumen.pop("detalle", None)
         print(json.dumps(res, ensure_ascii=False, indent=2))
         return 0
 

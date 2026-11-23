@@ -4,7 +4,7 @@ RUN = $(COMPOSE) exec app
 # Base propia de los tests: varios la borran, y solo corren sobre esta (BASES_DESCARTABLES)
 TEST_POSTGRES_URL = postgresql+psycopg://consorcio:consorcio@postgres:5432/consorcio_test
 
-.PHONY: build up down logs shell ingestar preguntar expensas evaluar-consultas test lint evaluar-ocr psql bot bot-logs bot-down respaldar restaurar consorcios asignar migrar consultas
+.PHONY: build up down logs shell ingestar preguntar expensas evaluar-consultas evaluar-agente test lint evaluar-ocr psql bot bot-logs bot-down respaldar restaurar consorcios asignar migrar consultas
 
 build:        ## Construye la imagen de la app
 	$(COMPOSE) build
@@ -35,6 +35,9 @@ expensas:     ## make expensas QUE=rubros PERIODO=2026-07  (QUE=resumen|rubros|g
 
 evaluar-consultas:  ## make evaluar-consultas [PARTICION=dev|test|todas] [CON_MODELO=1]
 	$(RUN) consorcio evaluar-consultas datos/evaluacion/preguntas.csv --particion $(or $(PARTICION),dev) $(if $(CON_MODELO),--con-modelo) --sin-detalle
+
+evaluar-agente:  ## make evaluar-agente [PARTICION=dev] [ROUTER=ambos|modelo|palabras] [DETALLE=1]; test pide TEST_FINAL=1
+	$(RUN) consorcio evaluar-agente datos/evaluacion/mensajes_agente.csv --particion $(or $(PARTICION),dev) --router $(or $(ROUTER),ambos) $(if $(TEST_FINAL),--test-final) $(if $(DETALLE),,--sin-detalle)
 
 test:
 	$(COMPOSE) exec postgres sh -c 'createdb -U "$$POSTGRES_USER" consorcio_test 2>/dev/null || true'

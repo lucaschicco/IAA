@@ -242,9 +242,9 @@ def trazar_corrida(nombre: str, etiquetas: dict[str, Any]):
 
 
 def _skill_de(nombre_corrida: str) -> str:
-    """Skill cuya versión se registra: `agente` para los turnos, `consulta` para preguntas y su evaluación,
-    `ingesta` para el resto."""
-    if nombre_corrida.startswith("agente"):
+    """Skill cuya versión se registra: `agente` para los turnos y su evaluación, `consulta` para preguntas y
+    su evaluación, `ingesta` para el resto."""
+    if nombre_corrida.startswith(("agente", "evaluacion-agente")):
         return "agente"
     return "consulta" if nombre_corrida.startswith(("consulta", "evaluacion-consultas")) else "ingesta"
 
