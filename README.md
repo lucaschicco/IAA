@@ -252,6 +252,34 @@ documentos, contextos, preguntas, elevaciones, acciones, costos y aciertos, por 
 Son agregados, sin textos ni nombres. Telegram no pasa por el router, así que sus preguntas no aparecen ahí,
 aunque su gasto sí entra en el tope.
 
+### Ver las trazas en MLflow
+
+MLflow guarda una traza por cada mensaje del chat, cada consulta y cada ingesta, con el texto completo de cada
+paso. Qué guarda, quién lo puede ver y la decisión de privacidad pendiente están en
+[`docs/observabilidad.md`](docs/observabilidad.md). Lo levanta `docker compose up -d`, y se publica solo en la
+máquina local porque no pide usuario ni contraseña.
+
+1. Abrir http://127.0.0.1:5000 y entrar a **Experiments → consorcio-ingesta → Traces**. Cada mensaje del chat es
+   una traza; la columna **Session** dice de qué conversación es, y filtrar por esa sesión muestra la charla
+   completa.
+2. Desde un mensaje: `turnos.mlflow_traza_id` es el **Trace ID** de su traza. Con `make psql`:
+   `select id, resultado, mlflow_traza_id from turnos order by id desc limit 5;`
+3. Los runs del mismo experimento tienen las métricas de cada corrida: tokens, costo y segundos.
+
+**En un Codespace**, el puerto 5000 se abre desde la pestaña **Puertos**, con el ícono del globo, y queda
+privado. Escribir a mano la dirección `*.app.github.dev`, o usar una pestaña vieja después de reiniciar el
+Codespace, da HTTP 401. MLflow además rechaza esa dirección si no está entre sus hosts permitidos: hace falta
+un `docker-compose.override.yml` local, que no se sube, y después `docker compose up -d mlflow`:
+
+```yaml
+# Solo para Codespaces (no se sube): que MLflow acepte la dirección *.app.github.dev
+services:
+  mlflow:
+    environment:
+      MLFLOW_SERVER_ALLOWED_HOSTS: "mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000,*.app.github.dev"
+      MLFLOW_SERVER_CORS_ALLOWED_ORIGINS: "http://localhost:5000,http://127.0.0.1:5000,https://*.app.github.dev"
+```
+
 ### Probarlo por Telegram
 
 Telegram está congelado hasta terminar la web: no usa el router, y lo que sigue describe lo de siempre.
