@@ -51,6 +51,7 @@ MEMBRESIAS = {  # lo que siembra agente/semilla.py
 }
 CONTEXTOS = [(u, c) for u, ms in MEMBRESIAS.items() for c in (None, *ms)]
 SIN_SESION = {"/entrar", "/registro", "/salud"}  # las únicas que no piden sesión
+SOLO_HTMX = {"/documentos/cargas"}  # la pide _carga.html con hx-get mientras haya cargas pendientes
 MAX_PAGINAS = 200
 REDIRECCION = (301, 302, 303, 307, 308)
 
@@ -323,7 +324,7 @@ def test_todo_get_de_la_app_tiene_un_link(recorridos):
     """Una pantalla nueva sin link desde ningún lado rompe este test (o se agrega a la lista de excepciones)."""
     visitadas = {u.split("?")[0] for _, vistas in recorridos.values() for u in vistas}
     gets = {r.path for r in rutas_web() if "GET" in r.methods and "{" not in r.path}
-    assert gets - visitadas - SIN_SESION == set()
+    assert gets - visitadas - SIN_SESION - SOLO_HTMX == set()
 
 
 # ------------------------------------------------------------------ rutas directas

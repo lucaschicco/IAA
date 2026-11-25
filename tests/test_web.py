@@ -777,3 +777,85 @@ def test_las_fichas_no_mezclan_consorcios():
     assert "Pablo Propietario" in palmeras and "Pablo Propietario" not in robles
     # Desde la ficha de otro consorcio se entra a sus documentos con un POST
     assert 'name="destino" value="/documentos"' in robles or 'href="/documentos"' in robles
+
+
+# ------------------------------------------------------------------ carga de varios PDFs en segundo plano (24/11)
+
+
+def subir_varios(cliente, archivos: list[tuple[str, bytes]]):
+    return cliente.post("/documentos", data={"csrf": cliente.csrf},
+                        files=[("archivo", (nombre, contenido, "application/pdf")) for nombre, contenido in archivos])
+
+
+def test_carga_de_varios_pdfs_juntos(tmp_path):
+    pdfs = [(f"circular-{n}.pdf", Path(crear_pdf(tmp_path / f"c{n}.pdf", f"circular numero {n} de prueba")).read_bytes())
+            for n in (1, 2, 3)]
+    r = subir_varios(cliente_como(ADMIN, PALMERAS), pdfs)
+    assert r.status_code == 200 and r.text.count("Listo: circular-") == 3
+    with Session(postgres.engine()) as s:
+        nombres = set(s.scalars(select(Documento.nombre_archivo).where(Documento.consorcio_id == PALMERAS)))
+    assert {"circular-1.pdf", "circular-2.pdf", "circular-3.pdf"} <= nombres
+
+
+def test_un_archivo_invalido_corta_la_carga_entera(monkeypatch, tmp_path):
+    llamadas = []
+    monkeypatch.setattr(rutas, "ingestar_pdf", lambda ruta, **k: llamadas.append(ruta) or {"estado": "procesado"})
+    r = subir_varios(cliente_como(ADMIN, PALMERAS), [("bueno.pdf", b"%PDF-1.4 bueno"), ("malo.pdf", b"no soy pdf")])
+    assert r.status_code == 415 and llamadas == []
+    assert not any((tmp_path / "entrada").rglob("*.pdf"))  # el bueno, ya copiado, también se borró
+
+
+def test_mas_archivos_que_el_maximo_da_422(monkeypatch):
+    monkeypatch.setattr(rutas, "ingestar_pdf", lambda ruta, **k: pytest.fail("no debía ingestar"))
+    archivos = [(f"a{n}.pdf", b"%PDF-1.4") for n in range(config.web_max_archivos_carga + 1)]
+    assert subir_varios(cliente_como(ADMIN, PALMERAS), archivos).status_code == 422
+
+
+def test_la_carga_lenta_sigue_en_segundo_plano_y_se_ve_en_documentos(monkeypatch):
+    import threading
+
+    from consorcio.web import cargas
+
+    soltar = threading.Event()
+
+    def lenta(ruta, **k):
+        soltar.wait(10)
+        return {"estado": "duplicado", "nombre_archivo": "lenta.pdf", "documento_existente": {"titulo": "Acta"}}
+
+    monkeypatch.setattr(rutas, "ingestar_pdf", lenta)
+    monkeypatch.setattr(config, "web_espera_carga", 0.05)
+    admin = cliente_como(ADMIN, PALMERAS)
+    r = subir_varios(admin, [("lenta.pdf", b"%PDF-1.4")])
+    assert r.status_code == 200 and "Recibimos 1 documento" in r.text and 'hx-get="/documentos/cargas"' in r.text
+    assert 'hx-get="/documentos/cargas"' in admin.get("/documentos").text  # se puede ir y volver
+    soltar.set()
+    cargas.esperar(cargas.de_consorcio(PALMERAS), 10)
+    estado = admin.get("/documentos/cargas")
+    assert estado.status_code == 200 and "Terminado" in estado.text and "ya estaba cargado" in estado.text
+    assert 'hx-get="/documentos/cargas"' not in estado.text  # sin pendientes deja de preguntar
+    assert cliente_como(PROP, PALMERAS).get("/documentos/cargas").status_code == 403
+
+
+# ------------------------------------------------------------------ consultar documentos (administración)
+
+
+def test_consultar_es_solo_de_la_administracion():
+    assert cliente_como(PROP, PALMERAS).get("/consultar").status_code == 403
+    html = cliente_como(ADMIN, PALMERAS).get("/consultar").text
+    assert 'hx-post="/consultar"' in html and 'href="/consultar"' in html
+
+
+def test_consultar_responde_con_citas_sin_crear_solicitud():
+    admin = cliente_como(ADMIN, PALMERAS)
+    r = admin.post("/consultar", data={"csrf": admin.csrf, "pregunta": "¿Se permiten mascotas?"})
+    assert r.status_code == 200 and "Fuente:" in r.text and "mascotas" in r.text
+    sin = admin.post("/consultar", data={"csrf": admin.csrf, "pregunta": "¿qué dice? #sin-respaldo"})
+    assert sin.status_code == 200 and "No encontré respaldo" in sin.text
+    with Session(postgres.engine()) as s:
+        assert s.scalar(text("SELECT count(*) FROM solicitudes")) == 0
+        assert s.scalar(text("SELECT count(*) FROM consultas WHERE origen = 'web-admin'")) >= 2
+
+
+def test_consultar_valida_el_largo():
+    admin = cliente_como(ADMIN, PALMERAS)
+    assert admin.post("/consultar", data={"csrf": admin.csrf, "pregunta": "a"}).status_code == 422

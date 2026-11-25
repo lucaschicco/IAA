@@ -59,14 +59,14 @@
       <form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="docs-tarjeta docs-carga">
         {% include "_csrf.html" %}
         <header>
-          <h2>Subir un PDF</h2>
+          <h2>Subir PDFs</h2>
           <span class="chip">• Administración</span>
         </header>
-        <p class="nota">Va a <strong>{{ consorcio }}</strong>. Hasta {{ max_mb }} MB; si ya estaba cargado, no se duplica. Para otro consorcio, cambiá desde la barra de arriba.</p>
-        <label class="archivo"><span class="solo-lector">Archivo PDF</span><input type="file" name="archivo" accept="application/pdf,.pdf" required></label>
+        <p class="nota">Van a <strong>{{ consorcio }}</strong>. Hasta {{ max_archivos }} archivos de {{ max_mb }} MB cada uno; si alguno ya estaba cargado, no se duplica. Para otro consorcio, cambiá desde la barra de arriba.</p>
+        <label class="archivo"><span class="solo-lector">Archivos PDF</span><input type="file" name="archivo" accept="application/pdf,.pdf" multiple required></label>
         <button type="submit">{{ i.icono("subir") }}Cargar</button>
-        <span id="cargando" class="htmx-indicator"><span class="girando"></span>Procesando; un escaneado puede tardar varios minutos…</span>
-        <div id="resultado-carga"></div>
+        <span id="cargando" class="htmx-indicator"><span class="girando"></span>Subiendo…</span>
+        <div id="resultado-carga">{% if cargas %}{% with en_pagina = true %}{% include "_carga.html" %}{% endwith %}{% endif %}</div>
       </form>
       {% endif %}
       <section class="docs-tarjeta">

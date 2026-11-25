@@ -587,6 +587,10 @@ th { color: var(--suave); font-size: .72rem; font-weight: 600; letter-spacing: .
 .docs-carga button { align-self: flex-start; }
 .docs-carga .htmx-indicator { align-items: center; gap: 8px; color: var(--ambar); }
 .docs-carga .resultado { margin: 0; }
+.cargas-lista { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.carga { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.carga .chip { display: inline-flex; align-items: center; gap: 6px; width: fit-content; }
+.carga-error .chip { color: var(--rojo, #c0392b); }
 .docs-pasos { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; color: var(--suave); font-size: .88rem; }
 .docs-pasos li { display: flex; gap: 12px; align-items: flex-start; }
 .docs-pasos span { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 99px; background: var(--crema); color: var(--tinta); font-size: .75rem; font-weight: 700; }
@@ -859,3 +863,12 @@ a.opcion-consorcio { display: flex; text-decoration: none; }
 }
 .tema-claro .invitar-link .invitar-copiar button { background: var(--crema); color: var(--tinta); box-shadow: none; }
 .invitar-link .invitar-copiar input { background: #fff7f2; color: var(--tinta); }
+
+/* Consultar documentos (administración) */
+.consultar-form { max-width: 720px; margin-bottom: 24px; }
+.consultar-form textarea { width: 100%; }
+.consultar-form .htmx-indicator { align-items: center; gap: 8px; color: var(--ambar); }
+.consultar-respuestas { display: grid; gap: 16px; max-width: 720px; }
+.consultar-respuesta { padding: 16px; border-radius: 16px; background: var(--superficie); box-shadow: inset 0 0 0 1px var(--borde); overflow-wrap: anywhere; }
+.consultar-respuesta .consultar-pregunta { margin: 0 0 8px; }
+.consultar-respuesta.sin-respaldo .resultado { color: var(--suave); }

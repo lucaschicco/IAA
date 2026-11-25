@@ -28,6 +28,9 @@ ENTORNO_FIJO = {
     "WEB_SELECTOR_USUARIOS": "false",
     "WEB_SECRETO": "secreto-solo-para-tests-de-mas-de-32-caracteres",
     "WEB_MAX_MB_PDF": "20",
+    "WEB_MAX_MB_CARGA": "60",
+    "WEB_MAX_ARCHIVOS_CARGA": "10",
+    "WEB_ESPERA_CARGA": "60",  # en los tests la carga se espera entera: el resultado sale en la misma respuesta
     "WEB_SESION_HORAS": "8",
     "JWT_SECRETO": "secreto-solo-para-tests-0123456789abcdef",
     "S3_BUCKET": "consorcio-crudos-test",  # test_crudos y test_duplicados lo vacían

@@ -52,9 +52,10 @@ from ..agente.memoria import conversacion_valida, conversaciones_de, historial
 from ..agente.panel import panel as datos_panel
 from ..almacen.postgres import MOTIVOS_REVISION, VEREDICTOS, listar_documentos, unidades_de
 from ..auth.config import DIAS_INVITACION
-from ..canales.formato import formatear_ingesta
+from ..canales.formato import formatear_ingesta, formatear_respuesta
 from ..canales.telegram import ruta_entrada
 from ..config import config
+from ..consulta.grafo import preguntar
 from ..identidad import (
     AdministracionInvalida,
     ConsorcioInvalido,
@@ -69,6 +70,7 @@ from ..identidad import (
     resolver_identidad,
 )
 from ..ingesta.grafo import ingestar_pdf
+from . import cargas as cola_cargas
 from . import invitaciones as invitaciones_web
 from .autenticacion import LoginFallido, datos_invitacion, proveedor_para, registrar
 from .sesion import (
@@ -123,7 +125,8 @@ def limitar_formulario(request: Request) -> None:
 
 
 def limitar_carga(request: Request) -> None:
-    _exigir_longitud(request, _maximo_pdf() + MARGEN_MULTIPART)
+    """Todos los PDFs juntos; cada uno se cuenta además contra su propio límite al copiarlo."""
+    _exigir_longitud(request, max(config.web_max_mb_carga * 1024 * 1024, _maximo_pdf()) + MARGEN_MULTIPART)
 
 
 async def formulario(request: Request) -> FormData:
@@ -357,8 +360,8 @@ def inicio_del_rol(es_administracion: bool) -> str:
 # Desde el panel y desde la barra se entra a un consorcio directo a una pantalla: solo rutas propias, nunca
 # una URL externa
 DESTINO_VALIDO = re.compile(
-    r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel|invitaciones)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
-SOLO_ADMINISTRACION = {"/bandeja", "/revisar", "/invitaciones"}
+    r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel|invitaciones|consultar)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
+SOLO_ADMINISTRACION = {"/bandeja", "/revisar", "/invitaciones", "/consultar"}
 SOLO_VECINOS = {"/chat", "/mis-solicitudes"}
 
 
@@ -464,9 +467,12 @@ def documentos(request: Request, sesion: SesionActual, identidad: Miembro, tipo:
     if tipo:
         for g in grupos:
             g["documentos"] = [d for d in g["documentos"] if (d["tipo"] or "otro") == tipo]
+    cargas = cola_cargas.de_consorcio(identidad.consorcio_id) if identidad.es_administracion else []
     return pagina(request, "documentos.html", sesion, identidad, max_mb=config.web_max_mb_pdf, grupos=grupos,
                   total=total, tipos=dict(sorted(tipos.items())), tipo=tipo,
-                  recientes=[d for d in actuales if d["activo"]][:3])
+                  recientes=[d for d in actuales if d["activo"]][:3], cargas=cargas,
+                  pendientes=sum(c["estado"] in cola_cargas.PENDIENTES for c in cargas),
+                  max_archivos=config.web_max_archivos_carga)
 
 
 def _guardar_pdf(archivo: UploadFile) -> Path:
@@ -503,25 +509,58 @@ def _texto_carga(final: dict) -> str:
                 f"{existente.get('periodo') or 'de este PDF'}. Para reemplazarla, avisale al equipo de la plataforma.")
     if estado == "tope_excedido":
         return f"No se procesó {nombre}: se alcanzó el tope mensual de gasto en modelos."
+    if final.get("errores") and not (final.get("extraccion") or {}).get("secciones"):
+        # el detalle del error es del proveedor (cuotas, URLs): no va a la pantalla
+        return (f"{nombre} quedó guardado pero sin secciones: el modelo no respondió y todavía no se puede "
+                "preguntar sobre él. Volvé a subirlo más tarde; se reprocesa sin repetir la lectura del PDF.")
     return formatear_ingesta(final)
+
+
+def _procesar_carga(ruta: str, consorcio_id: str, usuario_id: int | None) -> str:
+    return _texto_carga(ingestar_pdf(ruta, consorcio_id=consorcio_id, usuario_id=usuario_id))
+
+
+def _borrar_entrada(ruta: Path) -> None:
+    ruta.unlink(missing_ok=True)
+    ruta.parent.rmdir()
 
 
 @router.post("/documentos", dependencies=[Depends(exigir_administrador), Depends(limitar_carga), Depends(verificar_csrf)])
 def documentos_post(request: Request, identidad: Administrador, datos: Formulario) -> Response:
-    """Sincrónico a propósito, con indicador en la pantalla: la cola de ingesta está fuera de alcance."""
-    archivo = datos.get("archivo")
-    if not isinstance(archivo, UploadFile):
+    """Uno o varios PDFs. Se guardan todos o ninguno (uno inválido corta la carga entera) y se procesan en
+    segundo plano, de a uno; la pantalla espera unos segundos y lo que no terminó se sigue en Documentos."""
+    archivos = [a for a in datos.getlist("archivo") if isinstance(a, UploadFile)]
+    if not archivos or len(archivos) > config.web_max_archivos_carga:
         raise HTTPException(status_code=422)
+    guardados: list[Path] = []
     try:
-        ruta = _guardar_pdf(archivo)
-        mensaje = _texto_carga(ingestar_pdf(str(ruta), consorcio_id=identidad.consorcio_id, usuario_id=identidad.usuario_id))
+        for archivo in archivos:
+            guardados.append(_guardar_pdf(archivo))
     except HTTPException:
+        for ruta in guardados:
+            _borrar_entrada(ruta)
         raise
-    except Exception as e:
-        log.warning("falló la carga de un PDF: %s", type(e).__name__)
+    cid, uid = identidad.consorcio_id, identidad.usuario_id
+    nuevas = [cola_cargas.encolar(r, r.name, cid, uid, _procesar_carga, MENSAJE_CARGA_FALLIDA) for r in guardados]
+    cola_cargas.esperar(nuevas, config.web_espera_carga)
+    if len(nuevas) == 1 and nuevas[0]["estado"] == "error":
         return plantillas.TemplateResponse(request, "_error.html", {"mensaje": MENSAJE_CARGA_FALLIDA}, status_code=500)
+    return _respuesta_cargas(request, cid, nuevas)
+
+
+@router.get("/documentos/cargas", dependencies=[Depends(exigir_administrador)])
+def documentos_cargas(request: Request, identidad: Administrador) -> Response:
+    """Lo que la pantalla de Documentos consulta cada pocos segundos mientras haya cargas pendientes."""
+    return _respuesta_cargas(request, identidad.consorcio_id, None)
+
+
+def _respuesta_cargas(request: Request, consorcio_id: str, nuevas: list[dict] | None) -> Response:
+    todas = cola_cargas.de_consorcio(consorcio_id)
+    mostradas = [c for c in todas if c["id"] in {n["id"] for n in nuevas}] if nuevas is not None else todas
+    pendientes = sum(c["estado"] in cola_cargas.PENDIENTES for c in mostradas)
     return plantillas.TemplateResponse(request, "_carga.html", {
-        "mensaje": mensaje, "documentos": listar_documentos(identidad.consorcio_id),
+        "cargas": mostradas, "pendientes": pendientes, "recien_subidas": nuevas is not None,
+        "documentos": listar_documentos(consorcio_id),
     })
 
 
@@ -648,6 +687,37 @@ def _pantalla_invitar(request: Request, sesion: Sesion, identidad: Identidad, st
                   roles=invitaciones_web.ROLES_INVITABLES, dias=DIAS_INVITACION,
                   lista=invitaciones_web.invitaciones(identidad), unidades=unidades_de(identidad.consorcio_id),
                   **datos)
+
+
+# ------------------------------------------------------------------ consultar documentos (administración)
+
+K_ADMINISTRACION = 5  # la administración pregunta más amplio que un vecino (comparar, resumir): más secciones
+ORIGEN_ADMINISTRACION = "web-admin"
+
+
+@router.get("/consultar")
+def consultar(request: Request, sesion: SesionActual, identidad: Administrador) -> Response:
+    return pagina(request, "consultar.html", sesion, identidad, max_mensaje=config.agente_max_mensaje)
+
+
+@router.post("/consultar", dependencies=POST_ADMINISTRADOR)
+def consultar_post(request: Request, identidad: Administrador, datos: Formulario) -> Response:
+    """Pregunta directo a los documentos, sin el router del agente: no hay a quién derivar ni solicitud que crear.
+    Las mismas citas verificadas que ve un vecino; queda en `consultas` con su origen para separarla en el CRM."""
+    pregunta = _campo(datos, "pregunta").strip()
+    if not 3 <= len(pregunta) <= config.agente_max_mensaje:
+        raise HTTPException(status_code=422)
+    try:
+        final = preguntar(pregunta, k=K_ADMINISTRACION, origen=ORIGEN_ADMINISTRACION, consorcio_id=identidad.consorcio_id,
+                          usuario_id=identidad.usuario_id, validar_respuesta=True)
+    except Exception as e:  # el detalle puede traer texto de los documentos
+        log.warning("falló una consulta de la administración: %s", type(e).__name__)
+        return plantillas.TemplateResponse(request, "_error.html", {"mensaje": "No se pudo hacer la consulta. Probá de nuevo."},
+                                           status_code=500)
+    texto = (formatear_respuesta(final) if not final.get("derivada") else
+             "No encontré respaldo en los documentos de este consorcio para responder eso con seguridad.")
+    return plantillas.TemplateResponse(request, "_consulta_admin.html", {
+        "pregunta": pregunta, "texto": texto, "respondida": not final.get("derivada")})
 
 
 @router.get("/invitaciones")

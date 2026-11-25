@@ -80,6 +80,9 @@ class Config(BaseSettings):
     web_selector_usuarios: bool = False
     web_secreto: str = ""  # firma las cookies de sesión; obligatorio con el selector apagado
     web_max_mb_pdf: int = 20
+    web_max_mb_carga: int = 60  # todos los PDFs de una carga juntos
+    web_max_archivos_carga: int = 10
+    web_espera_carga: float = 3.0  # segundos que la pantalla espera el resultado antes de dejarlo en segundo plano
     web_sesion_horas: int = 8
 
     # Login (ver auth/). JWT_SECRETO firma los tokens de la API JSON (`make api`); la web usa WEB_SECRETO.

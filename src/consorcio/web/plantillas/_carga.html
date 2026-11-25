@@ -1,2 +1,18 @@
-<p class="resultado tarjeta">{{ mensaje }}</p>
-{% with oob = true %}{% include "_documentos.html" %}{% endwith %}
+{# Estado de las cargas. Mientras quede alguna pendiente se vuelve a pedir sola: la administración puede irse de la pantalla y volver. #}
+{% set ETIQUETA = {"en_cola": "En cola", "procesando": "Procesando", "listo": "Terminado", "error": "Error"} %}
+<div id="estado-cargas"{% if pendientes %} hx-get="/documentos/cargas" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
+  {% if recien_subidas and pendientes %}
+  <p class="resultado tarjeta">Recibimos {{ cargas|length }} {{ "documento" if cargas|length == 1 else "documentos" }}. Se procesan de a uno en segundo plano: podés seguir usando la web, y el estado queda acá, en Documentos.</p>
+  {% endif %}
+  {% if cargas %}
+  <ul class="cargas-lista">
+    {% for c in cargas %}
+    <li class="carga carga-{{ c.estado }}">
+      <strong>{{ c.nombre }}</strong> <span class="chip">{% if c.estado in ("en_cola", "procesando") %}<span class="girando"></span>{% endif %}{{ ETIQUETA.get(c.estado, c.estado) }}</span>
+      {% if c.mensaje %}<p class="resultado">{{ c.mensaje }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% if not en_pagina %}{% with oob = true %}{% include "_documentos.html" %}{% endwith %}{% endif %}
