@@ -80,3 +80,27 @@ Notas cortas de cómo va el desarrollo: qué probamos, qué no funcionó, qué d
 - 21/11 – La administración ya no cae en el chat: al entrar a un consorcio que administra (desde Consorcios, el panel o el selector de la barra) va a la Bandeja. Chat y Mis solicitudes son del vecino: salen del menú de quien administra ese consorcio y, si los abre por URL, redirigen a la Bandeja. En Documentos, la administración ve "Subir un PDF" en lugar de "Preguntar en el chat". Alguien que es vecino en un consorcio y administra otro (demo-multi) ve el chat solo en el primero. La administración sigue viendo lo que respondió el asistente en Revisar respuestas.
 - 21/11 – Crear un consorcio lleva a la Bandeja, igual que entrar a uno que se administra (antes iba a Documentos). En Consorcios, debajo de las cartas, cada consorcio tiene una ficha desplegable con pestañas: Documentos, Inquilinos, Integrantes y Eventos importantes. Las pestañas funcionan solo con CSS (radios), sin scripts. Inquilinos e Integrantes muestran nombres de vecinos, así que solo aparecen en los consorcios que la persona administra; un vecino ve Documentos y Eventos. Los eventos juntan los vencimientos de cada liquidación, los eventos que la ingesta extrae de los documentos activos y, para la administración, los reclamos y consultas. Documentos muestra solo el consorcio elegido, también para quien administra varios (antes mostraba una sección por cada uno); los demás se ven en las fichas de Consorcios. Código en `agente/ficha.py`.
 - 22/11 – Pantalla Invitar (`/invitaciones`, en el menú de la administración). La administración del consorcio elegido escribe el mail, elige el rol (propietario, inquilino, consejo o administración) y, para propietarios e inquilinos, el piso y el depto; recibe un link a `/registro` que se ve una sola vez (a la base va el hash del token, igual que en la API) con un botón para copiarlo. Si la unidad no está cargada se crea, así un consorcio recién creado puede invitar. Una invitación nueva al mismo mail anula las anteriores sin usar. La lista muestra cada invitación como sin usar, usada o vencida/anulada, y deja anular las sin usar. No se manda mail: el link se comparte a mano. El botón Copiar es un script propio (`estaticos/copiar.js`): la CSP no deja scripts en línea. Arreglado de paso: `base.html` pisaba la variable `rotulo_rol` de las páginas y los roles salían en minúscula.
+- 24/11 – **Consulta en dos pasos, carga masiva y consultas de la administración; prueba con Manzanares.** Implementado:
+  - La consulta pasa a `extraer` (hasta 3 citas textuales) → `verificar` (descarta las que no aparecen en el texto) → `redactar` (ve solo las citas). El vecino ve la respuesta corta y, debajo, cada cita con su archivo y página.
+  - Los montos que no salen de la liquidación (presupuesto, obra) van a documentos, y una consulta de expensas sin liquidación busca en documentos.
+  - Documentos acepta hasta 10 PDFs juntos y los procesa en segundo plano (`web/cargas.py`).
+  - La administración tiene su propia pantalla de consultas, `/consultar`.
+
+  Un subagente de QA armó 47 preguntas y tres PDFs `sintetic-`. La carga masiva anduvo: la web respondió en unos 3 s, la cola terminó en 445–993 s y 11 PDFs juntos dan 422.
+
+  Las preguntas no se pudieron evaluar: la cuota gratuita de Gemini, 20 pedidos por día, se agotó en `gemini-2.5-flash` y también en `gemini-3.5-flash`. Hay tres efectos laterales:
+  - cada error se reintentó unos 37 s y dejó una derivación (72 en la Bandeja de Manzanares, sin borrar);
+  - tres documentos quedaron sin secciones;
+  - subirlos de nuevo daba "duplicado".
+
+  Para lo último se agregó `documentos.estado='incompleto'`: subirlo de nuevo lo reprocesa reusando el texto. Detalle en `docs/evaluaciones/2026-11-24-manzanares.md`.
+- 25/11 – **Manzanares con Claude Haiku 5.5.** Se borraron las 70 derivaciones que dejó el error de cuota, con respaldo previo. Las rondas 3 a 5 corrieron con una clave de Anthropic pasada solo al proceso web.
+
+  La ronda 3 mostró tres fallas de Haiku, que se corrigieron:
+  - omitía `puede_responder` (ahora tiene default);
+  - mandaba listas como texto JSON (se reparan en `llm.py`);
+  - el control de palabras rechazaba respuestas correctas que retomaban la pregunta o decían "las citas no muestran…".
+
+  Además, los saludos ahora reciben un mensaje de bienvenida en lugar de un rechazo.
+
+  Calificación del QA: la ronda 3 tuvo 21 de 47 correctas; la ronda 5, 31 correctas, 3 parciales y 12 derivaciones indebidas, sin ninguna afirmación falsa. Costo: unos 0,001 USD y 2 s por consulta. Lo que más deriva son las actas manuscritas y los sinónimos del reglamento. Suite: 943 passed, 0 skipped.

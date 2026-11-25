@@ -223,3 +223,12 @@ tienen ninguna, no muestra nada y el consorcio queda sin Administración.
 - Datos para las tarjetas faltantes del CRM (series semanales, últimas revisiones).
 - Nombre y logo definitivos (hoy "Consorcio" con un edificio de línea).
 - Usuario demo `demo-admin-dos` (administra los dos consorcios demo) para probar la vista por consorcio.
+
+### Del testeo con Manzanares (24/11): implementado el mismo día
+
+- [x] **Carga de varios PDFs a la vez.** Documentos acepta hasta `WEB_MAX_ARCHIVOS_CARGA` (10) PDFs por envío;
+  si uno es inválido no se guarda ninguno.
+- [x] **Carga en segundo plano.** `web/cargas.py`: cola en el proceso, de a uno. La respuesta llega en segundos
+  ("Recibimos N documentos… podés seguir usando la web") y la lista se refresca sola mientras haya pendientes.
+- [ ] **Aviso al terminar.** Mail y mensaje siguen pendientes (no hay SMTP). Por ahora el estado se ve en Documentos.
+- [x] **Consultas de la administración.** `/consultar`: pantalla propia, k=5, citas verificadas, no crea solicitudes.
