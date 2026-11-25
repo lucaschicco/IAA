@@ -55,6 +55,9 @@ _PALABRAS_DE_ENLACE = {
     "podes", "poder", "podria", "tener", "debes", "deber", "segun", "porque", "pero", "aunque", "tambien",
     "solo", "cada", "todo", "toda", "todos", "todas", "otro", "otra", "otros", "otras", "ademas", "entonces",
     "pesos",
+    # cómo habla `redactar` de sus citas cuando no alcanzan ("las citas no muestran…"): no es contenido (25/11)
+    "cita", "citas", "muestra", "muestran", "aparece", "aparecen", "encuentro", "indica", "indican", "menciona",
+    "mencionan", "confirmar", "detalla", "detallan", "surge", "surgen", "ninguna", "ninguno", "tampoco",
 }
 
 _COLUMNAS = """
@@ -234,7 +237,7 @@ def _monto_en_letras_ajeno(respuesta: str, cita: str) -> bool:
     return any(m.group() not in normalizar(cita) for m in _MONTO_EN_LETRAS.finditer(normalizar(respuesta)))
 
 
-def verificar_respuesta(respuesta: str, cita: str, fuentes: str) -> tuple[bool, str]:
+def verificar_respuesta(respuesta: str, cita: str, fuentes: str, pregunta: str = "") -> tuple[bool, str]:
     """Que la cita exista no prueba que la respuesta salga de ella. Los montos no los inventa el modelo:
     un monto tiene que estar en la cita, porque otro número de la misma página puede ser un horario, y
     cualquier otra cantidad, en las fuentes, en cifras o en letras. Las palabras pasan por una cuota, porque
@@ -245,7 +248,8 @@ def verificar_respuesta(respuesta: str, cita: str, fuentes: str) -> tuple[bool, 
         return False, "respuesta sin respaldo: trae montos que no están en la cita"
     if _cantidades(respuesta) - _cantidades(base):
         return False, "respuesta sin respaldo: trae números que no están en las fuentes"
-    raices = {p[:_LARGO_RAIZ] for p in palabras_clave(base)}
+    # retomar las palabras de la pregunta no es inventar; los números no se aceptan desde la pregunta
+    raices = {p[:_LARGO_RAIZ] for p in palabras_clave(f"{base} {pregunta}")}
     palabras = [p for p in palabras_clave(respuesta) if p.isalpha() and p not in _PALABRAS_DE_ENLACE]
     ajenas = [p for p in palabras if p[:_LARGO_RAIZ] not in raices]
     if palabras and len(ajenas) / len(palabras) > MAX_PALABRAS_SIN_RESPALDO:

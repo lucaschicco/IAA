@@ -24,8 +24,20 @@ from consorcio.almacen import postgres
 from consorcio.almacen.postgres import Consulta, Conversacion, Mensaje, Solicitud, Turno
 from consorcio.config import config
 from consorcio.consulta import grafo as grafo_consulta
-from consorcio.consulta.esquemas import RespuestaConCita
+from consorcio.consulta.esquemas import CitasExtraidas, CitaTextual, RespuestaRedactada
 from consorcio.identidad import resolver_identidad
+
+
+def RespuestaConCita(puede_responder: bool, respuesta: str, fuente: int | None = None, pagina: int | None = None,
+                     cita: str | None = None):
+    """Lo que antes devolvía una sola llamada, repartido en las dos de la consulta: `extraer` y `redactar`."""
+    def segun_esquema(esquema):
+        if esquema is CitasExtraidas:
+            citas = [CitaTextual(fuente=fuente, pagina=pagina, cita=cita)] if cita and fuente else []
+            return CitasExtraidas(puede_responder=puede_responder, citas=citas)
+        return RespuestaRedactada(respuesta=respuesta)
+    return segun_esquema
+
 
 PALMERAS, ROBLES = "demo-palmeras", "demo-robles"
 
@@ -82,8 +94,8 @@ def router_prohibido(monkeypatch) -> None:
     monkeypatch.setattr(grafo, "invocar_estructurado", invocar)
 
 
-def consulta_devuelve(monkeypatch, respuesta: RespuestaConCita) -> None:
-    monkeypatch.setattr(grafo_consulta, "invocar_estructurado", lambda *a, **k: respuesta)
+def consulta_devuelve(monkeypatch, respuesta) -> None:
+    monkeypatch.setattr(grafo_consulta, "invocar_estructurado", lambda c, n, s, u, esquema, *a, **k: respuesta(esquema))
 
 
 # ------------------------------------------------------------------ enrutado
@@ -580,10 +592,10 @@ def test_el_turno_registra_costo_tokens_y_contexto(monkeypatch):
     r = atender("¿Se permiten mascotas?", yo(), None, "web")
 
     fila = turno(r["turno_id"])
-    assert (fila.tokens_entrada, fila.tokens_salida) == (1_010, 105)  # router + consulta fake
+    assert (fila.tokens_entrada, fila.tokens_salida) == (1_020, 110)  # router + extraer + redactar (fake)
     assert fila.costo_usd == pytest.approx(0.00015)  # 1000 × 0,10 + 100 × 0,50 por millón; el fake no cuesta
     assert (fila.rol, fila.canal, fila.origen, fila.modelo) == ("propietario", "web", "usuario", "fake")
-    assert fila.skill_version == "0.1.1" and fila.segundos >= 0 and fila.mlflow_traza_id is None
+    assert fila.skill_version == "0.1.3" and fila.segundos >= 0 and fila.mlflow_traza_id is None
 
 
 def _uso_con_precio(tokens_router: tuple[int, int], tokens_consulta: tuple[int, int], monkeypatch) -> None:
@@ -594,29 +606,31 @@ def _uso_con_precio(tokens_router: tuple[int, int], tokens_consulta: tuple[int, 
         registrar(contador, nodo, tokens_router)
         return SalidaRouter(intencion="reglamento")
 
-    def consulta(contador, nodo, *a, **k):
-        registrar(contador, nodo, tokens_consulta)
-        return RespuestaConCita(puede_responder=True, respuesta="Se permiten las mascotas pequeñas.", fuente=1, pagina=1,
-                                cita=CITA_REAL)
+    respuesta = RespuestaConCita(puede_responder=True, respuesta="Se permiten las mascotas pequeñas.", fuente=1, pagina=1,
+                                 cita=CITA_REAL)
+
+    def consulta(contador, nodo, skill, usuario, esquema, *a, **k):
+        registrar(contador, nodo, tokens_consulta)  # cada una de las dos llamadas: extraer y redactar
+        return respuesta(esquema)
 
     monkeypatch.setattr(grafo, "invocar_estructurado", router)
     monkeypatch.setattr(grafo_consulta, "invocar_estructurado", consulta)
 
 
 def test_el_costo_del_turno_incluye_la_consulta_sin_redondear(monkeypatch):
-    """Router 0,00011 + consulta 0,00045 USD: redondeada a 4 decimales, la consulta deja de sumar con el libro."""
+    """Router 0,00011 + consulta 2 × 0,00045 USD: redondeada a 4 decimales, la consulta deja de sumar con el libro."""
     with postgres.engine().begin() as con:
         con.execute(text("TRUNCATE gastos_modelo"))
     _uso_con_precio((800, 60), (3_000, 300), monkeypatch)
 
     for _ in range(3):
         r = atender("¿Se permiten mascotas?", yo(), None, "web")
-        assert turno(r["turno_id"]).costo_usd == pytest.approx(0.00056, abs=1e-12)
+        assert turno(r["turno_id"]).costo_usd == pytest.approx(0.00101, abs=1e-12)
 
     ahora = datetime.now(UTC)
     with Session(postgres.engine()) as s:
         costos = crm._costos(s, crm._Filtro(ahora - timedelta(minutes=5), ahora + timedelta(minutes=1), PALMERAS))
-    assert costos["por_funcionalidad"]["reglamento"]["costo_usd"] == pytest.approx(0.00168)
+    assert costos["por_funcionalidad"]["reglamento"]["costo_usd"] == pytest.approx(0.00303)
     assert costos["ingesta_y_otros"] == 0.0  # no hubo ingesta: el libro y los turnos dan lo mismo
 
 
@@ -873,3 +887,84 @@ def test_guion_cita_de_verdad_y_propia(monkeypatch):
     assert "Palmeras".upper() in r["mensaje"].upper() and "LOS ROBLES" not in r["mensaje"].upper()
     r = atender("¿cuánto pago de expensas?", yo(), None, "web")
     assert "UF 3" in r["mensaje"]
+
+
+# ------------------------------------------------------------------ consulta en dos pasos (Manzanares, 24/11)
+
+OTRA_CITA_REAL = "circulen con correa por los espacios comunes"
+
+
+def _modelo_en_dos_pasos(monkeypatch, citas: list[CitaTextual], respuesta: str = "Sí, con correa.") -> list[tuple]:
+    """Simula `extraer` y `redactar` y anota qué recibió cada paso."""
+    recibido: list[tuple] = []
+
+    def invocar(contador, nodo, skill, usuario, esquema, *a, **k):
+        recibido.append((nodo, usuario))
+        if esquema is CitasExtraidas:
+            return CitasExtraidas(puede_responder=True, citas=citas)
+        return RespuestaRedactada(respuesta=respuesta)
+
+    monkeypatch.setattr(grafo_consulta, "invocar_estructurado", invocar)
+    return recibido
+
+
+def test_una_cita_mala_se_descarta_y_la_buena_responde(monkeypatch):
+    """Antes una lista armada con renglones sueltos tiraba la respuesta entera; ahora se descarta solo esa cita."""
+    _modelo_en_dos_pasos(monkeypatch, [CitaTextual(fuente=1, pagina=1, cita="Artículo 1 | Artículo 2 | renglones sueltos"),
+                                       CitaTextual(fuente=1, pagina=1, cita=CITA_REAL)])
+    final = grafo_consulta.preguntar("¿Se permiten mascotas?", consorcio_id=PALMERAS, validar_respuesta=True)
+    assert final["verificada"] and not final["derivada"]
+    assert [c["cita"] for c in final["respuesta"]["citas"]] == [CITA_REAL]
+
+
+def test_redactar_ve_solo_las_citas_verificadas(monkeypatch):
+    recibido = _modelo_en_dos_pasos(monkeypatch, [CitaTextual(fuente=1, pagina=1, cita=CITA_REAL),
+                                                  CitaTextual(fuente=1, pagina=1, cita="esto no está en ningún documento")])
+    grafo_consulta.preguntar("¿Se permiten mascotas?", consorcio_id=PALMERAS, validar_respuesta=True)
+    (nodo_extraer, a_extraer), (nodo_redactar, a_redactar) = recibido
+    assert (nodo_extraer, nodo_redactar) == ("extraer", "redactar")
+    assert "=== Página" in a_extraer and "=== Página" not in a_redactar
+    assert CITA_REAL in a_redactar and "esto no está" not in a_redactar
+
+
+def test_el_vecino_ve_todas_las_citas_y_se_guardan(monkeypatch):
+    _modelo_en_dos_pasos(monkeypatch, [CitaTextual(fuente=1, pagina=1, cita=CITA_REAL),
+                                       CitaTextual(fuente=1, pagina=1, cita=OTRA_CITA_REAL)])
+    router_devuelve(monkeypatch, intencion="reglamento")
+    r = atender("¿Se permiten mascotas?", yo(), None, "web")
+    assert r["resultado"] == "respondida" and r["verificada"]
+    assert r["mensaje"].count("Fuente:") == 2 and CITA_REAL in r["mensaje"] and OTRA_CITA_REAL in r["mensaje"]
+    with Session(postgres.engine()) as s:
+        guardada = s.get(Consulta, turno(r["turno_id"]).consulta_id).cita
+    assert CITA_REAL in guardada and OTRA_CITA_REAL in guardada
+
+
+def test_a_lo_sumo_tres_citas(monkeypatch):
+    _modelo_en_dos_pasos(monkeypatch, [CitaTextual(fuente=1, pagina=1, cita=CITA_REAL)] * 4)
+    final = grafo_consulta.preguntar("¿Se permiten mascotas?", consorcio_id=PALMERAS, validar_respuesta=True)
+    assert len(final["respuesta"]["citas"]) == 3
+
+
+def test_ninguna_cita_verificada_deriva(monkeypatch):
+    recibido = _modelo_en_dos_pasos(monkeypatch, [CitaTextual(fuente=1, pagina=1, cita="un texto que no figura en el reglamento")])
+    final = grafo_consulta.preguntar("¿Se permiten mascotas?", consorcio_id=PALMERAS, validar_respuesta=True)
+    assert final["derivada"] and final["motivo"].startswith("cita no verificada")
+    assert [nodo for nodo, _ in recibido] == ["extraer"]  # sin citas no se gasta la segunda llamada
+
+
+def test_expensas_sin_liquidacion_busca_en_los_documentos(monkeypatch):
+    """"¿Cuánto salió la obra?" iba a expensas y respondía que no había liquidaciones (Manzanares, 24/11)."""
+    router_devuelve(monkeypatch, intencion="expensas", que="gastos", texto="obra palier", periodo="2031-01")
+    _modelo_en_dos_pasos(monkeypatch, [CitaTextual(fuente=1, pagina=1, cita="pintar el palier de todos los pisos")],
+                         respuesta="La asamblea aprobó pintar el palier de todos los pisos.")
+    r = atender("¿cuánto salió la obra del palier?", yo(), None, "web")
+    assert r["resultado"] == "respondida" and "pintar el palier" in r["mensaje"]
+    assert turno(r["turno_id"]).funcionalidad == "reglamento"
+
+
+def test_expensas_sin_datos_ni_documentos_no_crea_solicitud(monkeypatch):
+    router_devuelve(monkeypatch, intencion="expensas", que="gastos", texto="obra", periodo="2031-01")
+    monkeypatch.setattr(grafo_consulta, "invocar_estructurado",
+                        lambda *a, **k: CitasExtraidas(puede_responder=False, falta="no está"))
+    r = atender("¿cuánto salió la obra?", yo(), None, "web")
+    assert r["resultado"] == "sin_datos" and r["solicitud_id"] is None and contar(Solicitud) == 0

@@ -1,12 +1,12 @@
 """Guion del proveedor fake (`FAKE_GUIONADO=true`): respuestas plausibles sin clave ni red.
 
-Sin esto el router fake siempre falla y `RespuestaConCita` vacía siempre deriva, y la web de prueba
+Sin esto el router fake siempre falla y `CitasExtraidas` vacía siempre deriva, y la web de prueba
 solo mostraría derivaciones. Las marcas `#fallar-router` y `#sin-respaldo` solo existen acá."""
 from __future__ import annotations
 
 import re
 
-from ..consulta.esquemas import RespuestaConCita
+from ..consulta.esquemas import CitasExtraidas, CitaTextual, RespuestaRedactada
 from ..texto import normalizar
 from .esquemas import SalidaRouter
 
@@ -49,14 +49,21 @@ def router(texto: str) -> SalidaRouter:
     )
 
 
-def respuesta_con_cita(texto: str) -> RespuestaConCita:
+def citas_extraidas(texto: str) -> CitasExtraidas:
     pagina = _PAGINA.search(texto)
     if "#sin-respaldo" in texto or not pagina:
-        return RespuestaConCita(puede_responder=False, respuesta="[fake] sin respaldo en las fuentes")
+        return CitasExtraidas(puede_responder=False, falta="[fake] sin respaldo en las fuentes")
     fuente = re.findall(r"\[Fuente (\d+)\]", texto[: pagina.start()])[-1]
-    cita = pagina.group(2)[:60]
-    return RespuestaConCita(puede_responder=True, respuesta=f"[fake] Según el documento: {cita}", fuente=int(fuente),
-                            pagina=int(pagina.group(1)), cita=cita)
+    return CitasExtraidas(puede_responder=True, citas=[
+        CitaTextual(fuente=int(fuente), pagina=int(pagina.group(1)), cita=pagina.group(2)[:60])])
 
 
-GUIONES = {"SalidaRouter": router, "RespuestaConCita": respuesta_con_cita}
+_CITA = re.compile(r"«(.+?)»", re.DOTALL)
+
+
+def respuesta_redactada(texto: str) -> RespuestaRedactada:
+    cita = _CITA.search(texto)
+    return RespuestaRedactada(respuesta=f"[fake] Según el documento: {cita.group(1) if cita else ''}")
+
+
+GUIONES = {"SalidaRouter": router, "CitasExtraidas": citas_extraidas, "RespuestaRedactada": respuesta_redactada}

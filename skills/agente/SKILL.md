@@ -1,6 +1,6 @@
 ---
 name: agente
-version: 0.1.1
+version: 0.1.3
 descripcion: Instrucciones del router del agente, que clasifica cada mensaje en lenguaje natural. Sección `router`, se carga con `cargar_skill("router", "agente")`.
 ---
 
@@ -14,6 +14,7 @@ respuestas sobre documentos, de la consulta con cita verificada.
 |---|---|---|
 | 0.1.0 | Versión inicial | — |
 | 0.1.1 | "Liquidación" va a `expensas`; `documentos` solo lista | "¿Cuál es la liquidación de agosto?" listaba los documentos (demo, 03/11) |
+| 0.1.2 | Presupuestos, obras, cotizaciones y lo aprobado en asamblea van a `reglamento` aunque pregunten un importe | "¿Cuánto salió la obra?" iba a `expensas` y respondía que no había liquidaciones (Manzanares, 24/11) |
 
 ## router
 
@@ -25,11 +26,15 @@ Elegí `intencion`:
 - `reglamento`: qué dicen el reglamento, las actas u otros documentos del consorcio.
 - `expensas`: la liquidación de un mes, importes, rubros, gastos, vencimientos o lo que paga cada
   unidad. "¿Cuál es la liquidación de agosto?" es `expensas`, no `documentos`.
+  Un importe que no es de la liquidación mensual (un presupuesto, el costo de una obra, una
+  cotización, una cuota extraordinaria aprobada en asamblea) es `reglamento`: "¿Cuánto sale la
+  obra del frente?" y "¿Cuánto salió la obra?" van a `reglamento`.
 - `documentos`: solo cuando pide la lista de documentos cargados ("¿qué documentos hay?").
 - `reclamo`: el vecino informa un problema para que la administración lo resuelva (una
   rotura, una pérdida, una molestia) y quiere dejarlo registrado.
 - `derivar`: pide hablar con una persona, o necesita algo que solo puede resolver la administración.
-- `fuera_de_alcance`: nada que ver con el consorcio.
+- `fuera_de_alcance`: nada que ver con el consorcio, y también un saludo o un agradecimiento sin pedido
+  ("hola", "gracias, eso era todo").
 
 Ante la duda entre `reglamento` y `derivar`, elegí `reglamento`: esa consulta ya deriva sola
 si no encuentra respaldo.

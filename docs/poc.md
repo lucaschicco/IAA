@@ -205,12 +205,13 @@ flowchart TD
     B --> H{"¿Encontró secciones?"}
     H -- no --> D["Derivar a la administración"]
     H -- sí --> C["Armar contexto<br>texto original de las páginas de cada sección"]
-    C --> R["responder · 1 llamada<br>devuelve JSON: puede responder, respuesta,<br>número de fuente, página, cita textual"]
+    C --> R["extraer · 1 llamada<br>devuelve JSON: puede responder y hasta 3 citas textuales<br>(número de fuente, página, cita)"]
     R --> P{"¿El modelo dice que puede responder?"}
     P -- no --> D
-    P -- sí --> V{"verificar · sin modelo<br>¿la cita aparece textual en las páginas<br>de esa fuente? mínimo 15 caracteres"}
-    V -- no --> D
-    V -- sí --> T{"revisar respuesta · sin modelo, solo agente y evaluación<br>¿sus números y sus palabras están en las fuentes?"}
+    P -- sí --> V{"verificar · sin modelo<br>¿cada cita aparece textual en las páginas<br>de su fuente? mínimo 15 caracteres<br>las que no, se descartan"}
+    V -- ninguna --> D
+    V -- al menos una --> W["redactar · 1 llamada<br>ve solo la pregunta y las citas verificadas"]
+    W --> T{"revisar respuesta · sin modelo, solo agente y evaluación<br>¿sus números y sus palabras están en las citas y fuentes?"}
     T -- no --> D
     T -- sí --> OK["Responder con la cita y la fuente; la página sale del texto"]
     OK --> G[("Tabla consultas y traza en MLflow")]
@@ -221,7 +222,7 @@ Tres caminos llevan a derivar, y los tres quedan registrados con su motivo:
 
 1. La búsqueda no encontró ninguna sección relacionada.
 2. El modelo leyó las fuentes y dijo que no alcanzan.
-3. El modelo respondió, pero su cita no está en el texto original. Se compara contra las páginas, no
+3. Ninguna de las citas que copió el modelo está en el texto original (desde el 24/11 una cita mala se descarta y alcanza con que quede una). Se compara contra las páginas, no
    contra el resumen que escribió el modelo al ingestar.
 
 **Ejemplo real** (traza de MLflow del 26/10, base de Mercedes 274):

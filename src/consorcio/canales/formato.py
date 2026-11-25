@@ -73,15 +73,18 @@ def formatear_respuesta(final: dict) -> str:
     r = final.get("respuesta", {}) or {}
     fuente = final.get("fuente") or {}
     partes = [r.get("respuesta") or final.get("mensaje") or ""]
-    if r.get("cita"):
-        partes.append(f"\n«{r['cita']}»")
-    pie = [str(x) for x in (fuente.get("nombre_archivo"), fuente.get("titulo")) if x]
-    if r.get("pagina"):
-        pie.append(f"pág. {r['pagina']}")
-    if pie:
-        partes.append("Fuente: " + " · ".join(pie))
+    # cada cita con su propia fuente: pueden venir de documentos distintos
+    citas = r.get("citas") or ([{**fuente, "cita": r["cita"], "pagina": r.get("pagina")}] if r.get("cita") else [])
+    for c in citas:
+        partes.append(f"\n«{c['cita']}»")
+        pie = [str(x) for x in (c.get("nombre_archivo"), c.get("titulo")) if x]
+        if c.get("pagina"):
+            pie.append(f"pág. {c['pagina']}")
+        if pie:
+            partes.append("Fuente: " + " · ".join(pie))
     if final.get("verificada"):
-        partes.append("(cita verificada contra el documento original)")
+        partes.append("(citas verificadas contra el documento original)" if len(citas) > 1
+                      else "(cita verificada contra el documento original)")
     return _recortar("\n".join(partes))
 
 

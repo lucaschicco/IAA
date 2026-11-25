@@ -28,7 +28,11 @@ log = logging.getLogger("consorcio.agente")
 MENSAJE_ERROR = "No pude completar el pedido por un problema interno. Probá de nuevo en un rato."
 MENSAJE_FALLO_DERIVADO = "No pude resolverlo y lo derivé a la administración."
 MENSAJE_DERIVADO = "Derivé tu consulta a la administración. Vas a ver la respuesta en tus solicitudes."
-MENSAJE_FUERA_DE_ALCANCE = "Eso queda fuera de lo que puedo resolver: solo ayudo con temas del consorcio."
+# también le llega a un saludo o un "gracias" (Manzanares, 25/11): que sirva de bienvenida y no suene a rechazo
+MENSAJE_FUERA_DE_ALCANCE = (
+    "Puedo ayudarte con temas del consorcio: qué dice el reglamento o las actas, tus expensas, los documentos "
+    "cargados o un reclamo para la administración. ¿En qué te ayudo?"
+)
 MENSAJE_SIN_EXPENSAS = "No encontré liquidaciones que coincidan con lo que pediste."
 MENSAJE_SIN_UNIDADES = "Tu usuario no tiene unidades asociadas en este consorcio, así que no puedo saber cuál es la tuya."
 MENSAJE_SIN_DOCUMENTOS = "Este consorcio todavía no tiene documentos cargados."
@@ -93,7 +97,7 @@ def protegido(nombre: str, nodo: Callable[[EstadoAgente], dict]) -> Callable[[Es
     return envuelto
 
 
-def nodo_reglamento(estado: EstadoAgente) -> dict:
+def _consultar_documentos(estado: EstadoAgente) -> tuple[dict, dict]:
     identidad = estado["identidad"]
     pregunta = (estado.get("salida_router") or {}).get("pregunta_reescrita") or estado["entrada"]
     origen = "evaluacion" if estado["origen"] == "evaluacion" else estado["canal"]
@@ -105,6 +109,11 @@ def nodo_reglamento(estado: EstadoAgente) -> dict:
         "seccion_citada": (final.get("fuente") or {}).get("seccion_id"), "verificada": bool(final.get("verificada")),
         "senales_certeza": senales_reglamento(final.get("resultados", []), (final.get("respuesta") or {}).get("fuente")),
     }
+    return datos, final
+
+
+def nodo_reglamento(estado: EstadoAgente) -> dict:
+    datos, final = _consultar_documentos(estado)
     if not final.get("derivada"):
         return {**datos, "resultado": "respondida", "respuesta": formatear_respuesta(final)}
     motivo = "cita_no_verificada" if (final.get("motivo") or "").startswith("cita no verificada") else "sin_respaldo"
@@ -139,6 +148,19 @@ def _que_pide(salida: dict) -> str:
 
 
 def nodo_expensas(estado: EstadoAgente) -> dict:
+    """Sin liquidación que responda, antes de decir que no hay datos busca en los documentos: "¿cuánto salió
+    la obra?" también es un importe, pero de un presupuesto o un acta. Solo se usa si sale con cita
+    verificada; si no, queda el "no hay datos" de expensas, sin crear una solicitud por eso."""
+    r = _expensas(estado)
+    if r["resultado"] != "sin_datos" or r["respuesta"] == MENSAJE_SIN_UNIDADES:
+        return r
+    datos, final = _consultar_documentos(estado)
+    if final.get("derivada"):
+        return r
+    return {**datos, "funcionalidad": "reglamento", "resultado": "respondida", "respuesta": formatear_respuesta(final)}
+
+
+def _expensas(estado: EstadoAgente) -> dict:
     identidad, salida = estado["identidad"], estado.get("salida_router") or {}
     cid = identidad.consorcio_id
     que, periodo = _que_pide(salida), salida.get("periodo")

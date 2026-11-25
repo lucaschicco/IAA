@@ -1,15 +1,17 @@
-"""Grafo de LangGraph de una consulta con cita verificada.
+"""Grafo de LangGraph de una consulta con citas verificadas.
 
-    START → buscar ─┬→ responder → verificar → END
-                    └→ derivar ──────────────→ END   (sin resultados)
+    START → buscar ─┬→ extraer → verificar ─┬→ redactar → END
+                    │                       └→ END        (ninguna cita verificada: deriva)
+                    └→ derivar ─────────────────────────→ END   (sin resultados)
 
 - `buscar` no usa el modelo: Postgres devuelve las k secciones más parecidas.
-- `responder` hace UNA llamada con salida estructurada (RespuestaConCita).
-- `verificar` comprueba en código que la cita exista textualmente en las páginas
-  originales de la fuente. Si no existe, o el modelo dijo que no puede responder,
-  la consulta se deriva a la administración: el sistema no responde sin respaldo.
-  Con `validar_respuesta` también revisa el texto libre y calcula la página: lo piden
-  el agente y la evaluación. Telegram está congelado y sigue sin esa revisión.
+- `extraer` (modelo) copia de 1 a 3 fragmentos textuales de las páginas que respondan la pregunta.
+- `verificar` (código) se queda con las citas que aparecen textualmente en las páginas de su fuente. Una cita
+  mala se descarta sin tirar la consulta; si no queda ninguna, se deriva: el sistema no responde sin respaldo.
+- `redactar` (modelo) escribe la respuesta corta viendo solo la pregunta y las citas verificadas, no las páginas:
+  lo que no está en una cita no lo puede usar. El vecino ve la respuesta y, debajo, las citas reales.
+  Con `validar_respuesta` también revisa en código los montos y números del texto libre y calcula la página:
+  lo piden el agente y la evaluación. Telegram está congelado y sigue sin esa revisión.
 """
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ from .buscador import (
     verificar_cita,
     verificar_respuesta,
 )
-from .esquemas import RespuestaConCita
+from .esquemas import MAX_CITAS, CitasExtraidas, RespuestaRedactada
 
 MENSAJE_DERIVACION = (
     "No encuentro respaldo suficiente en los documentos del consorcio para responder con seguridad. "
@@ -45,12 +47,14 @@ class EstadoConsulta(TypedDict, total=False):
     validar_respuesta: bool
     resultados: list[dict]
     contexto: str
-    respuesta: dict  # RespuestaConCita.model_dump()
+    extraidas: dict  # CitasExtraidas.model_dump()
+    citas: list[dict]  # las verificadas, con su documento
+    respuesta: dict  # respuesta, y fuente, pagina y cita de la primera cita; todas en `citas`
     verificada: bool
     derivada: bool
     motivo: str
     mensaje: str  # lo que ve el usuario
-    fuente: dict | None  # la sección citada
+    fuente: dict | None  # la sección de la primera cita
     costo: dict
     segundos: float
     _costo_usd: float | None  # `costo` lo trae redondeado a 4 decimales, para mostrar
@@ -70,43 +74,70 @@ def nodo_buscar(estado: EstadoConsulta) -> dict:
     }
 
 
-def hay_resultados(estado: EstadoConsulta) -> Literal["responder", "derivar"]:
-    return "responder" if estado["resultados"] else "derivar"
+def hay_resultados(estado: EstadoConsulta) -> Literal["extraer", "derivar"]:
+    return "extraer" if estado["resultados"] else "derivar"
 
 
-def nodo_responder(estado: EstadoConsulta) -> dict:
+def nodo_extraer(estado: EstadoConsulta) -> dict:
     usuario = f"Pregunta del vecino: {estado['pregunta']}\n\nFuentes:\n\n{estado['contexto']}"
     resp = invocar_estructurado(
-        estado["_contador"], "responder", cargar_skill("responder", "consulta"), usuario, RespuestaConCita
+        estado["_contador"], "extraer", cargar_skill("extraer", "consulta"), usuario, CitasExtraidas
     )
-    return {"respuesta": resp.model_dump()}
+    return {"extraidas": resp.model_dump()}
 
 
 def nodo_verificar(estado: EstadoConsulta) -> dict:
-    r = estado["respuesta"]
-    if not r.get("puede_responder"):
+    e = estado["extraidas"]
+    if not e.get("puede_responder") or not e.get("citas"):
         return _derivar(estado, "el modelo no encontró respaldo en las fuentes")
-    fuente_n = r.get("fuente")
-    paginas = estado["_paginas_por_fuente"].get(fuente_n or -1, [])
-    ok, motivo = verificar_cita(r.get("cita"), paginas)
-    if not ok:
-        return _derivar(estado, f"cita no verificada: {motivo}")
+    citas, motivos = [], []
+    for c in e["citas"][:MAX_CITAS]:
+        paginas = estado["_paginas_por_fuente"].get(c.get("fuente") or -1, [])
+        ok, motivo = verificar_cita(c.get("cita"), paginas)
+        if not ok:
+            motivos.append(motivo)
+            continue
+        pagina = pagina_de_cita(c["cita"], paginas, c.get("pagina")) if estado.get("validar_respuesta") else c.get("pagina")
+        r = estado["resultados"][c["fuente"] - 1]
+        citas.append({**c, "pagina": pagina, "documento": r["documento"], "titulo": r["titulo"],
+                      "nombre_archivo": r.get("nombre_archivo"), "fecha_documento": r.get("fecha_documento")})
+    if not citas:
+        return _derivar(estado, f"cita no verificada: {motivos[0]}")
+    return {"citas": citas}
+
+
+def hay_citas(estado: EstadoConsulta) -> Literal["redactar", "__end__"]:
+    return "redactar" if estado.get("citas") and not estado.get("derivada") else END
+
+
+def _con_pagina(c: dict) -> str:
+    return f", página {c['pagina']}" if c.get("pagina") else ""
+
+
+def nodo_redactar(estado: EstadoConsulta) -> dict:
+    citas = estado["citas"]
+    bloques = "\n\n".join(
+        f"[Cita {i}] {c['documento']} — {c['titulo']} (fecha {c.get('fecha_documento') or 'sin fecha'}{_con_pagina(c)}):"
+        f"\n«{c['cita']}»" for i, c in enumerate(citas, start=1)
+    )
+    usuario = f"Pregunta del vecino: {estado['pregunta']}\n\nCitas verificadas:\n\n{bloques}"
+    redactada = invocar_estructurado(
+        estado["_contador"], "redactar", cargar_skill("redactar", "consulta"), usuario, RespuestaRedactada
+    )
+    principal = citas[0]
+    r = {"puede_responder": True, "respuesta": redactada.respuesta, "fuente": principal["fuente"],
+         "pagina": principal.get("pagina"), "cita": principal["cita"], "citas": citas}
+    motivo = "citas encontradas en el texto original"
     if estado.get("validar_respuesta"):
         fuentes = texto_de_fuentes(estado["resultados"], estado["_paginas_por_fuente"])
-        ok, motivo = verificar_respuesta(r["respuesta"], r["cita"], fuentes)
+        ok, motivo = verificar_respuesta(
+            r["respuesta"], " ".join(c["cita"] for c in citas), fuentes, estado["pregunta"]
+        )
         if not ok:
-            return _derivar(estado, motivo)
-        r = {**r, "pagina": pagina_de_cita(r["cita"], paginas, r.get("pagina"))}
-    fuente = estado["resultados"][fuente_n - 1]
-    pagina = r.get("pagina")
-    mensaje = (
-        f"{r['respuesta']}\n\n"
-        f"Fuente: {fuente['documento']} — {fuente['titulo']}"
-        f"{f', página {pagina}' if pagina else ''}.\n"
-        f"Cita: «{r['cita']}»"
-    )
+            return {**_derivar(estado, motivo), "respuesta": r}
+    pie = "\n".join(f"Fuente: {c['documento']} — {c['titulo']}{_con_pagina(c)}.\nCita: «{c['cita']}»" for c in citas)
     return {**_cierre(estado), "respuesta": r, "verificada": True, "derivada": False, "motivo": motivo,
-            "mensaje": mensaje, "fuente": fuente}
+            "mensaje": f"{r['respuesta']}\n\n{pie}", "fuente": estado["resultados"][principal["fuente"] - 1]}
 
 
 def nodo_derivar(estado: EstadoConsulta) -> dict:
@@ -127,13 +158,15 @@ def _cierre(estado: EstadoConsulta) -> dict:
 def construir_grafo():
     g = StateGraph(EstadoConsulta)
     g.add_node("buscar", nodo_buscar)
-    g.add_node("responder", nodo_responder)
+    g.add_node("extraer", nodo_extraer)
     g.add_node("verificar", nodo_verificar)
+    g.add_node("redactar", nodo_redactar)
     g.add_node("derivar", nodo_derivar)
     g.add_edge(START, "buscar")
-    g.add_conditional_edges("buscar", hay_resultados, ["responder", "derivar"])
-    g.add_edge("responder", "verificar")
-    g.add_edge("verificar", END)
+    g.add_conditional_edges("buscar", hay_resultados, ["extraer", "derivar"])
+    g.add_edge("extraer", "verificar")
+    g.add_conditional_edges("verificar", hay_citas, ["redactar", END])
+    g.add_edge("redactar", END)
     g.add_edge("derivar", END)
     return g.compile()
 
@@ -172,7 +205,8 @@ def preguntar(
         costo = final.get("costo", {})
         final["consulta_id"] = guardar_consulta(
             {
-                "pregunta": pregunta, "consorcio_id": consorcio_id, "respuesta": r.get("respuesta"), "cita": r.get("cita"),
+                "pregunta": pregunta, "consorcio_id": consorcio_id, "respuesta": r.get("respuesta"),
+                "cita": "\n\n".join(c["cita"] for c in r.get("citas", [])) or r.get("cita"),
                 "documento_id": fuente.get("documento_id"), "seccion_id": fuente.get("seccion_id"),
                 "pagina": r.get("pagina"), "verificada": bool(final.get("verificada")),
                 "derivada": bool(final.get("derivada")), "motivo": final.get("motivo"),

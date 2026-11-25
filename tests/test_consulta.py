@@ -36,14 +36,14 @@ FILA_SIN_REDONDEO = (
 
 
 def test_skill_consulta_existe_y_tiene_version():
-    assert "cita" in cargar_skill("responder", "consulta").lower()
-    assert version_skill("consulta") == "0.2.0"
+    assert "cita" in cargar_skill("extraer", "consulta").lower() and "citas" in cargar_skill("redactar", "consulta").lower()
+    assert version_skill("consulta") == "0.3.0"
     assert len(cargar_skill("liquidacion")) > 100
 
 
 def test_grafo_consulta_tiene_los_nodos():
     nodos = set(construir_grafo().get_graph().nodes)
-    assert {"buscar", "responder", "verificar", "derivar"} <= nodos
+    assert {"buscar", "extraer", "verificar", "redactar", "derivar"} <= nodos
 
 
 def test_normalizar_y_palabras_clave():
@@ -200,3 +200,22 @@ def test_buscador_palabras_y_tsvector_devuelven_la_misma_forma():
         for r in res:
             assert {"seccion_id", "documento_id", "nombre_archivo", "titulo", "resumen", "puntaje", "metodo"} <= set(r)
             assert r["metodo"] == metodo
+
+
+def test_citas_extraidas_sin_puede_responder_se_acepta():
+    """Haiku 5.5 omitía `puede_responder` al traer citas y la consulta fallaba con ValueError (25/11)."""
+    from consorcio.consulta.esquemas import CitasExtraidas
+
+    e = CitasExtraidas.model_validate({"citas": [{"fuente": 1, "pagina": 2, "cita": "una cita textual de prueba"}]})
+    assert e.puede_responder is True and len(e.citas) == 1
+    assert CitasExtraidas.model_validate({"puede_responder": False}).citas == []
+
+
+def test_la_respuesta_puede_retomar_la_pregunta_y_hablar_de_las_citas():
+    """Manzanares, 25/11: respuestas correctas derivaban por palabras de la pregunta y por "las citas no muestran"."""
+    fuente = "La asamblea se convoca para las 19:30 hs en el hall de entrada."
+    respuesta = "Las citas no muestran a qué hora empezó la asamblea: estaba convocada a las 19:30 en el hall."
+    assert not verificar_respuesta(respuesta, fuente, fuente)[0]
+    assert verificar_respuesta(respuesta, fuente, fuente, "¿A qué hora empezó la asamblea? ¿estaba convocada?")[0]
+    # los números siguen teniendo que estar en las fuentes, aunque los diga la pregunta
+    assert not verificar_respuesta("Empezó a las 20:15 en el hall.", fuente, fuente, "¿Empezó a las 20:15?")[0]
