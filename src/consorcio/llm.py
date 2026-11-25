@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 import time
 from dataclasses import asdict, dataclass, field
@@ -273,6 +274,8 @@ def invocar_estructurado[T: BaseModel](
     contador.registrar(nodo, modelo, getattr(raw, "usage_metadata", None), segundos)
     parsed = resp.get("parsed") if isinstance(resp, dict) else resp
     if parsed is None:
+        parsed = _reparar_listas_como_texto(raw, esquema)
+    if parsed is None:
         raise ValueError(
             f"El modelo no devolvió una salida válida para {esquema.__name__}: "
             f"{resp.get('parsing_error') if isinstance(resp, dict) else 'sin detalle'}"
@@ -326,3 +329,23 @@ def _texto_de(contenido: Any) -> str:
                 partes.append(b.get("text", ""))
         return "\n".join(partes)
     return str(contenido)
+
+
+def _reparar_listas_como_texto[T: BaseModel](raw: Any, esquema: type[T]) -> T | None:
+    """Haiku 5.5 a veces manda un campo lista como texto JSON (`"personas": "[{...}]"`, Manzanares 25/11):
+    se decodifica ese texto y se valida de nuevo. Si igual no valida, sigue el error original."""
+    llamadas = getattr(raw, "tool_calls", None) or []
+    if not llamadas:
+        return None
+    args = dict(llamadas[0].get("args") or {})
+    for k, v in args.items():
+        campo = esquema.model_fields.get(k)
+        if campo and campo.annotation is not str and isinstance(v, str) and v.lstrip()[:1] in ("[", "{"):
+            try:
+                args[k] = json.loads(v)
+            except ValueError:
+                return None
+    try:
+        return esquema.model_validate(args)
+    except ValueError:  # ValidationError
+        return None

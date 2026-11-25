@@ -119,7 +119,7 @@ class Documento(Base):
     clasificacion: Mapped[dict] = mapped_column(JSON)
     costo: Mapped[dict] = mapped_column(JSON)
     segundos_total: Mapped[float] = mapped_column(Float)
-    # extraido → (futuro) pendiente_revision → aprobado / rechazado
+    # extraido | incompleto (falló la extracción, sin secciones) → (futuro) pendiente_revision → aprobado / rechazado
     estado: Mapped[str] = mapped_column(String(30), default="extraido")
     # False: el documento queda guardado pero el buscador de consultas no lo usa
     # (p. ej. el contrato Cabrera, que es de otro edificio y se ingestó para evaluar OCR)
@@ -760,8 +760,10 @@ def guardar_documento(
     sha256: str | None = None,
     crudo_clave: str | None = None,
     reemplazar_periodo: bool = False,
+    incompleto: bool = False,
 ) -> dict:
-    """Inserta (o reemplaza) el documento y todo lo extraído. Idempotente por consorcio + hash.
+    """Inserta (o reemplaza) el documento y todo lo extraído. `incompleto`: falló la extracción y quedó sin
+    secciones; se guarda igual (lo que costó OCR no se pierde) y una nueva carga lo reprocesa. Idempotente por consorcio + hash.
 
     Una sola liquidación por consorcio y período: este es el control autoritativo (el de la ingesta
     evita gastar de más, pero no cubre dos PDF distintos en paralelo). Si otro documento ya tiene el
@@ -785,6 +787,7 @@ def guardar_documento(
         d = Documento(
             id=documento_id,
             consorcio_id=consorcio_id,
+            estado="incompleto" if incompleto else "extraido",
             nombre_archivo=nombre_archivo,
             ruta=ruta,
             tipo_documento=m.tipo_documento,
@@ -934,7 +937,7 @@ def buscar_documento(documento_id: str, consorcio_id: str | None = None) -> dict
     crear_tablas()
     with Session(engine()) as s:
         d = s.get(Documento, documento_id)
-        return _ficha_documento(d) if d and d.consorcio_id == cid else None
+        return _ficha_documento(d, estado=d.estado) if d and d.consorcio_id == cid else None
 
 
 def _documentos_del_periodo(s: Session, consorcio_id: str, periodo: str, excluir_id: str) -> list[Documento]:

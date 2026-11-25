@@ -240,6 +240,7 @@ def nodo_persistir(estado: EstadoIngesta) -> dict:
         segundos_total=estado["segundos_total"],
         liquidacion=estado.get("liquidacion"),
         consorcio_id=estado["consorcio_id"],
+        incompleto=bool(estado.get("errores")) and not estado["extraccion"].get("secciones"),
     )
     return {"persistido": {**estado["persistido"], "postgres": fila}}
 
@@ -350,7 +351,11 @@ def _correr_con_candado(entrada: EstadoIngesta) -> EstadoIngesta:
         # Dentro del candado: si no, una carga que acaba de terminar se vería como documento nuevo
         if not (entrada["forzar"] or entrada["reusar_texto"]):
             existente = postgres.buscar_documento(entrada["documento_id"], consorcio_id)
-            if existente:
+            if existente and existente.get("estado") == "incompleto":
+                # Quedó guardado sin secciones porque falló `estructurar` (p. ej. sin cupo del modelo): no se
+                # puede buscar en él. Subirlo de nuevo lo reprocesa reusando las páginas ya transcriptas.
+                entrada = {**entrada, "reusar_texto": True}
+            elif existente:
                 return _corte(entrada, "duplicado", documento_existente=existente)
         if tope_excedido():  # después de `duplicado`, que no gasta y sigue contestando
             return _corte(entrada, "tope_excedido")

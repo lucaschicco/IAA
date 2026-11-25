@@ -145,7 +145,7 @@ def documento(documento_id: str) -> dict | None:
         d = s.get(postgres.Documento, documento_id)
         return None if d is None else {
             "sha256": d.sha256, "crudo_clave": d.crudo_clave, "total_paginas": d.total_paginas, "costo": d.costo,
-            "paginas": len(d.paginas), "consorcio_id": d.consorcio_id,
+            "paginas": len(d.paginas), "consorcio_id": d.consorcio_id, "estado": d.estado,
         }
 
 
@@ -191,7 +191,7 @@ def test_segunda_carga_es_duplicado_sin_ocr_ni_modelo(s3, espias, tmp_path):
     assert final["estado"] == "duplicado" and espias == {}
     existente = final["documento_existente"]
     assert existente["id"] == primero["documento_id"] and existente["nombre_archivo"] == "acta.pdf"
-    assert set(existente) == {"id", "nombre_archivo", "titulo", "creado_en"}
+    assert set(existente) == {"id", "nombre_archivo", "titulo", "creado_en", "estado"}
     assert final["errores"] == [] and final["costo"] == {} and final["consorcio_id"] == X
     assert final["documento_id"] == primero["documento_id"] and final["nombre_archivo"] == "acta.pdf"
     json.dumps(final)
@@ -691,3 +691,24 @@ def test_cli_salida_por_estado_y_forzar(monkeypatch, capsys, final, salida):
     assert cli.main(["ingestar", "a.pdf", "--consorcio", X, "--forzar"]) == salida
     assert recibido["forzar"] is True and recibido["consorcio_id"] == X
     assert json.loads(capsys.readouterr().out)["estado"] == final["estado"]
+
+
+def test_un_documento_que_quedo_sin_secciones_se_reprocesa_al_subirlo_de_nuevo(s3, monkeypatch, tmp_path):
+    """Manzanares, 24/11: sin cupo del modelo, `estructurar` falló, el documento se guardó con 0 secciones y
+    volver a subirlo daba "duplicado". Ahora queda `incompleto` y la nueva carga lo reprocesa."""
+    pdf = crear_pdf(tmp_path / "reglamento.pdf", "reglamento de copropiedad")
+
+    def sin_cupo(*_a, **_k):
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
+
+    original = grafo.estructurar_lotes
+    monkeypatch.setattr(grafo, "estructurar_lotes", sin_cupo)
+    primero = ingestar_pdf(pdf, consorcio_id=X)
+    assert primero["estado"] == "procesado" and primero["errores"]
+    assert documento(primero["documento_id"])["estado"] == "incompleto"
+
+    monkeypatch.setattr(grafo, "estructurar_lotes", original)
+    otra = ingestar_pdf(pdf, consorcio_id=X)
+    assert otra["estado"] == "procesado" and otra["errores"] == []
+    assert documento(primero["documento_id"])["estado"] == "extraido"
+    assert ingestar_pdf(pdf, consorcio_id=X)["estado"] == "duplicado"  # completo: ya no se reprocesa
