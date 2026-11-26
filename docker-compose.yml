@@ -77,7 +77,8 @@ services:
   # Trazas y métricas (docs/observabilidad.md). Sin login y con textos de todos los consorcios: el puerto se
   # publica solo en la máquina local. La app lo alcanza igual por la red de Compose (http://mlflow:5000).
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    # Fija: los arreglos de las trazas dependen de esta versión. Va junto con mlflow-skinny en pyproject.toml
+    image: ghcr.io/mlflow/mlflow:v3.18.0
     container_name: consorcio-mlflow
     environment:
       # Sin esto MLflow rechaza el Host "mlflow:5000" con el que lo llama la app (403, "DNS rebinding")

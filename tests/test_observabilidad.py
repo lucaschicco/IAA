@@ -13,11 +13,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import yaml
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 RAIZ = Path(__file__).resolve().parents[1]
 
@@ -188,3 +192,18 @@ def test_mlflow_se_publica_solo_en_la_maquina_local():
     mlflow = yaml.safe_load((RAIZ / "docker-compose.yml").read_text(encoding="utf-8"))["services"]["mlflow"]
     assert mlflow["ports"] == ["127.0.0.1:5000:5000"]
     assert "--host 0.0.0.0 --port 5000" in mlflow["command"]
+
+
+def test_mlflow_tiene_version_fija():
+    """Los arreglos del 17/11 y del 18/11 dependen de cómo se comporta MLflow 3.18, sobre todo la librería
+    que corre dentro de la app. Con la imagen en `latest` y la librería en `>=3.0`, un Codespace nuevo podía
+    bajar otra versión. Servidor y librería quedan en la misma versión."""
+    imagen = yaml.safe_load((RAIZ / "docker-compose.yml").read_text(encoding="utf-8"))["services"]["mlflow"]["image"]
+    nombre, _, etiqueta = imagen.rpartition(":")
+    assert nombre == "ghcr.io/mlflow/mlflow"
+    assert re.fullmatch(r"v\d+\.\d+\.\d+", etiqueta), imagen
+    version = Version(etiqueta.removeprefix("v"))
+    dependencias = tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    libreria = next(r for r in map(Requirement, dependencias) if r.name == "mlflow-skinny")
+    assert libreria.specifier.contains(version), libreria
+    assert not libreria.specifier.contains(f"{version.major}.{version.minor + 1}.0"), libreria

@@ -29,7 +29,7 @@ dependencies = [
     "boto3>=1.34",
     "psycopg[binary]>=3.1",
     # Trazabilidad
-    "mlflow-skinny>=3.0",
+    "mlflow-skinny>=3.18,<3.19",  # la misma versión que la imagen de docker-compose.yml
     "pandas>=2.0",  # lo importa mlflow.langchain (autolog de trazas GenAI); skinny no lo trae
     "python-dotenv>=1.0",
     # Canales

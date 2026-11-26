@@ -7,8 +7,11 @@ documentación de MLflow, y deja planteada una decisión de privacidad que tiene
 ## Qué se guarda
 
 MLflow es opcional: sin `MLFLOW_TRACKING_URI`, o con el servidor caído, el sistema anda igual y no
-guarda nada (`src/consorcio/observabilidad.py`). Con MLflow prendido, cada corrida deja dos cosas en el
-experimento `consorcio-ingesta`:
+guarda nada (`src/consorcio/observabilidad.py`). La versión está fija en la 3.18, en el servidor
+(`ghcr.io/mlflow/mlflow:v3.18.0` en `docker-compose.yml`) y en la librería que corre dentro de la app
+(`mlflow-skinny>=3.18,<3.19` en `pyproject.toml`): los arreglos de las trazas del 17/11 y del 18/11
+dependen de cómo se comporta esa versión, y `test_mlflow_tiene_version_fija` falla si una de las dos
+cambia sola. Con MLflow prendido, cada corrida deja dos cosas en el experimento `consorcio-ingesta`:
 
 - **Un run** (pestaña "Model training"): etiquetas y números, sin texto libre.
 - **Una traza** (pestaña "Traces", hecha por `mlflow.langchain.autolog()`): un árbol de spans, uno por
@@ -104,6 +107,4 @@ decisión y ya está hecho (20/11).
   Hay que comprobar en la versión que usamos si `span_processors` también tapa las salidas y el resumen
   de la traza (la columna Input de la lista), porque la documentación solo muestra entradas y salidas de
   cada span.
-- `docker-compose.yml` usa `ghcr.io/mlflow/mlflow:latest`, que hoy es la 3.18.0. Los dos arreglos de las
-  trazas (17/11 y 18/11) dependen de cómo se comporta esa versión, así que conviene fijarla.
 - Usar MLflow como fuente de costo y latencia por tarea en el informe.
