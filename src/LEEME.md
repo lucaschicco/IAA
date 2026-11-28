@@ -7,6 +7,7 @@ Paquete `consorcio/` (se instala con `pip install -e .`; dentro de Docker ya est
 | `config.py` | Configuración desde `.env` (proveedor de modelo, umbrales de OCR, conexiones, precios) |
 | `llm.py` | Acceso al modelo independiente del proveedor (`google_genai`, `anthropic`, `openai`, `fake`) + contador de llamadas, tokens y costo |
 | `observabilidad.py` | Trazas en MLflow (opcional) y logging |
+| `datos_personales.py` | `tapar`: reemplaza mails, CUIT, teléfonos, DNI, direcciones y nombres antes de mandar un texto a MLflow (spec en `docs/2026-11-27-spec-privacidad-trazas.md`) |
 | `cli.py` | Línea de comandos `consorcio ...`; junto con la evaluación, el único lugar que resuelve `CONSORCIO_POR_DEFECTO` |
 | `identidad.py` | `Identidad` inmutable y `resolver_identidad(sujeto_externo, consorcio_id)`, que falla sin membresía activa y junta los roles y unidades de esa persona en el consorcio (rol principal y UF); equipo de plataforma y última actividad. Agnóstico al login |
 | `auth/` | Login de Lucas: `cuentas.py` (autenticar con bloqueo, invitaciones), `seguridad.py` (Argon2, JWT), la API JSON (`app.py`, `make api`) y `alta.py` (alta de consorcios y unidades por terminal). Ver `auth/LEEME.md` |
