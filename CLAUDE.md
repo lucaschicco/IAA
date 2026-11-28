@@ -218,6 +218,7 @@ Grafos de LangGraph (estado tipado, nodos, aristas condicionales). Se dibujan co
 - `docs/poc.md`: diagramas y paso a paso. Actualizarlo cuando cambie un grafo, un canal o los resultados.
 - `docs/evaluaciones/`: un archivo por evaluación, con fecha. Los resultados tienen que poder reproducirse desde
   el repo.
+- `docs/TODO.md`: tareas pendientes con prioridad. Tildar al cerrar y sumar lo nuevo que encuentre el QA.
 - `README.md`: referencia técnica y checklist de próximos pasos.
 - `src/LEEME.md`: mapa de módulos.
 - `docs/informe.md`: informe final, una sección por ítem de la consigna.

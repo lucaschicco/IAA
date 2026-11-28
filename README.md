@@ -70,6 +70,8 @@ En el diseño original había dos flujos más, facturas y proveedores, que no en
 
 ## 2. Estado y próximos pasos
 
+La lista detallada de tareas, con lo que encontró el QA y su prioridad, está en [`docs/TODO.md`](docs/TODO.md).
+
 **Datos**
 - [x] OCR del reglamento de copropiedad y las 4 actas (76 páginas escaneadas) (26/10). Falta revisarlo a mano
 - [x] Texto del reglamento de cocheras y las convocatorias (26/10). Falta la normativa
