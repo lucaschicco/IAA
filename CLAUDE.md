@@ -1,93 +1,234 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guía para agentes (Claude Code u otros) que trabajan en este repo. Los detalles técnicos completos están en
+`README.md`. Esto es lo que hay que saber antes de tocar código.
 
-## Qué es este repo
+## 1. Qué es
 
-TP grupal de Inteligencia Artificial Agéntica (Maestría en Data Mining, UBA, Grupo 6): un asistente para la administración de consorcios que responde consultas sobre reglamento y expensas citando la fuente, asiste la carga de facturas, registra reclamos y gestiona proveedores, con revisión humana (bandeja de aprobación) en las acciones importantes.
+TP grupal de Inteligencia Artificial Agéntica (Maestría en Data Mining, UBA, Grupo 6). Es un asistente para la
+administración de consorcios:
 
-**Estado actual (01/11/2026): tool 1 (ingesta de PDF, incluidas liquidaciones de expensas), tool 2 (consultas con cita verificada), agente con router, web de pruebas y CRM para el equipo de plataforma.** Telegram está **congelado** hasta terminar la web: no cambiar su comportamiento ni pasarlo por el router. Proveedores y facturas no entran en esta etapa. Paquete `src/consorcio/`, todo corre en Docker (`docker compose up -d`; ver "Cómo correrlo" en el README). Comandos: `make test`, `make lint`, `make ingestar PDF=...`, `make preguntar Q=...`, `make expensas QUE=...`, `make evaluar-consultas`, `make evaluar-ocr PDF=... REF=...`, `make bot` (Telegram), `make web` / `make web-logs` / `make web-down`, `make sembrar-demo`, `make gasto`, `make respaldar` / `make restaurar` (volcado de Postgres en `datos/respaldo/`), `make db-actualizar` (Alembic). Todos los documentos de `datos/documentos/` y las 8 liquidaciones están ingestados en el Postgres local. Hay un **canal de Telegram** (`src/consorcio/canales/telegram.py`, `consorcio bot`, long polling): PDF adjunto → ingesta, texto o `/preguntar` → `preguntar`, `/expensas` → SQL, `/documentos`; lista blanca de chats en `TELEGRAM_CHATS_PERMITIDOS`; es un cliente de las tools y no debe tener lógica propia. **Una base por consorcio (26/10)**: `consorcios` y `chats` en Postgres, `documentos.consorcio_id` y `consultas.consorcio_id`, id de documento `<consorcio>:<hash>`; cada chat de Telegram usa su propio consorcio (`chat-<id>`, creado al primer mensaje) y `consorcio consorcios --asignar-chat ID --a X` agrupa varios números en uno. La capa de datos y las tools exigen `consorcio_id` (`exigir_consorcio`, ValueError si falta): solo la CLI y la evaluación resuelven `CONSORCIO_POR_DEFECTO=mercedes-274`, y lo hacen a la vista. `consorcio documentos` y `consorcio consultas` sin `--consorcio` listan todos con funciones de nombre explícito (`listar_documentos_de_todos_los_consorcios`, `listar_consultas_de_todos_los_consorcios`); `--activar/--desactivar` sin `--consorcio` usa el consorcio por defecto. El contrato Cabrera está en el consorcio `cabrera`, activo. Las bases anteriores al 26/10 se migran con `consorcio migrar` (idempotente) y después pasan por Alembic. Proveedores, facturas, calendario y WhatsApp todavía no existen. En Telegram y la CLI el camino lo sigue eligiendo el subcomando o el tipo de mensaje; el router solo atiende a la web.
+- responde consultas sobre reglamento, actas y expensas citando la fuente;
+- registra reclamos y deriva lo que no puede resolver a una persona;
+- en las acciones importantes, la administración revisa en una bandeja (human-in-the-loop).
 
-Agente, web y CRM (01/11/2026):
-- **Agente (`agente/`)**: `atender(mensaje, identidad, conversacion_id, canal)` es la única entrada y nunca propaga excepciones. Grafo: `preparar` (sin modelo: conversación, mensaje y tope) → `router` (una llamada, `SalidaRouter` plana, sin campos de consorcio ni rol) → `reglamento | expensas | documentos | reclamo | derivar | fuera_de_alcance` → `registrar`. Sin comandos: solo lenguaje natural. Los importes salen de SQL, nunca del modelo. Una funcionalidad nueva se agrega en `agente/registro.py`. El skill es `skills/agente/SKILL.md`.
-- **Bandeja (`agente/bandeja.py`)**: derivaciones y reclamos en `solicitudes`. Un reclamo solo crea una fila `pendiente`; el administrador del consorcio aprueba, edita o rechaza. `titulo` y `detalle` quedan como los propuso el modelo y lo humano va a `titulo_final` y `detalle_final`, para medir el efecto de la revisión.
-- **Texto y métricas separados**: `mensajes` guarda el texto para la memoria y el chat; `turnos` guarda solo métricas, sin texto libre, y es lo que lee el CRM. `crm.py` no importa `Mensaje`.
-- **Tope (`tope.py`)**: `TOPE_USD_MENSUAL` por mes calendario UTC, global, sobre el libro solo-inserción `gastos_modelo` (`--forzar` no lo reduce). Bloquea `atender` e `ingestar_pdf`; `preguntar` por Telegram, CLI y evaluación cuenta pero no se bloquea. Se chequea antes de cada corrida, los modelos sin precio no suman y nunca reemplaza al tope del proveedor. Falta verlo contra una factura real.
-- **Web (`web/`)**: FastAPI + Jinja + htmx vendorizado, cliente de las tools. El login es de Lucas (`auth/`, integrado el 09/11): `/entrar` pide mail y contraseña (`ProveedorLogin` en `web/autenticacion.py`, que llama a `auth/cuentas.py`) y `/registro?token=` acepta una invitación; lo único que pasa al resto es un `sujeto_externo`. Sin sesión, toda pantalla redirige a `/entrar`. Rol y membresía se resuelven en cada pedido. `WEB_SELECTOR_USUARIOS=true` es solo desarrollo y suma, al login, los usuarios `demo-*`. Todo POST lleva CSRF; CSP `default-src 'self'`, así que nada de `script` o `style` en línea ni `|safe`. `base.html` da el menú lateral y la barra a todas las pantallas; los tonos son variables de `web.css`, los íconos salen de `_iconos.html` y los gráficos son SVG con atributos o `<progress>`. El menú se abre con una casilla y CSS, sin scripts propios.
-- **CRM (`crm.py`, `/crm`)**: solo `usuarios.plataforma`; el resto recibe 404. Es la única pantalla que cruza consorcios y por eso solo muestra agregados. "Contextos" son las secciones indexadas y las usadas por respuesta. `actividad` va por día UTC y `periodo_anterior` es la ventana previa del mismo largo. Todo filtra `origen='evaluacion'`. `acertadas` son tres indicadores que no se promedian.
-- **Pruebas sin clave**: `FAKE_GUIONADO=true` con `LLM_PROVIDER=fake` responde con guion (`agente/guion_fake.py`); `consorcio sembrar-demo` carga dos consorcios y cinco usuarios inventados, sin `datos/`.
+**Estado (27/11/2026):**
 
-Decisiones de implementación ya tomadas (24/10/2026):
-- **LangGraph** para los grafos (siguiendo `docs/practicas/10_langgraph_y_mlflow_self_hosted.py`): estado tipado, nodos, aristas condicionales, dibujable con `consorcio dibujar-grafo`.
-- **Proveedor de modelo abstraído** en `src/consorcio/llm.py` vía `init_chat_model` de LangChain; se elige con `LLM_PROVIDER` (`google_genai`, `anthropic`, `openai`, `openrouter`, `ollama`, `fake`) y se puede pisar por corrida con `--proveedor/--modelo`. El `fake` corre el pipeline sin clave y es lo que usan los tests. No acoplar código a un SDK de proveedor. Resultados comparados en `docs/evaluaciones/`.
-- **Clasificador de calidad de PDF sin modelo** (`ingesta/clasificador.py`): capa de texto → gratis; escaneo legible (confianza Tesseract ≥ umbral) → Tesseract; escaneo malo → visión del modelo. Es el "paso inicial de clasificación símil Jev" de la práctica: decisión tipada con confianza y motivo.
-- **Prompts en `skills/ingesta/SKILL.md`**, no en el código; tienen versión y se iteran contra fallas observadas (anotar en la bitácora).
-- **Almacenamiento**: Postgres es el único almacén de datos estructurados y entidades (SQLAlchemy, `almacen/postgres.py`). Los datos sensibles (DNI, CUIT, teléfonos, emails, fechas de nacimiento) se guardan completos con `sensible=true`.
-- **Crudos (01/11)**: el PDF original va a un bucket S3 (`almacen/crudos.py`, boto3; SeaweedFS en Compose) con clave `<consorcio>/<sha256>.pdf`; `documentos.sha256` y `documentos.crudo_clave` guardan el hash completo y la clave (NULL en documentos históricos). Sin `S3_ENDPOINT_URL` la ingesta sigue solo en local, con un warning; con endpoint, un fallo del bucket la frena (`CrudoNoDisponible`).
-- **Esquema con Alembic (01/11)**: `alembic.ini` y `migraciones/` (`0001_base`, idéntica al esquema de 7d86ca2; `0002_usuarios`; `0003_crudos`; `0004_normalizar_fks`; `0005_periodo_texto`; `0006_fechas_texto`; `0007_agente`; `0008_login`). `crear_tablas()` ya no usa `create_all`: sube a head solo una base vacía y, si la base tiene tablas sin marcar o en otra revisión, lanza RuntimeError con el comando. Una base existente o un volcado hace `make respaldar` y `make db-actualizar` (`consorcio actualizar-base`): marca la revisión según lo que muestran las tablas, solo si hace falta, y aplica lo pendiente. No editar una revisión ya aplicada: agregar una nueva y comprobar con `alembic check`.
-- **Usuarios (01/11; modelo de Lucas desde el 09/11, `0008_login`)**: `usuarios` (con mail, hash Argon2, `activo`), `unidades_funcionales` (piso, depto, porcentual y `uf`, el número en la liquidación; no confundir con `unidades`, que son las extraídas de documentos), `membresias` (una fila por usuario, consorcio, unidad y rol; roles `administracion`, `consejo`, `propietario`, `inquilino`; propietario e inquilino siempre con unidad), `invitaciones` (hash del token) y `accesos` (cada intento de login). `consultas.usuario_id` es nullable. Bandeja y carga de PDF son solo de `administracion` (`Identidad.es_administracion`). `identidad.py` tiene `Identidad`, inmutable, y `resolver_identidad(sujeto_externo, consorcio_id)`, que junta las filas de esa persona en el consorcio (rol principal por prioridad, UF propias) y lanza `SinMembresia` con el mismo mensaje en todos los casos. Es agnóstico al login, que hace otra persona y solo entrega `sujeto_externo`; hoy solo lo usa la web. `usuarios.plataforma` marca al equipo que entra al CRM, sin membresía.
-- **Costo medido por corrida**: `Contador` en `llm.py` registra llamadas, tokens, segundos y USD por nodo; se guarda en `llamadas_modelo`, en `extraccion.json` y en MLflow si `MLFLOW_TRACKING_URI` está seteado. Hay un tope de llamadas por documento (`presupuesto_llamadas`).
-- Cada ingesta deja `datos/procesados/<slug>-<hash>-<consorcio>[-pags-N-M]-<proveedor>-<modelo>/texto.md` y `extraccion.json` (reproducible y revisable a mano); las carpetas anteriores al 01/11 conservan el nombre viejo. En Postgres el documento se identifica por consorcio y hash del archivo.
-- **Duplicados (01/11)**: el hash se calcula antes de clasificar. `final["estado"]` dice cómo terminó: `procesado`, `solo_disco` (`--sin-persistir` o `--paginas`: nunca toca Postgres ni el bucket), `duplicado` (ya estaba en ese consorcio: corta sin OCR ni modelo), `en_proceso` (otra carga del mismo PDF y consorcio, con `pg_try_advisory_lock`) y `periodo_duplicado` (una sola liquidación por consorcio y período). `--forzar` reprocesa y reemplaza; `--reusar-texto` reprocesa pero no reemplaza otro PDF. Los cortes solo informan documentos del mismo consorcio: el mismo PDF en dos consorcios son documentos independientes. Un documento guardado con `errores` parciales también da `duplicado`: rehacerlo pide `--forzar`; la excepción (24/11) es el que quedó sin secciones porque falló `estructurar` (`documentos.estado='incompleto'`): volver a subirlo lo reprocesa reusando el texto.
-- **Consultas con cita (`consulta/`)**: `buscar` (Postgres, sin modelo) → `extraer` (una llamada: hasta 3 citas textuales) → `verificar` (cada cita tiene que aparecer textualmente en las páginas originales; las que no, se descartan; si no queda ninguna, `derivar`) → `redactar` (segunda llamada que ve solo la pregunta y las citas verificadas; desde el 24/11). El agente y la evaluación piden además `validar_respuesta`: ningún número del texto libre fuera de las fuentes, una cuota de palabras y la página calculada desde el texto. Telegram no la pide porque está congelado. El baseline es la búsqueda por palabras clave sin stemming (`--busqueda palabras`); el sistema usa `tsvector` en español sobre título+tema+resumen de `secciones`. Sin embeddings por ahora: decidir con `consorcio evaluar-consultas` (26/10: tsvector gana en dev, 1,0 vs 0,917 de recall@3, pero pierde en test, 0,583 vs 0,917; no se ajusta nada mirando test). El buscador solo usa documentos con `activo=true` (`consorcio documentos --desactivar X`) del consorcio consultado.
-- **Liquidaciones de expensas**: el modelo extrae encabezado, rubros y gastos (sección `liquidacion` del skill); el prorrateo por unidad (~140 filas) lo parsea una regex en `ingesta/liquidacion.py` y se cuentan las filas que no matchean. Los importes se consultan con `consorcio expensas` por SQL; nunca los produce el modelo.
-- **Salida estructurada por prompt** para proveedores sin tool calling confiable (`ollama`, `openrouter`): `invocar_estructurado` pide el JSON Schema en el prompt y valida con pydantic. Para `google_genai`/`anthropic`/`openai` se sigue usando `with_structured_output`.
-- **Cuotas gratuitas (26/10/2026)**: la clave de Anthropic venció; AI Studio gratuito da 20 pedidos/día en `gemini-2.5-flash`; Ollama cloud gratuito (`gpt-oss:120b` texto, `gemma4:31b` visión) admite un pedido a la vez. Por eso la mayor parte de la base se ingestó con Ollama. Al conseguir una clave paga, reingestar con Haiku 5.5 usando `--forzar` (el hash hace que pise lo anterior).
-- **Freno a los bucles del modelo**: toda llamada lleva `max_tokens` (`max_tokens_salida`, 16.000; visión 4.000) y `texto_degenerado()` detecta transcripciones en bucle ("l l l l…", "[ilegible]" × 10.000) y las manda directo a Tesseract (el bucle es determinista y Ollama cloud ignora `max_tokens`). `consorcio ingestar --reusar-texto` reutiliza las páginas OCR/visión ya guardadas en Postgres (misma hash) para iterar el estructurado sin volver a pagar la transcripción; implica reprocesar. Una corrida con `--paginas` no guarda en Postgres, así que no deja páginas para reutilizar.
-- Las claves de API viven solo en `.env` (ignorado por git). Si se cambia el `.env`, hay que recrear el contenedor (`docker compose up -d --force-recreate app`) porque Compose inyecta las variables al arrancar.
+- **Funciona:**
+  - ingesta de PDF, incluidas las liquidaciones de expensas;
+  - consultas con cita verificada, en dos pasos;
+  - agente con router;
+  - web con login, carga masiva, bandeja, revisión, consultas de la administración y CRM.
+- **Fuera de esta etapa:** facturas, proveedores, calendario y WhatsApp.
+- **Telegram está congelado:** no cambiar su comportamiento ni pasarlo por el router.
 
-El repo hoy está **público y debe sanitizarse: `datos/` contiene datos personales reales** del consorcio Mercedes 274 (CABA). No copiar su contenido a servicios externos ni a otros repos públicos; la consigna pide una muestra sanitizada para replicabilidad.
+Idioma del proyecto: **español** en docs, nombres, mensajes de commit y textos de la UI. Mantenerlo.
 
-El idioma del proyecto es español (docs, nombres de archivos `LEEME.md`, commits). Mantenerlo.
+## 2. Mapa del repo
 
-## Arquitectura prevista
+| Ruta | Qué hay |
+|---|---|
+| `src/consorcio/` | El paquete. El mapa de módulos está en `src/LEEME.md` (actualizarlo al agregar uno) |
+| `skills/{ingesta,consulta,agente}/SKILL.md` | Prompts versionados (frontmatter `version:`). Los prompts no van en el código |
+| `migraciones/versions/` | Alembic, de `0001_base` a `0011_administraciones`. Toda tabla o columna nueva lleva una revisión |
+| `tests/` | pytest (unos 940 tests). Usan el proveedor `fake`: no gastan tokens |
+| `scripts/e2e_web.py` | Prueba de punta a punta contra la web levantada (carga masiva y preguntas como un navegador) |
+| `datos/` | Documentos **reales** del consorcio Mercedes 274, normativa, preguntas de evaluación (ver §9) |
+| `docs/` | `poc.md` (cómo funciona hoy), `informe.md`, `bitacora.md`, `evaluaciones/`, `diseno/` (spec de la web), `observabilidad.md`, `fuentes.md`, `consigna.md`, `propuesta/` |
+| `docker-compose.yml`, `Dockerfile`, `Makefile` | Entorno: todo corre en Docker |
 
-Descrita en `README.md` (diagrama mermaid) y `docs/informe.md` §5. Un router clasifica cada pedido y lo deriva a uno de cinco flujos. Hoy existen Reglamento, Expensas y Reclamos, más el listado de documentos y la derivación a humano; Facturas y Proveedores quedan fuera de esta etapa:
+## 3. Cómo levantarlo
 
-| Flujo | Fuente | Salida |
+Todo corre en Docker. El proyecto de Compose se llama `iaa` (volúmenes `iaa_pgdata` e `iaa_seaweeddata`).
+
+```bash
+cp .env.example .env              # LLM_PROVIDER=fake corre sin clave
+docker compose build
+docker compose up -d              # app (sleep infinity), postgres, seaweedfs, mlflow
+make db-actualizar                # sobre una base existente; una vacía se crea sola en head
+make sembrar-demo                 # consorcios y usuarios inventados (demo-*), idempotente
+make web                          # http://127.0.0.1:8000 (servicio `web`, perfil web)
+```
+
+| Servicio | Contenedor | Puerto (solo 127.0.0.1) |
 |---|---|---|
-| Reglamento | Buscador (RAG) sobre reglamento, actas, normativa | Respuesta con cita verificada, o deriva a la administración |
-| Expensas | Tabla extraída de las liquidaciones | Respuesta con el dato exacto (los montos nunca los inventa el modelo) |
-| Facturas | Extracción con LLM de PDF/foto → tabla | Bandeja de aprobación |
-| Reclamos | Tabla propia del sistema | Bandeja de aprobación |
-| Proveedores | `datos/proveedores/proveedores.csv` | Bandeja de aprobación |
+| app (CLI, tests, web a mano) | `consorcio-app` | 8001 (web a mano) y 8002 (API del login, `make api`) |
+| web (`make web`) | `consorcio-web` | 8000 |
+| postgres 16 | `consorcio-postgres` | 5432 |
+| seaweedfs (S3 de PDFs crudos) | `consorcio-seaweedfs` | 8333 |
+| mlflow | `consorcio-mlflow` | 5000 |
+| bot de Telegram (`make bot`) | `consorcio-bot` | — |
 
-Principios de diseño que ya están decididos:
-- **Consultas** se responden citando; si la cita no se puede verificar programáticamente contra lo recuperado, se deriva a la administración.
-- **Acciones** (guardar factura, registrar reclamo, contactar proveedor) nunca se ejecutan sin aprobación humana; la administración aprueba, edita o rechaza. Hay que registrar cada acción propuesta y su resultado para medir el costo y efecto del human-in-the-loop.
-- Las actas pueden modificar lo que dice el reglamento: el buscador debe recuperar de varios documentos y el sistema debe considerar vigencia.
-- Dentro del consorcio, los propietarios ven las expensas por unidad como en la liquidación; nada cruza entre consorcios.
-- Registrar llamadas al modelo, costo y latencia por consulta (va a la sección de costos del informe).
+**Web dentro de `app`, en el 8001**, con variables solo para ese proceso y sin tocar `.env`. Es lo que se usó en
+las pruebas de punta a punta:
 
-`docs/fuentes.md` detalla cada fuente, si es real/pública/inventada y cómo la lee el sistema (buscador, tabla, o extracción → tabla).
+```bash
+docker compose -p iaa exec -d -T \
+  -e WEB_SELECTOR_USUARIOS=false -e WEB_SECRETO=<aleatorio de 32+> \
+  -e LLM_PROVIDER=anthropic -e LLM_MODEL=claude-haiku-5-5 -e LLM_MODEL_VISION=claude-haiku-5-5 \
+  -e ANTHROPIC_API_KEY=... \
+  app uvicorn --factory consorcio.web.app:crear_app --host 0.0.0.0 --port 8001
+```
 
-## Datos (`datos/`)
+- El contenedor no tiene `kill`. Para reiniciar ese proceso: `docker compose exec app python -c "import os; os.kill(<pid>, 15)"`.
+- Si cambia el `.env`: `docker compose up -d --force-recreate app`. Compose inyecta las variables al arrancar.
+- Windows con Git Bash: anteponer `MSYS_NO_PATHCONV=1` a los `docker compose exec` que llevan rutas.
 
-| Carpeta | Contenido | Estado |
+## 4. Cómo correr las pruebas
+
+```bash
+make lint                         # ruff check src tests
+make test                         # crea consorcio_test si falta y corre pytest -q ahí
+```
+
+- Los tests **solo** corren sobre `consorcio_test` (`BASES_DESCARTABLES`): varios la borran. No apuntarlos nunca
+  a `consorcio`.
+- Los tests de S3 (`test_crudos.py`, parte de `test_duplicados.py`) se saltean sin `S3_*`. Para que no se salteen,
+  seaweedfs tiene que estar arriba (`docker start consorcio-seaweedfs`) y hay que pasar las variables:
+
+  ```bash
+  MSYS_NO_PATHCONV=1 docker compose -p iaa exec -T \
+    -e POSTGRES_URL=postgresql+psycopg://consorcio:consorcio@postgres:5432/consorcio_test \
+    -e S3_ENDPOINT_URL=http://seaweedfs:8333 -e S3_ACCESS_KEY=consorcio -e S3_SECRET_KEY=consorcio123 \
+    app sh -c "ruff check src tests && pytest -q"
+  ```
+
+- Dura unos 7 minutos. Con poca memoria, el proceso puede morir: correrlo en dos mitades
+  (`pytest -q tests/test_[a-l]*.py` y `pytest -q tests/test_[m-z]*.py`).
+- Un archivo: `docker compose exec -e POSTGRES_URL=... app pytest -q tests/test_consulta.py -k cita`.
+- Última corrida completa (25/11): 943 passed, 0 skipped.
+- `alembic check` tiene que dar sin diferencias después de agregar una migración.
+
+## 5. Cómo probarlo a mano y de punta a punta
+
+- **Sin clave:** con `LLM_PROVIDER=fake`, `FAKE_GUIONADO=true` y `WEB_SELECTOR_USUARIOS=true`, `make sembrar-demo`
+  y `make web`. En `/entrar` se elige un usuario `demo-*`. Las respuestas salen de `agente/guion_fake.py`.
+- **CLI con modelo real:**
+  - `make preguntar Q="..."`;
+  - `make ingestar PDF="..."`;
+  - `make expensas QUE=rubros PERIODO=2026-07`;
+  - `make evaluar-consultas PARTICION=dev [CON_MODELO=1]`.
+- **Punta a punta por HTTP:** `E2E_CLAVE=... python -u scripts/e2e_web.py rondaN [--sin-carga]`.
+  - Necesita la web en el 8001 (o en `E2E_BASE`) y los usuarios de prueba creados.
+  - Lee los PDFs y `evaluacion/preguntas.csv` de `E2E_DOCS`, por defecto `datos/entrada/doc-manzanares/`, que
+    está ignorada por git.
+  - Deja `resultados-<ronda>.json` en esa misma carpeta.
+  - El método y los resultados están en `docs/evaluaciones/2026-11-24-manzanares.md`.
+- **Navegador:** la cookie de sesión es `Secure` cuando el selector está apagado. Chrome la acepta en
+  `http://127.0.0.1`, pero un cliente HTTP propio no la manda: el script usa una política de cookies propia.
+
+## 6. Arquitectura
+
+Grafos de LangGraph (estado tipado, nodos, aristas condicionales). Se dibujan con `consorcio dibujar-grafo`.
+
+- **Ingesta** (`ingesta/grafo.py`):
+  - pasos: hash (antes de todo) → `clasificar` (sin modelo) → `extraer_texto | extraer_tesseract | extraer_vision`
+    → `estructurar` (modelo; `liquidacion.py` para expensas) → `guardar_disco` → `preparar_guardado` → `persistir`;
+  - hay un candado por PDF y consorcio (`pg_try_advisory_lock`).
+- **Consulta** (`consulta/grafo.py`):
+  - pasos: `buscar` (Postgres `tsvector` en español, sin modelo) → `extraer` (hasta 3 citas textuales) →
+    `verificar` (cada cita tiene que estar en el texto original; si no queda ninguna, deriva) → `redactar`
+    (ve solo la pregunta y las citas verificadas);
+  - después, `verificar_respuesta`: ningún número fuera de las fuentes y una cuota de palabras ajenas del 25 %,
+    descontando las de la pregunta.
+- **Agente** (`agente/grafo.py`):
+  - entrada única `atender(mensaje, identidad, conversacion_id, canal)`, que nunca propaga excepciones;
+  - pasos: `preparar` → `router` (una llamada, `SalidaRouter`) → `reglamento | expensas | documentos | reclamo |
+    derivar | fuera_de_alcance` → `registrar`;
+  - una funcionalidad nueva se agrega en `agente/registro.py`.
+- **Web** (`web/`):
+  - FastAPI, Jinja y htmx vendorizado; es cliente de las tools y no tiene lógica de negocio;
+  - rutas en `rutas.py`, `crm_rutas.py` y `invitaciones.py`;
+  - la carga de PDFs va en segundo plano (`cargas.py`): una hebra y una cola en memoria del proceso
+    (`shortcut:`), así que un reinicio pierde lo pendiente.
+- **Login** (`auth/`): mail y contraseña con Argon2, invitaciones por token (en la base va solo el hash) y una API
+  JSON con JWT. Al resto del sistema solo le pasa un `sujeto_externo`, que `identidad.resolver_identidad`
+  convierte en `Identidad`.
+
+## 7. Reglas que no se rompen
+
+- **Aislamiento por consorcio.**
+  - La capa de datos y las tools exigen `consorcio_id` (`exigir_consorcio`, ValueError si falta).
+  - Solo la CLI y la evaluación resuelven `CONSORCIO_POR_DEFECTO`.
+  - Nada cruza entre consorcios, salvo el CRM, que solo muestra agregados y es solo para `usuarios.plataforma`;
+    el resto recibe 404.
+- **Importes:** salen de SQL, nunca del modelo.
+- **Citas:** toda respuesta de documentos cita textualmente y se verifica en código; si no se puede, deriva.
+- **Acciones:** los reclamos solo crean una solicitud `pendiente`, y la administración aprueba, edita o rechaza.
+  Lo que propone el modelo queda en `titulo`/`detalle` y lo humano en `titulo_final`/`detalle_final`.
+- **Texto y métricas separados:** `mensajes` tiene texto; `turnos` solo métricas, y es lo que lee el CRM.
+  `crm.py` no importa `Mensaje`.
+- **Proveedor de modelo:**
+  - siempre a través de `llm.py` (`init_chat_model`, `invocar_estructurado`); no acoplar código a un SDK;
+  - `LLM_PROVIDER` puede ser `google_genai`, `anthropic`, `openai`, `openrouter`, `ollama` o `fake`;
+  - para `ollama` y `openrouter`, la salida estructurada se pide por prompt;
+  - `_reparar_listas_como_texto` arregla listas que el modelo manda como texto JSON.
+- **Costo:**
+  - `Contador` registra llamadas, tokens, segundos y USD por nodo;
+  - `TOPE_USD_MENSUAL` (`tope.py`) bloquea `atender` e `ingestar_pdf`;
+  - toda llamada lleva `max_tokens`, y `texto_degenerado()` corta las transcripciones en bucle.
+- **Duplicados:**
+  - `final["estado"]` es `procesado`, `solo_disco`, `duplicado`, `en_proceso`, `periodo_duplicado` o
+    `tope_excedido`;
+  - un documento con `estado='incompleto'` (falló `estructurar` y quedó sin secciones) se reprocesa al subirlo de
+    nuevo, reusando el texto;
+  - `--forzar` reprocesa y reemplaza.
+- **Esquema:**
+  - nunca editar una revisión ya aplicada: agregar una nueva;
+  - `crear_tablas()` solo sube a head una base vacía, y con cualquier otra frena con RuntimeError y el comando a
+    correr;
+  - antes de migrar una base con datos: `make respaldar`.
+- **Web:**
+  - todo POST lleva CSRF;
+  - la CSP es `default-src 'self'`: nada de `script` o `style` en línea ni `|safe`;
+  - los tonos van en variables de `web.css` y los íconos en `_iconos.html`;
+  - el menú se abre con CSS, sin scripts propios.
+- **Skills:** al cambiar un prompt, subir el `version:` del SKILL.md y el test que lo espera
+  (`test_agente.py` espera la versión del skill del agente) y anotar la falla que lo motivó en la bitácora.
+
+## 8. Bases y datos sensibles
+
+| Base | Qué es | Cuidado |
 |---|---|---|
-| `normativa/` | Leyes 941 y 3254, modelo de reglamento PH, manual de prácticas consorciales | Pública, con texto |
-| `documentos/` | Reglamento de copropiedad (60 pág.), reglamento de cocheras, 4 actas, 2 convocatorias, contrato Cabrera (otro edificio, con transcripción a mano para evaluar OCR) | Todo ingestado (26/10); reglamento y actas por visión del modelo, falta revisión a mano |
-| `expensas/` | 8 liquidaciones mensuales feb–sep 2026 (el nombre del archivo es la fecha de emisión; liquida el mes anterior) | Ingestadas a tablas (26/10): rubros, gastos y prorrateo por unidad |
-| `facturas/` | 29 facturas/comprobantes + listado de gastos de agosto 2026 | El listado de agosto es el **ground truth** para evaluar la extracción de facturas |
-| `comunicados/` | Mensajes de la administración jun–sep 2026 (`.docx`) | Con texto |
-| `proveedores/` | CSV inventado | Listo |
-| `evaluacion/` | `preguntas.csv`: preguntas con documento y sección esperados, partición dev/test, y preguntas que deben derivarse | 26 preguntas (26/10), 2 de ellas "trampa" que deben derivarse; ampliar |
-| `unidades/` | Tabla de unidades | A armar (el prorrateo ya da UF, piso-depto y porcentual) |
+| `consorcio` | Base de trabajo: Mercedes 274, Cabrera, Manzanares y demo. Hoy es de pruebas | Respaldar antes de cambios destructivos (`make respaldar` → `datos/respaldo/`, ignorado). No borrar Mercedes ni Cabrera sin preguntar |
+| `consorcio_test` | La de los tests | Se borra en cada corrida |
+| `consorcio_local` | Copia de datos reales | No tocar |
 
-## Evaluación y entrega
+- **El repo es público y `datos/` tiene datos personales reales.** No copiar su contenido a servicios externos ni
+  a otros repos.
+- No commitear `datos/respaldo/*.sql`, `datos/procesados/*` ni `datos/entrada/*`: ya están en `.gitignore`.
+- Las claves viven solo en `.env`, que está ignorado. No escribirlas en docs, commits ni respuestas.
+- En los documentos de evaluación no van nombres de vecinos ni direcciones reales.
 
-La consigna (`docs/consigna.md`) exige hipótesis medible contra baseline con partición fija dev/test, y profundizar en al menos 2 áreas. Las elegidas de hecho son retrieval evaluado por separado de la generación, herramientas/router y human-in-the-loop. Baselines planeados: búsqueda por palabras clave vs. nuestro retrieval, y modelo sin documentos vs. el sistema completo. Los resultados deben ser reproducibles desde el repo, no fabricados para la demo.
+## 9. Datos (`datos/`)
 
-Fechas: entrega final 19/11/2026, exposición 10 u 11/12/2026.
+| Carpeta | Contenido |
+|---|---|
+| `normativa/` | Leyes 941 y 3254, modelo de reglamento PH, manual de prácticas consorciales |
+| `documentos/` | Reglamento de copropiedad (60 pág.), reglamento de cocheras, 4 actas y 2 convocatorias de Mercedes 274 |
+| `expensas/` | 8 liquidaciones, de feb a sep de 2026 (el nombre es la fecha de emisión; cada una liquida el mes anterior) |
+| `facturas/` | 29 comprobantes y el listado de gastos de agosto de 2026 (ground truth para cuando se haga facturas) |
+| `evaluacion/` | `preguntas.csv` (consultas, partición dev/test) y `mensajes_agente.csv` (set del agente) |
+| `entrada/` | PDFs recibidos por la web o Telegram. Ignorada; ahí están también los docs de Manzanares |
+| `procesados/` | Lo que deja cada ingesta: `texto.md` y `extraccion.json`. Ignorada |
 
-## Documentación que hay que mantener
+## 10. Documentación que hay que mantener
 
-- `docs/poc.md`: la prueba de concepto tal como está (diagramas del agente, paso a paso de cada petición, números y límites). Actualizarlo cuando cambie un grafo, un canal o los resultados.
-- `docs/informe.md`: informe final, una sección por ítem de la consigna. Las partes marcadas "Falta" se completan a medida que se construye.
-- `docs/bitacora.md`: notas cortas con fecha de qué se probó, qué no funcionó y qué se decidió. Agregar una entrada ante cada decisión o bloqueo relevante; alimenta la exposición final.
-- `README.md`: checklist de próximos pasos (ir tildando) y sección "Cómo correrlo".
-- `src/LEEME.md`: mapa de módulos del paquete; actualizar al agregar uno.
-- `migraciones/`: toda columna o tabla nueva lleva su revisión de Alembic.
-- `docs/propuesta/`: propuesta presentada, devolución de la cátedra (pidió más que consultas y revisión humana explícita), entrevista al administrador (dolores: carga de facturas y seguimiento de reclamos por WhatsApp).
+- `docs/bitacora.md`: una entrada con fecha ante cada decisión, falla o bloqueo relevante.
+- `docs/poc.md`: diagramas y paso a paso. Actualizarlo cuando cambie un grafo, un canal o los resultados.
+- `docs/evaluaciones/`: un archivo por evaluación, con fecha. Los resultados tienen que poder reproducirse desde
+  el repo.
+- `README.md`: referencia técnica y checklist de próximos pasos.
+- `src/LEEME.md`: mapa de módulos.
+- `docs/informe.md`: informe final, una sección por ítem de la consigna.
 
-La consigna pide que el repo incluya todos los artefactos usados en el desarrollo (skills, reglas, etc.) y una historia de git con contribuciones distribuidas: commits chicos y descriptivos, no "Add files via upload".
+## 11. Git
+
+- Commits chicos y descriptivos, en español. La consigna pide una historia distribuida, no "Add files via upload".
+- No hacer push ni merge a `main` sin que lo pida el usuario.
+- Remoto: `origin` = `github.com/lucaschicco/IAA`, que es público.
+- Ramas:
+  - `feat/diseno-web`: trabajo actual;
+  - `integracion/login`;
+  - `mlflow/trazas-y-evaluacion`, de otra integrante.
+- Revisar que no viajen claves, mails reales ni datos de `datos/entrada` antes de cada push.
