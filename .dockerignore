@@ -1,0 +1,9 @@
+# Lo que no entra en la imagen: datos reales, claves e historia. En compose se monta el repo igual.
+.env
+.env.*
+!.env.example
+datos/
+.git/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/

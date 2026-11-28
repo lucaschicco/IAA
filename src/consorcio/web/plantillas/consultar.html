@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% block titulo %}Consultar documentos{% endblock %}
+{% block tema %}claro{% endblock %}
+{% block contenido %}
+<div class="ancho consultar">
+<header class="encabezado">
+  <div>
+    <h1>Consultar los documentos de {{ consorcio }}</h1>
+    <p class="nota">Preguntale a los documentos cargados: qué se aprobó en una asamblea, qué dice el reglamento antes de responder un reclamo, cuánto sale una obra. Cada respuesta trae las citas textuales de donde sale. Las consultas no se pasan a la Bandeja.</p>
+  </div>
+</header>
+<form hx-post="/consultar" hx-target="#respuestas-consulta" hx-swap="afterbegin" hx-indicator="#consultando" hx-disabled-elt="find button" class="pila consultar-form">
+  {% include "_csrf.html" %}
+  <label>Tu pregunta <textarea name="pregunta" rows="3" required minlength="3" maxlength="{{ max_mensaje }}" placeholder="¿Qué se resolvió sobre la unidad de portería?"></textarea></label>
+  <button type="submit">{{ i.icono("enviar") }}Consultar</button>
+  <span id="consultando" class="htmx-indicator"><span class="girando"></span>Buscando en los documentos…</span>
+</form>
+<section id="respuestas-consulta" class="consultar-respuestas" aria-live="polite"></section>
+</div>
+{% endblock %}

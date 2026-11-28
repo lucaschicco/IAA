@@ -1,0 +1,751 @@
+"""Rutas de la web de pruebas: otro cliente de las tools, sin lógica propia.
+
+Toda ruta usa la identidad que resuelve `identidad_actual` en cada pedido: de lo que manda el cliente
+solo se lee el contenido (el mensaje, una respuesta, el id de una solicitud), nunca quién es ni en qué
+consorcio opera. Los ids que llegan se validan contra esa identidad en la capa de abajo.
+
+Ningún endpoint declara `Form()` ni `File()`: FastAPI leería el cuerpo antes de correr las dependencias.
+Acá el orden es sesión o rol, tamaño, CSRF y recién después el formulario.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import replace
+from pathlib import Path
+from typing import Annotated
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse, Response
+from fastapi.templating import Jinja2Templates
+from starlette.datastructures import FormData, UploadFile
+
+from ..agente import revision
+from ..agente.bandeja import (
+    CUPO_DIARIO,
+    LARGO_ASUNTO,
+    LARGO_MENSAJE,
+    MAX_NOTA,
+    RESULTADOS_ELEVABLES,
+    CupoExcedido,
+    PedidoInvalido,
+    SinPermiso,
+    SolicitudInexistente,
+    SolicitudYaResuelta,
+    TurnoAjeno,
+    TurnoNoElevable,
+    aprobar_reclamo,
+    editar_reclamo,
+    elevar_turno,
+    listar_solicitudes,
+    mis_solicitudes,
+    pedido_directo,
+    pendientes_por_consorcio,
+    rechazar_reclamo,
+    registrar_feedback,
+    resolver_derivacion,
+)
+from ..agente.ficha import ficha
+from ..agente.grafo import atender
+from ..agente.memoria import conversacion_valida, conversaciones_de, historial
+from ..agente.panel import panel as datos_panel
+from ..almacen.postgres import MOTIVOS_REVISION, VEREDICTOS, listar_documentos, unidades_de
+from ..auth.config import DIAS_INVITACION
+from ..canales.formato import formatear_ingesta, formatear_respuesta
+from ..canales.telegram import ruta_entrada
+from ..config import config
+from ..consulta.grafo import preguntar
+from ..identidad import (
+    AdministracionInvalida,
+    ConsorcioInvalido,
+    Identidad,
+    SinMembresia,
+    administraciones_de,
+    crear_consorcio,
+    es_plataforma,
+    listar_usuarios_demo,
+    membresias_de,
+    puede_crear_consorcio,
+    resolver_identidad,
+)
+from ..ingesta.grafo import ingestar_pdf
+from . import cargas as cola_cargas
+from . import invitaciones as invitaciones_web
+from .autenticacion import LoginFallido, datos_invitacion, proveedor_para, registrar
+from .sesion import (
+    COOKIE_PREVIA,
+    NOMBRE_COOKIE,
+    Sesion,
+    SesionActual,
+    exigir_administrador,
+    identidad_actual,
+    nueva_sesion,
+    poner_cookie_previa,
+    poner_cookie_sesion,
+    sesion_actual,
+    token_csrf,
+    token_csrf_previo,
+    verificar_csrf,
+    verificar_csrf_previo,
+)
+
+log = logging.getLogger("consorcio.web")
+
+router = APIRouter()
+plantillas = Jinja2Templates(directory=Path(__file__).resolve().parent / "plantillas")
+
+MAX_FORMULARIO = 64 * 1024  # bytes: de sobra para AGENTE_MAX_MENSAJE con el texto ya codificado
+MARGEN_MULTIPART = 64 * 1024  # bytes: bordes y campos que acompañan al PDF
+MAX_ID = 2**31 - 1  # lo que entra en la columna: más grande sería un error de la base y no un 422
+MAX_NOMBRE = 200
+MAGICO_PDF = b"%PDF-"
+BLOQUE = 1024 * 1024
+RESULTADOS_SIN_VOTO = {"mensaje_invalido", "conversacion_invalida", "tope_excedido", "error"}
+MENSAJE_CARGA_FALLIDA = "No se pudo procesar el archivo. Probá de nuevo o avisale al equipo de la plataforma."
+
+
+def _maximo_pdf() -> int:
+    return config.web_max_mb_pdf * 1024 * 1024
+
+
+def _exigir_longitud(request: Request, maximo: int) -> None:
+    """Corta antes de leer el cuerpo. Con `Transfer-Encoding` la longitud no dice cuánto va a llegar."""
+    largo = request.headers.get("content-length")
+    if largo is None or "transfer-encoding" in request.headers:
+        raise HTTPException(status_code=411)
+    if not largo.isdecimal():
+        raise HTTPException(status_code=400)
+    if int(largo) > maximo:
+        raise HTTPException(status_code=413)
+
+
+def limitar_formulario(request: Request) -> None:
+    _exigir_longitud(request, MAX_FORMULARIO)
+
+
+def limitar_carga(request: Request) -> None:
+    """Todos los PDFs juntos; cada uno se cuenta además contra su propio límite al copiarlo."""
+    _exigir_longitud(request, max(config.web_max_mb_carga * 1024 * 1024, _maximo_pdf()) + MARGEN_MULTIPART)
+
+
+async def formulario(request: Request) -> FormData:
+    """Va después de los controles. Queda en `state` porque el selector lo lee en código sincrónico."""
+    request.state.formulario = await request.form()
+    return request.state.formulario
+
+
+Miembro = Annotated[Identidad, Depends(identidad_actual)]
+Administrador = Annotated[Identidad, Depends(exigir_administrador)]
+Formulario = Annotated[FormData, Depends(formulario)]
+
+POST_SESION = [Depends(sesion_actual), Depends(limitar_formulario), Depends(verificar_csrf)]
+POST_MIEMBRO = [Depends(identidad_actual), Depends(limitar_formulario), Depends(verificar_csrf)]
+POST_ADMINISTRADOR = [Depends(exigir_administrador), Depends(limitar_formulario), Depends(verificar_csrf)]
+
+
+def _campo(datos: FormData, nombre: str) -> str:
+    """Texto de un campo: un archivo donde iba texto cuenta como vacío. Postgres no acepta NUL."""
+    valor = datos.get(nombre)
+    return valor.replace("\x00", "").strip() if isinstance(valor, str) else ""
+
+
+def _obligatorio(datos: FormData, nombre: str) -> str:
+    valor = _campo(datos, nombre)
+    if not valor:
+        raise HTTPException(status_code=422)
+    return valor
+
+
+def _id(valor: str) -> int:
+    if not valor.isdecimal() or not 0 < int(valor) <= MAX_ID:
+        raise HTTPException(status_code=422)
+    return int(valor)
+
+
+def contexto_menu(sesion: Sesion, identidad: Identidad | None = None) -> dict:
+    """Lo que el menú lateral y la barra superior necesitan en toda pantalla con sesión (también la de error)."""
+    membresias = membresias_de(sesion.sujeto_externo)
+    actual = identidad.consorcio_id if identidad else None
+    consorcio = next((m["nombre"] for m in membresias if m["consorcio_id"] == actual), None)
+    administra = any(m["rol"] == "administracion" for m in membresias)
+    # Una sola consulta para todo lo que administra: el número del menú y el de cada fila del selector
+    pendientes = pendientes_por_consorcio([m["consorcio_id"] for m in membresias if m["rol"] == "administracion"])
+    por_atender = pendientes.get(actual, 0) if identidad and identidad.es_administracion else 0
+    return {"sesion": sesion, "identidad": identidad, "consorcio": consorcio, "csrf": token_csrf(sesion),
+            "administra": administra, "plataforma": es_plataforma(sesion.sujeto_externo), "por_atender": por_atender,
+            "selector": _selector(membresias, actual, administra, pendientes)}
+
+
+MAX_SELECTOR = 8
+
+
+def _selector(membresias: list[dict], actual: str | None, administra: bool, pendientes: dict[str, int]) -> list[dict]:
+    """Los consorcios de la píldora de la barra: el actual primero y después por nombre, hasta `MAX_SELECTOR`
+    (el resto, en "Ver todos"). Vacío si no hay nada que elegir: un vecino de un solo consorcio ve la píldora
+    como texto."""
+    if len(membresias) < 2 and not administra:
+        return []  # sin consorcio elegido (p. ej. en el panel) igual se puede elegir uno desde la barra
+    filas = sorted(membresias, key=lambda m: (m["consorcio_id"] != actual, m["nombre"]))[:MAX_SELECTOR]
+    return [{**m, "actual": m["consorcio_id"] == actual,
+             "pendientes": pendientes.get(m["consorcio_id"], 0) if m["rol"] == "administracion" else 0}
+            for m in filas]
+
+
+def pagina(request: Request, plantilla: str, sesion: Sesion, identidad: Identidad | None = None,
+           status_code: int = 200, **datos) -> Response:
+    return plantillas.TemplateResponse(request, plantilla, {**contexto_menu(sesion, identidad), **datos},
+                                       status_code=status_code)
+
+
+def _ir_a(destino: str) -> RedirectResponse:
+    return RedirectResponse(destino, status_code=303)
+
+
+# ------------------------------------------------------------------ entrada y salida
+
+
+@router.get("/salud")
+def salud() -> dict:
+    return {"estado": "ok"}
+
+
+@router.get("/")
+def inicio(sesion: SesionActual) -> Response:
+    """La administración arranca en su panel; el resto, eligiendo consorcio."""
+    if any(m["rol"] == "administracion" for m in membresias_de(sesion.sujeto_externo)):
+        return _ir_a("/panel")
+    return _ir_a("/consorcios")
+
+
+def _pantalla_previa(request: Request, plantilla: str, status_code: int = 200, **datos) -> Response:
+    """Pantallas sin sesión (entrar, registro): su CSRF se ata a una cookie previa nueva en cada render."""
+    nonce = uuid4().hex
+    respuesta = plantillas.TemplateResponse(request, plantilla, {
+        "csrf": token_csrf_previo(nonce), "selector": config.web_selector_usuarios, **datos,
+    }, status_code=status_code)
+    poner_cookie_previa(respuesta, nonce)
+    return respuesta
+
+
+def _iniciar_sesion(sujeto: str, proveedor: str) -> Response:
+    respuesta = _ir_a("/")
+    poner_cookie_sesion(respuesta, nueva_sesion(sujeto, proveedor))
+    respuesta.delete_cookie(COOKIE_PREVIA, path="/")
+    return respuesta
+
+
+def _usuarios_demo() -> list[dict]:
+    return listar_usuarios_demo() if config.web_selector_usuarios else []
+
+
+@router.get("/entrar")
+def entrar(request: Request) -> Response:
+    return _pantalla_previa(request, "entrar.html", usuarios=_usuarios_demo())
+
+
+@router.post("/entrar", dependencies=[Depends(limitar_formulario), Depends(verificar_csrf_previo)])
+def entrar_post(request: Request, datos: Formulario) -> Response:
+    proveedor = proveedor_para(request)
+    try:
+        sujeto = proveedor.sujeto(request)
+    except LoginFallido as e:
+        return _pantalla_previa(request, "entrar.html", e.status_code, usuarios=_usuarios_demo(), error=e.mensaje,
+                                email=_campo(datos, "email")[:320])
+    if sujeto is None:
+        raise HTTPException(status_code=401)
+    return _iniciar_sesion(sujeto, proveedor.nombre)
+
+
+@router.get("/registro")
+def registro(request: Request, token: str = "") -> Response:
+    """El link de la invitación. Una inválida da la misma pantalla que una vencida."""
+    invitacion = datos_invitacion(token)
+    if invitacion is None:
+        return _pantalla_previa(request, "registro.html", 400, invitacion=None, token="")
+    return _pantalla_previa(request, "registro.html", invitacion=invitacion, token=token)
+
+
+@router.post("/registro", dependencies=[Depends(limitar_formulario), Depends(verificar_csrf_previo)])
+def registro_post(request: Request, datos: Formulario) -> Response:
+    try:
+        sujeto = registrar(request)
+    except LoginFallido as e:
+        token = _campo(datos, "token")
+        return _pantalla_previa(request, "registro.html", e.status_code, invitacion=datos_invitacion(token),
+                                token=token, error=e.mensaje)
+    return _iniciar_sesion(sujeto, "login")
+
+
+@router.post("/salir", dependencies=POST_SESION)
+def salir() -> Response:
+    respuesta = _ir_a("/entrar")
+    respuesta.delete_cookie(NOMBRE_COOKIE, path="/")
+    return respuesta
+
+
+def _elegir_consorcio(sesion: Sesion, consorcio_id: str, destino: str = "/chat") -> Response:
+    respuesta = _ir_a(destino)
+    poner_cookie_sesion(respuesta, replace(sesion, consorcio_id=consorcio_id))
+    return respuesta
+
+
+@router.get("/consorcios")
+def consorcios(request: Request, sesion: SesionActual) -> Response:
+    membresias = membresias_de(sesion.sujeto_externo)
+    puede_crear = any(m["rol"] == "administracion" for m in membresias)
+    if len(membresias) == 1 and not puede_crear:
+        return _elegir_consorcio(sesion, membresias[0]["consorcio_id"])
+    if not membresias and es_plataforma(sesion.sujeto_externo):
+        return _ir_a("/crm")
+    fichas = {m["consorcio_id"]: ficha(resolver_identidad(sesion.sujeto_externo, m["consorcio_id"])) for m in membresias}
+    return pagina(request, "consorcios.html", sesion, membresias=membresias, puede_crear=puede_crear, fichas=fichas)
+
+
+@router.get("/consorcios/nuevo")
+def consorcio_nuevo(request: Request, sesion: SesionActual) -> Response:
+    if not puede_crear_consorcio(sesion.sujeto_externo):
+        raise HTTPException(status_code=403)
+    return pagina(request, "consorcio_nuevo.html", sesion, administraciones=administraciones_de(sesion.sujeto_externo))
+
+
+@router.post("/consorcios/nuevo", dependencies=POST_SESION)
+def consorcio_nuevo_post(request: Request, sesion: SesionActual, datos: Formulario) -> Response:
+    """Quien crea queda como administración y entra a su bandeja, como a cualquier consorcio que administra."""
+    nombre, direccion = _campo(datos, "nombre"), _campo(datos, "direccion")
+    administracion = _campo(datos, "administracion")
+
+    def de_nuevo(error: str) -> Response:
+        return pagina(request, "consorcio_nuevo.html", sesion, status_code=422, nombre=nombre[:120],
+                      direccion=direccion[:200], error=error, administraciones=administraciones_de(sesion.sujeto_externo))
+
+    elegida = int(administracion) if administracion.isascii() and administracion.isdigit() and len(administracion) <= 9 else None
+    if administracion and elegida is None:
+        return de_nuevo("Elegí una de tus Administraciones.")
+    try:
+        consorcio_id = crear_consorcio(sesion.sujeto_externo, nombre, direccion, elegida)
+    except PermissionError as e:
+        raise HTTPException(status_code=403) from e
+    except ConsorcioInvalido:
+        return de_nuevo("El nombre tiene que tener entre 3 y 120 letras.")
+    except AdministracionInvalida:
+        return de_nuevo("Elegí una de tus Administraciones.")
+    return _elegir_consorcio(sesion, consorcio_id, inicio_del_rol(True))
+
+
+@router.post("/consorcios", dependencies=POST_SESION)
+def consorcios_post(sesion: SesionActual, datos: Formulario) -> Response:
+    """Valida contra las membresías: elegir un consorcio ajeno no llega a firmarse en la cookie."""
+    elegido = _campo(datos, "consorcio_id")
+    roles = {m["consorcio_id"]: m["rol"] for m in membresias_de(sesion.sujeto_externo)}
+    if elegido not in roles:
+        raise HTTPException(status_code=403)
+    es_administracion = roles[elegido] == "administracion"
+    destino = _campo(datos, "destino")
+    if not DESTINO_VALIDO.fullmatch(destino):
+        destino = inicio_del_rol(es_administracion)
+    # Desde la barra se cambia de consorcio quedándose en la pantalla, salvo que con el rol nuevo no sea para vos:
+    # la administración no usa el chat ni Mis solicitudes, y un vecino no ve la bandeja ni Revisar
+    ruta = destino.split("?")[0]
+    if (ruta in SOLO_ADMINISTRACION and not es_administracion) or (ruta in SOLO_VECINOS and es_administracion):
+        destino = inicio_del_rol(es_administracion)
+    return _elegir_consorcio(sesion, elegido, destino)
+
+
+def inicio_del_rol(es_administracion: bool) -> str:
+    """Dónde arranca cada uno dentro de un consorcio: la administración atiende, el vecino pregunta."""
+    return "/bandeja" if es_administracion else "/chat"
+
+
+# Desde el panel y desde la barra se entra a un consorcio directo a una pantalla: solo rutas propias, nunca
+# una URL externa
+DESTINO_VALIDO = re.compile(
+    r"/(chat|documentos|mis-solicitudes|bandeja|revisar|panel|invitaciones|consultar)(\?(solicitud|turno|ver)=[a-z0-9]{1,20})?")
+SOLO_ADMINISTRACION = {"/bandeja", "/revisar", "/invitaciones", "/consultar"}
+SOLO_VECINOS = {"/chat", "/mis-solicitudes"}
+
+
+@router.get("/panel")
+def panel(request: Request, sesion: SesionActual) -> Response:
+    datos = datos_panel(sesion.sujeto_externo)
+    if not datos["consorcios"]:
+        raise HTTPException(status_code=403)
+    identidad = None
+    if sesion.consorcio_id:
+        try:
+            identidad = resolver_identidad(sesion.sujeto_externo, sesion.consorcio_id)
+        except SinMembresia:
+            identidad = None
+    return pagina(request, "panel.html", sesion, identidad, **datos)
+
+
+# ------------------------------------------------------------------ chat
+
+
+@router.get("/chat")
+def chat(request: Request, sesion: SesionActual, identidad: Miembro, conversacion: str | None = None) -> Response:
+    """Una conversación ajena da lo mismo que una que no existe. El chat es del vecino: la administración va a su bandeja."""
+    if identidad.es_administracion:
+        return _ir_a("/bandeja")
+    if conversacion and not conversacion_valida(identidad, conversacion):
+        raise HTTPException(status_code=404)
+    mensajes = [{**m, "acciones": _acciones(m["turno_id"], m["resultado"], m["solicitud_id"], m["feedback"])
+                 if m["rol"] == "asistente" and m["turno_id"] else None}
+                for m in (historial(identidad, conversacion) if conversacion else [])]
+    return pagina(
+        request, "chat.html", sesion, identidad, conversacion_id=conversacion or "",
+        conversaciones=conversaciones_de(identidad), mensajes=mensajes,
+        max_mensaje=config.agente_max_mensaje, max_nota=MAX_NOTA,
+        # la columna de la derecha: lo último del vecino y del consorcio, para tenerlo a mano
+        solicitudes=mis_solicitudes(identidad, limite=3), documentos=listar_documentos(identidad.consorcio_id)[:3],
+    )
+
+
+@router.post("/chat/mensaje", dependencies=POST_MIEMBRO)
+def chat_mensaje(request: Request, sesion: SesionActual, identidad: Miembro, datos: Formulario) -> Response:
+    mensaje = _campo(datos, "mensaje")
+    turno = atender(mensaje, identidad, _campo(datos, "conversacion_id") or None, canal="web")
+    return plantillas.TemplateResponse(request, "_turno.html", {
+        "pregunta": mensaje, "turno": turno, "csrf": token_csrf(sesion), "max_mensaje": config.agente_max_mensaje,
+        "acciones": _acciones(turno["turno_id"], turno["resultado"], turno["solicitud_id"]), "max_nota": MAX_NOTA,
+        "conversaciones": conversaciones_de(identidad),  # la conversación nueva tiene que aparecer en el menú
+    })
+
+
+def _acciones(turno_id: int | None, resultado: str | None, solicitud_id: int | None, feedback: int | None = None) -> dict:
+    """Qué va bajo una respuesta, igual al responder que al reabrir la conversación. Un turno derivado o con
+    reclamo ya tiene su solicitud: muestra el link y no el botón de elevar."""
+    elevable = turno_id is not None and resultado in RESULTADOS_ELEVABLES
+    return {"turno_id": turno_id, "solicitud_id": solicitud_id, "feedback": feedback,
+            "con_voto": turno_id is not None and resultado not in RESULTADOS_SIN_VOTO,
+            "elevable": elevable and solicitud_id is None, "elevada": elevable and solicitud_id is not None}
+
+
+@router.post("/chat/elevar", dependencies=POST_MIEMBRO)
+def chat_elevar(request: Request, identidad: Miembro, datos: Formulario) -> Response:
+    """Pasa una respuesta propia a la administración. Un turno ajeno, de otro consorcio o inexistente: 404."""
+    try:
+        elevada = elevar_turno(identidad, _id(_campo(datos, "turno_id")), _campo(datos, "nota"))
+    except TurnoAjeno as e:
+        raise HTTPException(status_code=404) from e
+    except (TurnoNoElevable, PedidoInvalido) as e:
+        raise HTTPException(status_code=422) from e
+    except CupoExcedido as e:
+        raise HTTPException(status_code=429) from e
+    return plantillas.TemplateResponse(request, "_elevado.html", {"solicitud_id": elevada["solicitud_id"]})
+
+
+@router.post("/chat/feedback", dependencies=POST_MIEMBRO)
+def chat_feedback(request: Request, identidad: Miembro, datos: Formulario) -> Response:
+    voto = _campo(datos, "valor")
+    if voto not in ("1", "-1"):
+        raise HTTPException(status_code=422)
+    try:
+        registrar_feedback(identidad, _id(_campo(datos, "turno_id")), int(voto))
+    except TurnoAjeno as e:
+        raise HTTPException(status_code=404) from e
+    return plantillas.TemplateResponse(request, "_voto.html", {"valor": int(voto)})
+
+
+# ------------------------------------------------------------------ documentos
+
+
+@router.get("/documentos")
+def documentos(request: Request, sesion: SesionActual, identidad: Miembro, tipo: str = "") -> Response:
+    """`tipo` filtra la lista; uno que no existe deja la lista vacía y no es un error.
+
+    Solo el consorcio elegido, también para quien administra varios: los demás se ven en Consorcios."""
+    consorcios = [m for m in membresias_de(sesion.sujeto_externo) if m["consorcio_id"] == identidad.consorcio_id]
+    grupos = [{**m, "actual": m["consorcio_id"] == identidad.consorcio_id,
+               "documentos": listar_documentos(m["consorcio_id"])} for m in consorcios]
+    tipos: dict[str, int] = {}
+    for g in grupos:
+        for d in g["documentos"]:
+            tipos[d["tipo"] or "otro"] = tipos.get(d["tipo"] or "otro", 0) + 1
+    total = sum(len(g["documentos"]) for g in grupos)
+    actuales = next((g["documentos"] for g in grupos if g["actual"]), [])
+    if tipo:
+        for g in grupos:
+            g["documentos"] = [d for d in g["documentos"] if (d["tipo"] or "otro") == tipo]
+    cargas = cola_cargas.de_consorcio(identidad.consorcio_id) if identidad.es_administracion else []
+    return pagina(request, "documentos.html", sesion, identidad, max_mb=config.web_max_mb_pdf, grupos=grupos,
+                  total=total, tipos=dict(sorted(tipos.items())), tipo=tipo,
+                  recientes=[d for d in actuales if d["activo"]][:3], cargas=cargas,
+                  pendientes=sum(c["estado"] in cola_cargas.PENDIENTES for c in cargas),
+                  max_archivos=config.web_max_archivos_carga)
+
+
+def _guardar_pdf(archivo: UploadFile) -> Path:
+    """Copia a `datos/entrada`, contando: `Content-Length` es lo que dice el cliente, no lo que mandó."""
+    cabecera = archivo.file.read(len(MAGICO_PDF))
+    if cabecera != MAGICO_PDF:
+        raise HTTPException(status_code=415)
+    nombre = re.sub(r"[\x00-\x1f\x7f]", "", archivo.filename or "")[-MAX_NOMBRE:]
+    ruta = ruta_entrada(config.ruta_entrada(), uuid4().hex, nombre)
+    copiados = len(cabecera)
+    with ruta.open("wb") as destino:
+        destino.write(cabecera)
+        while copiados <= _maximo_pdf() and (bloque := archivo.file.read(BLOQUE)):
+            copiados += len(bloque)
+            destino.write(bloque)
+    if copiados > _maximo_pdf():
+        ruta.unlink()
+        ruta.parent.rmdir()
+        raise HTTPException(status_code=413)
+    return ruta
+
+
+def _texto_carga(final: dict) -> str:
+    """Los cortes llevan texto propio: el de Telegram manda a `--forzar`, que acá no existe."""
+    estado, nombre = final.get("estado"), final.get("nombre_archivo", "El documento")
+    existente = final.get("documento_existente") or {}
+    previo = existente.get("titulo") or existente.get("nombre_archivo") or nombre
+    if estado == "duplicado":
+        return f"Ese PDF ya estaba cargado en este consorcio ({previo}). No se procesó de nuevo."
+    if estado == "en_proceso":
+        return f"{nombre} ya se está procesando en este consorcio. Alcanza con esperar a que termine."
+    if estado == "periodo_duplicado":
+        return (f"No se guardó {nombre}: este consorcio ya tiene la liquidación del período "
+                f"{existente.get('periodo') or 'de este PDF'}. Para reemplazarla, avisale al equipo de la plataforma.")
+    if estado == "tope_excedido":
+        return f"No se procesó {nombre}: se alcanzó el tope mensual de gasto en modelos."
+    if final.get("errores") and not (final.get("extraccion") or {}).get("secciones"):
+        # el detalle del error es del proveedor (cuotas, URLs): no va a la pantalla
+        return (f"{nombre} quedó guardado pero sin secciones: el modelo no respondió y todavía no se puede "
+                "preguntar sobre él. Volvé a subirlo más tarde; se reprocesa sin repetir la lectura del PDF.")
+    return formatear_ingesta(final)
+
+
+def _procesar_carga(ruta: str, consorcio_id: str, usuario_id: int | None) -> str:
+    return _texto_carga(ingestar_pdf(ruta, consorcio_id=consorcio_id, usuario_id=usuario_id))
+
+
+def _borrar_entrada(ruta: Path) -> None:
+    ruta.unlink(missing_ok=True)
+    ruta.parent.rmdir()
+
+
+@router.post("/documentos", dependencies=[Depends(exigir_administrador), Depends(limitar_carga), Depends(verificar_csrf)])
+def documentos_post(request: Request, identidad: Administrador, datos: Formulario) -> Response:
+    """Uno o varios PDFs. Se guardan todos o ninguno (uno inválido corta la carga entera) y se procesan en
+    segundo plano, de a uno; la pantalla espera unos segundos y lo que no terminó se sigue en Documentos."""
+    archivos = [a for a in datos.getlist("archivo") if isinstance(a, UploadFile)]
+    if not archivos or len(archivos) > config.web_max_archivos_carga:
+        raise HTTPException(status_code=422)
+    guardados: list[Path] = []
+    try:
+        for archivo in archivos:
+            guardados.append(_guardar_pdf(archivo))
+    except HTTPException:
+        for ruta in guardados:
+            _borrar_entrada(ruta)
+        raise
+    cid, uid = identidad.consorcio_id, identidad.usuario_id
+    nuevas = [cola_cargas.encolar(r, r.name, cid, uid, _procesar_carga, MENSAJE_CARGA_FALLIDA) for r in guardados]
+    cola_cargas.esperar(nuevas, config.web_espera_carga)
+    if len(nuevas) == 1 and nuevas[0]["estado"] == "error":
+        return plantillas.TemplateResponse(request, "_error.html", {"mensaje": MENSAJE_CARGA_FALLIDA}, status_code=500)
+    return _respuesta_cargas(request, cid, nuevas)
+
+
+@router.get("/documentos/cargas", dependencies=[Depends(exigir_administrador)])
+def documentos_cargas(request: Request, identidad: Administrador) -> Response:
+    """Lo que la pantalla de Documentos consulta cada pocos segundos mientras haya cargas pendientes."""
+    return _respuesta_cargas(request, identidad.consorcio_id, None)
+
+
+def _respuesta_cargas(request: Request, consorcio_id: str, nuevas: list[dict] | None) -> Response:
+    todas = cola_cargas.de_consorcio(consorcio_id)
+    mostradas = [c for c in todas if c["id"] in {n["id"] for n in nuevas}] if nuevas is not None else todas
+    pendientes = sum(c["estado"] in cola_cargas.PENDIENTES for c in mostradas)
+    return plantillas.TemplateResponse(request, "_carga.html", {
+        "cargas": mostradas, "pendientes": pendientes, "recien_subidas": nuevas is not None,
+        "documentos": listar_documentos(consorcio_id),
+    })
+
+
+# ------------------------------------------------------------------ solicitudes
+
+
+@router.get("/mis-solicitudes")
+def solicitudes_propias(request: Request, sesion: SesionActual, identidad: Miembro, solicitud: str = "") -> Response:
+    """Lista y detalle: `solicitud` elige cuál se ve al lado; sin ella (o si no es tuya), la más reciente."""
+    if identidad.es_administracion:
+        return _ir_a("/bandeja")
+    return _pantalla_solicitudes(request, sesion, identidad, solicitud)
+
+
+def _pantalla_solicitudes(request: Request, sesion: Sesion, identidad: Identidad, solicitud: str = "",
+                          status_code: int = 200, **escribir) -> Response:
+    solicitudes = mis_solicitudes(identidad)
+    return pagina(request, "mis_solicitudes.html", sesion, identidad, status_code, solicitudes=solicitudes,
+                  elegida=_elegida(solicitudes, "id", solicitud), largo_asunto=LARGO_ASUNTO,
+                  largo_mensaje=LARGO_MENSAJE, **escribir)
+
+
+@router.post("/mis-solicitudes", dependencies=POST_MIEMBRO)
+def solicitudes_propias_post(request: Request, sesion: SesionActual, identidad: Miembro, datos: Formulario) -> Response:
+    """El formulario "Escribirle a la administración": una derivación directa, sin modelo (anda con el tope excedido)."""
+    asunto, mensaje = _campo(datos, "asunto"), _campo(datos, "mensaje")
+    try:
+        solicitud_id = pedido_directo(identidad, asunto, mensaje)
+    except (PedidoInvalido, CupoExcedido) as e:
+        cupo = isinstance(e, CupoExcedido)
+        error = (f"Ya mandaste {CUPO_DIARIO} mensajes a la administración en las últimas 24 horas. Probá más tarde."
+                 if cupo else f"El asunto va de {LARGO_ASUNTO[0]} a {LARGO_ASUNTO[1]} caracteres y el mensaje de "
+                 f"{LARGO_MENSAJE[0]} a {LARGO_MENSAJE[1]}.")
+        return _pantalla_solicitudes(request, sesion, identidad, status_code=429 if cupo else 422, escribir_error=error,
+                                     escribir_abierto=True, asunto=asunto[:LARGO_ASUNTO[1]],
+                                     cuerpo=mensaje[:LARGO_MENSAJE[1]])
+    return _ir_a(f"/mis-solicitudes?solicitud={solicitud_id}")
+
+
+@router.get("/bandeja")
+def bandeja(request: Request, sesion: SesionActual, identidad: Administrador,
+            ver: str = "pendientes", solicitud: str = "") -> Response:
+    ver = "resueltas" if ver == "resueltas" else "pendientes"
+    solicitudes = listar_solicitudes(identidad)
+    pendientes = [s for s in solicitudes if s["estado"] == "pendiente"]
+    resueltas = [s for s in solicitudes if s["estado"] != "pendiente"]
+    lista = resueltas if ver == "resueltas" else pendientes
+    return pagina(request, "bandeja.html", sesion, identidad, ver=ver, lista=lista,
+                  pendientes=len(pendientes), resueltas=len(resueltas), elegida=_elegida(lista, "id", solicitud))
+
+
+def _elegida(filas: list[dict], clave: str, valor: str) -> dict | None:
+    """La fila pedida por la URL, o la primera. Solo busca en `filas`, que ya vienen filtradas por permiso."""
+    return next((f for f in filas if str(f[clave]) == valor), filas[0] if filas else None)
+
+
+def _transicion(funcion, *args) -> Response:
+    try:
+        funcion(*args)
+    except SinPermiso as e:
+        raise HTTPException(status_code=403) from e
+    except SolicitudInexistente as e:
+        raise HTTPException(status_code=404) from e
+    except SolicitudYaResuelta as e:
+        raise HTTPException(status_code=409) from e
+    return _ir_a("/bandeja")
+
+
+@router.post("/bandeja/{solicitud_id}/resolver", dependencies=POST_ADMINISTRADOR)
+def bandeja_resolver(solicitud_id: str, identidad: Administrador, datos: Formulario) -> Response:
+    return _transicion(resolver_derivacion, identidad, _id(solicitud_id), _obligatorio(datos, "respuesta"))
+
+
+@router.post("/bandeja/{solicitud_id}/aprobar", dependencies=POST_ADMINISTRADOR)
+def bandeja_aprobar(solicitud_id: str, identidad: Administrador, datos: Formulario) -> Response:
+    return _transicion(aprobar_reclamo, identidad, _id(solicitud_id), _campo(datos, "respuesta") or None)
+
+
+@router.post("/bandeja/{solicitud_id}/editar", dependencies=POST_ADMINISTRADOR)
+def bandeja_editar(solicitud_id: str, identidad: Administrador, datos: Formulario) -> Response:
+    return _transicion(
+        editar_reclamo, identidad, _id(solicitud_id), _obligatorio(datos, "titulo"), _obligatorio(datos, "detalle"),
+        _campo(datos, "respuesta") or None,
+    )
+
+
+@router.post("/bandeja/{solicitud_id}/rechazar", dependencies=POST_ADMINISTRADOR)
+def bandeja_rechazar(solicitud_id: str, identidad: Administrador, datos: Formulario) -> Response:
+    return _transicion(rechazar_reclamo, identidad, _id(solicitud_id), _obligatorio(datos, "respuesta"))
+
+
+# ------------------------------------------------------------------ revisión de respuestas
+
+
+@router.get("/revisar")
+def revisar_respuestas(request: Request, sesion: SesionActual, identidad: Administrador,
+                       ver: str = "pendientes", turno: str = "") -> Response:
+    ver = "revisadas" if ver == "revisadas" else "pendientes"
+    respuestas = revision.listar(identidad, ver)
+    return pagina(request, "revisar.html", sesion, identidad, ver=ver, respuestas=respuestas,
+                  elegida=_elegida(respuestas, "turno_id", turno), motivos=MOTIVOS_REVISION, veredictos=VEREDICTOS)
+
+
+@router.post("/revisar/{turno_id}", dependencies=POST_ADMINISTRADOR)
+def revisar_post(turno_id: str, identidad: Administrador, datos: Formulario) -> Response:
+    try:
+        revision.revisar(identidad, _id(turno_id), _campo(datos, "veredicto"), _campo(datos, "motivo") or None,
+                         _campo(datos, "respuesta_correcta") or None)
+    except revision.RevisionInvalida as e:
+        raise HTTPException(status_code=422) from e
+    except revision.RespuestaInexistente as e:
+        raise HTTPException(status_code=404) from e
+    except SinPermiso as e:
+        raise HTTPException(status_code=403) from e
+    return _ir_a("/revisar?ver=revisadas" if _campo(datos, "ver") == "revisadas" else "/revisar")
+
+
+# ------------------------------------------------------------------ invitaciones
+
+
+def _pantalla_invitar(request: Request, sesion: Sesion, identidad: Identidad, status_code: int = 200,
+                      **datos) -> Response:
+    return pagina(request, "invitaciones.html", sesion, identidad, status_code=status_code,
+                  roles=invitaciones_web.ROLES_INVITABLES, dias=DIAS_INVITACION,
+                  lista=invitaciones_web.invitaciones(identidad), unidades=unidades_de(identidad.consorcio_id),
+                  **datos)
+
+
+# ------------------------------------------------------------------ consultar documentos (administración)
+
+K_ADMINISTRACION = 5  # la administración pregunta más amplio que un vecino (comparar, resumir): más secciones
+ORIGEN_ADMINISTRACION = "web-admin"
+
+
+@router.get("/consultar")
+def consultar(request: Request, sesion: SesionActual, identidad: Administrador) -> Response:
+    return pagina(request, "consultar.html", sesion, identidad, max_mensaje=config.agente_max_mensaje)
+
+
+@router.post("/consultar", dependencies=POST_ADMINISTRADOR)
+def consultar_post(request: Request, identidad: Administrador, datos: Formulario) -> Response:
+    """Pregunta directo a los documentos, sin el router del agente: no hay a quién derivar ni solicitud que crear.
+    Las mismas citas verificadas que ve un vecino; queda en `consultas` con su origen para separarla en el CRM."""
+    pregunta = _campo(datos, "pregunta").strip()
+    if not 3 <= len(pregunta) <= config.agente_max_mensaje:
+        raise HTTPException(status_code=422)
+    try:
+        final = preguntar(pregunta, k=K_ADMINISTRACION, origen=ORIGEN_ADMINISTRACION, consorcio_id=identidad.consorcio_id,
+                          usuario_id=identidad.usuario_id, validar_respuesta=True)
+    except Exception as e:  # el detalle puede traer texto de los documentos
+        log.warning("falló una consulta de la administración: %s", type(e).__name__)
+        return plantillas.TemplateResponse(request, "_error.html", {"mensaje": "No se pudo hacer la consulta. Probá de nuevo."},
+                                           status_code=500)
+    texto = (formatear_respuesta(final) if not final.get("derivada") else
+             "No encontré respaldo en los documentos de este consorcio para responder eso con seguridad.")
+    return plantillas.TemplateResponse(request, "_consulta_admin.html", {
+        "pregunta": pregunta, "texto": texto, "respondida": not final.get("derivada")})
+
+
+@router.get("/invitaciones")
+def invitaciones(request: Request, sesion: SesionActual, identidad: Administrador) -> Response:
+    return _pantalla_invitar(request, sesion, identidad)
+
+
+@router.post("/invitaciones", dependencies=POST_ADMINISTRADOR)
+def invitaciones_post(request: Request, sesion: SesionActual, identidad: Administrador, datos: Formulario) -> Response:
+    """El link se muestra en esta misma respuesta y nunca más: a la base va solo el hash del token."""
+    email, rol = _campo(datos, "email")[:320], _campo(datos, "rol")
+    piso, depto = _campo(datos, "piso")[:20], _campo(datos, "depto")[:20]
+    try:
+        token, vence_en = invitaciones_web.invitar(identidad, email, rol, piso, depto)
+    except invitaciones_web.InvitacionRechazada as e:
+        return _pantalla_invitar(request, sesion, identidad, 422, error=str(e), email=email, rol=rol,
+                                 piso=piso, depto=depto)
+    con_unidad = rol in invitaciones_web.CON_UNIDAD
+    creada = {"email": email.lower(), "rol": rol, "vence_en": vence_en,
+              "unidad": f"{piso.upper()}-{depto.upper()}" if con_unidad else ""}
+    link = str(request.url_for("registro").include_query_params(token=token))
+    respuesta = _pantalla_invitar(request, sesion, identidad, 201, link=link, creada=creada)
+    respuesta.headers["Cache-Control"] = "no-store"  # el link no tiene que quedar en ninguna caché
+    return respuesta
+
+
+@router.post("/invitaciones/{invitacion_id}/anular", dependencies=POST_ADMINISTRADOR)
+def invitaciones_anular(invitacion_id: str, identidad: Administrador) -> Response:
+    if not invitaciones_web.anular(identidad, _id(invitacion_id)):
+        raise HTTPException(status_code=404)
+    return _ir_a("/invitaciones")

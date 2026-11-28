@@ -1,0 +1,2 @@
+{% set rotulos = {"pendiente": "Pendiente", "resuelta": "Resuelta", "aprobada": "Aprobada", "editada": "Aprobada con cambios", "rechazada": "Rechazada"} %}
+<span class="estado estado-{{ s.estado }}">{{ rotulos.get(s.estado, s.estado) }}</span>

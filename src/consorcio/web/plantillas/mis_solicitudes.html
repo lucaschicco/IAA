@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% block titulo %}Mis solicitudes{% endblock %}
+{% block contenido %}
+<div class="ancho">
+<header class="encabezado">
+  <div>
+    <h1>Mis solicitudes</h1>
+    <p class="nota">Reclamos y consultas que pasaron a la administración.</p>
+  </div>
+  <a href="/chat" class="boton">{{ i.icono("nuevo") }}Nueva desde el chat</a>
+</header>
+{# Sin modelo: llega aunque el asistente no ande o se haya pasado el tope de gasto #}
+<details class="escribir"{% if escribir_abierto %} open{% endif %}>
+  <summary>{{ i.icono("enviar") }}Escribirle a la administración</summary>
+  <form method="post" action="/mis-solicitudes" class="escribir-form">
+    {% include "_csrf.html" %}
+    <p class="nota">Le llega directo a la administración{% if consorcio %} de {{ consorcio }}{% endif %}, sin pasar por el asistente.</p>
+    {% if escribir_error %}<p class="alerta" role="alert">{{ i.icono("alerta") }}<span>{{ escribir_error }}</span></p>{% endif %}
+    <label class="campo">Asunto<input type="text" name="asunto" required minlength="{{ largo_asunto[0] }}" maxlength="{{ largo_asunto[1] }}" value="{{ asunto or '' }}"></label>
+    <label class="campo">Mensaje<textarea name="mensaje" rows="4" required minlength="{{ largo_mensaje[0] }}" maxlength="{{ largo_mensaje[1] }}">{{ cuerpo or '' }}</textarea></label>
+    <button type="submit">Enviar a la administración</button>
+  </form>
+</details>
+{% if solicitudes %}
+<div class="dos-paneles{% if request.query_params.get("solicitud") %} con-eleccion{% endif %}">
+  <ul class="lista">
+    {% for s in solicitudes %}
+    <li><a href="/mis-solicitudes?solicitud={{ s.id }}" class="lista-item"{% if elegida and s.id == elegida.id %} aria-current="true"{% endif %}>
+      <span class="fila"><span class="pie">{{ "Reclamo" if s.tipo == "reclamo" else "Consulta" }}</span><span class="pie">{{ s.creado_en.strftime("%d/%m") }}</span></span>
+      <strong>{{ s.titulo_final or s.titulo }}</strong>
+      {% include "_estado.html" %}
+    </a></li>
+    {% endfor %}
+  </ul>
+  {% set s = elegida %}
+  <article class="detalle">
+    <a href="/mis-solicitudes" class="volver-lista">{{ i.icono("flecha") }}Volver a la lista</a>
+    <div class="detalle-cabeza">
+      <div>
+        <span class="pie">{{ "Reclamo" if s.tipo == "reclamo" else "Consulta" }} · {{ s.creado_en.strftime("%d/%m/%Y %H:%M") }}</span>
+        <h2>{{ s.titulo_final or s.titulo }}</h2>
+      </div>
+      {% include "_estado.html" %}
+    </div>
+    {% if s.motivo == "elevada_usuario" %}
+    <p class="texto">{{ s.mensaje }}</p>
+    <div class="caja"><span class="pie">Lo que había respondido el asistente</span><p class="texto">{{ s.detalle }}</p></div>
+    {% else %}
+    <p class="texto">{{ s.detalle_final or s.detalle }}</p>
+    {% endif %}
+    {# El seguimiento sale solo del estado: pedido → en la administración → respuesta #}
+    {% set cerrada = s.estado != "pendiente" %}
+    <ol class="seguimiento">
+      <li class="paso-hecho"><span class="paso-punto">{{ i.icono("listo") }}</span><span class="paso-texto"><strong>{% if s.motivo == "pedido_directo" %}Le escribiste a la administración{% elif s.motivo == "elevada_usuario" %}Lo pasaste desde una respuesta del chat{% else %}Lo pediste desde el chat{% endif %}</strong><span>{{ s.creado_en.strftime("%d/%m/%Y %H:%M") }}</span></span></li>
+      <li class="{{ 'paso-hecho' if cerrada else 'paso-actual' }}"><span class="paso-punto">{{ i.icono("listo") if cerrada else i.icono("bandeja") }}</span><span class="paso-texto"><strong>La administración lo está viendo</strong>{% if not cerrada %}<span>Te avisamos acá cuando responda.</span>{% endif %}</span></li>
+      <li class="{{ 'paso-hecho' if cerrada else 'paso-pendiente' }}"><span class="paso-punto">{% if cerrada %}{{ i.icono("listo") }}{% endif %}</span><span class="paso-texto"><strong>{% if cerrada %}{% include "_estado.html" %}{% else %}Respuesta{% endif %}</strong>{% if s.resuelta_en %}<span>{{ s.resuelta_en.strftime("%d/%m/%Y %H:%M") }}</span>{% endif %}</span></li>
+    </ol>
+    {% if s.respuesta %}
+    <div class="caja caja-crema"><span class="pie">Respuesta de la administración</span><p class="texto">{{ s.respuesta }}</p></div>
+    {% endif %}
+  </article>
+</div>
+{% else %}
+<p class="vacio">Todavía no tenés solicitudes. Las que hagas desde el chat aparecen acá.</p>
+{% endif %}
+</div>
+{% endblock %}

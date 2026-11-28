@@ -1,0 +1,132 @@
+{% import "_iconos.html" as i %}
+{% macro item(ruta, rotulo, icono, actual, aviso=0) %}
+<a href="{{ ruta }}" class="item" title="{{ rotulo }}"{% if actual == ruta %} aria-current="page"{% endif %}>{{ i.icono(icono) }}<span class="rotulo">{{ rotulo }}</span>{% if aviso %}<span class="aviso-numero">{{ aviso }}</span>{% endif %}</a>
+{% endmacro %}
+{% macro marca() %}<span class="marca-logo">{{ i.icono("marca") }}</span><span class="marca-nombre">Consorcio</span>{% endmacro %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Los errores también se muestran; sin esto htmx los descarta en silencio #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":true}]}'>
+  <title>{% block titulo %}Consorcio{% endblock %}</title>
+  <link rel="preload" href="/estaticos/fuentes/inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/estaticos/web.css">
+  <script src="/estaticos/htmx.min.js" defer></script>
+  {% block cabeza %}{% endblock %}
+</head>
+{# Oscuro para lo que usa el vecino; claro para la administración y la plataforma #}
+<body class="tema-{% block tema %}oscuro{% endblock %}">
+  {% if sesion %}
+  {% set actual = request.url.path %}
+  {# Sin scripts propios: esta casilla abre y cierra el menú desde el CSS. Escritorio: lo reduce a íconos. Celular: lo despliega. #}
+  <input type="checkbox" id="menu" class="menu-alternar" aria-label="Mostrar u ocultar el menú">
+  <aside class="lateral" aria-label="Menú principal">
+    <a href="/consorcios" class="marca">{{ marca() }}</a>
+    <nav class="menu-principal">
+      {% if identidad %}
+      <div class="grupo">Consorcio</div>
+      {# Chat y Mis solicitudes son del vecino; la administración atiende desde la bandeja #}
+      {% if not identidad.es_administracion %}
+      {{ item("/chat", "Chat", "chat", actual) }}
+      {% block sub_chat %}{% endblock %}
+      {% endif %}
+      {{ item("/documentos", "Documentos", "documentos", actual) }}
+      {% if not identidad.es_administracion %}
+      {{ item("/mis-solicitudes", "Mis solicitudes", "solicitudes", actual) }}
+      {% endif %}
+      {% endif %}
+      {% if administra %}
+      <div class="grupo">Administración</div>
+      {{ item("/panel", "Panel", "panel", actual) }}
+      {% if identidad and identidad.es_administracion %}
+      {{ item("/bandeja", "Bandeja", "bandeja", actual, por_atender) }}
+      {{ item("/revisar", "Revisar respuestas", "revisar", actual) }}
+      {{ item("/consultar", "Consultar documentos", "libro", actual) }}
+      {{ item("/invitaciones", "Invitar", "usuarios", actual) }}
+      {% endif %}
+      {% endif %}
+      {% if plataforma %}
+      <div class="grupo">Plataforma</div>
+      {{ item("/crm", "CRM", "crm", actual) }}
+      {% block sub_crm %}{% endblock %}
+      {% endif %}
+    </nav>
+    <div class="menu-pie">
+      {{ item("/consorcios", "Consorcios", "consorcios", actual) }}
+      <form method="post" action="/salir">
+        {% include "_csrf.html" %}
+        <button type="submit" class="item" title="Salir">{{ i.icono("salir") }}<span class="rotulo">Salir</span></button>
+      </form>
+    </div>
+  </aside>
+  <label for="menu" class="velo" aria-hidden="true"></label>
+  <div class="area">
+    <header class="barra">
+      <label for="menu" class="boton-menu" aria-hidden="true">{{ i.icono("menu") }}<span>Menú</span></label>
+      <div class="quien">
+        {% set rol_barra = {"administracion": "administración", "consejo": "consejo", "propietario": "propietario", "inquilino": "inquilino"} %}
+        {% if selector %}
+        {# Cambiar de consorcio sin salir de la pantalla: un <details> sin scripts; cada fila es un POST con destino #}
+        {% set destino = "" if request.url.path == "/panel" else request.url.path %}
+        {% set rol_actual = rol_barra.get(identidad.rol, identidad.rol) if identidad else "" %}
+        <details class="contexto-menu">
+          {% if consorcio %}
+          <summary class="contexto" title="{{ consorcio }} · {{ rol_actual }}"><span class="solo-lector">Cambiar de consorcio. Actual: </span><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rol_actual }}</span>{{ i.icono("desplegar") }}</summary>
+          {% else %}
+          <summary class="contexto"><span class="contexto-nombre">Elegí un consorcio</span>{{ i.icono("desplegar") }}</summary>
+          {% endif %}
+          <div class="contexto-lista">
+            <p class="contexto-titulo">Tus consorcios</p>
+            <ul>
+              {% for m in selector %}
+              <li>
+                {% if m.actual %}
+                <span class="contexto-opcion" aria-current="true"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rol_barra.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span>{{ i.icono("listo") }}</span>
+                {% else %}
+                <form method="post" action="/consorcios">
+                  {% include "_csrf.html" %}
+                  <input type="hidden" name="consorcio_id" value="{{ m.consorcio_id }}">
+                  <input type="hidden" name="destino" value="{{ destino }}">
+                  <button type="submit" class="contexto-opcion"><span class="contexto-opcion-texto"><strong>{{ m.nombre }}</strong><small>{{ rol_barra.get(m.rol, m.rol) }}{% if m.pendientes %} · {{ m.pendientes }} pendiente{{ "s" if m.pendientes != 1 }}{% endif %}</small></span></button>
+                </form>
+                {% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+            <div class="contexto-pie">
+              {% if administra %}<a href="/panel">{{ i.icono("panel") }}Panel</a><a href="/consorcios/nuevo">{{ i.icono("nuevo") }}Nuevo consorcio</a>{% endif %}
+              <a href="/consorcios">{{ i.icono("consorcios") }}Ver todos</a>
+            </div>
+          </div>
+        </details>
+        {% elif consorcio %}<span class="contexto" title="{{ consorcio }} · {{ rol_barra.get(identidad.rol, identidad.rol) }}"><span class="contexto-nombre">{{ consorcio }}</span><span class="contexto-rol">&nbsp;· {{ rol_barra.get(identidad.rol, identidad.rol) }}</span></span>
+        {% elif plataforma %}<span class="contexto-plataforma">Equipo de plataforma</span>{% endif %}
+        <span class="avatar">{{ i.icono("usuario") }}</span>
+      </div>
+    </header>
+    <main class="{% block clase_main %}pagina{% endblock %}">{% block contenido %}{% endblock %}</main>
+  </div>
+  {% else %}
+  <main class="suelta">
+    <section class="bienvenida" aria-label="Bienvenida">
+      <div class="marca">{{ marca() }}</div>
+      {% block bienvenida %}
+      <div class="bienvenida-texto">
+        <span>El asistente de tu edificio</span>
+        <h1>Preguntá lo que quieras sobre tu consorcio</h1>
+        <p>Respuestas con la cita del reglamento, tus expensas y los documentos del edificio. Si hace falta, lo pasa a la administración.</p>
+      </div>
+      <div class="cartas" aria-hidden="true">
+        <div class="carta"><small>01</small>{{ i.icono("libro") }}<strong>¿Puedo tener mascotas?</strong></div>
+        <div class="carta"><small>02</small>{{ i.icono("recibo") }}<strong>¿Cuánto pago este mes?</strong></div>
+        <div class="carta"><small>03</small>{{ i.icono("campana") }}<strong>Se rompió el portón</strong></div>
+      </div>
+      {% endblock %}
+    </section>
+    <section class="formulario-suelto">{{ self.contenido() }}</section>
+  </main>
+  {% endif %}
+</body>
+</html>

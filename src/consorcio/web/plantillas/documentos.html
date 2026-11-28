@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% set ICONO_TIPO = {"reglamento": "libro", "liquidacion": "recibo", "acta": "documento", "comunicado": "campana", "factura": "recibo"} %}
+{% block titulo %}Documentos{% endblock %}
+{% block contenido %}
+<div class="ancho docs">
+  {# Arriba, como en el resto de la app: el recuadro marrón con el titular y los últimos documentos como cartas #}
+  <section class="docs-portada">
+    <div class="docs-portada-texto">
+      <span>Biblioteca del consorcio</span>
+      {% if not recientes and identidad.es_administracion %}
+      <h1>Todavía no hay documentos en {{ consorcio }}</h1>
+      <p>Subí el reglamento, las actas y las liquidaciones: el asistente responde solo con lo que esté cargado.</p>
+      <a href="#subir" class="boton">Subir un PDF {{ i.icono("flecha") }}</a>
+      {% else %}
+      <h1>{% if total == 1 %}1 documento{% else %}{{ total }} documentos{% endif %} que el asistente puede consultar</h1>
+      {% if identidad.es_administracion %}
+      <a href="#subir" class="boton">Subir un PDF {{ i.icono("flecha") }}</a>
+      {% else %}
+      <a href="/chat" class="boton">Preguntar en el chat {{ i.icono("flecha") }}</a>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% if recientes %}
+    <ol class="docs-cartas" aria-label="Los últimos documentos">
+      {% for d in recientes %}
+      <li class="docs-carta">
+        <span class="docs-carta-numero">0{{ loop.index }}</span>
+        <strong>{{ (d.titulo or d.archivo)|truncate(42) }}</strong>
+        {{ i.icono(ICONO_TIPO.get(d.tipo, "documento")) }}
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+  </section>
+
+  <div class="docs-cuerpo">
+    <section class="docs-panel">
+      <header class="docs-panel-cabeza">
+        <div>
+          <span class="pie">Todo lo cargado</span>
+          <h2>Documentos</h2>
+        </div>
+        {% if tipos %}
+        <nav class="docs-filtros" aria-label="Filtrar por tipo">
+          <a href="/documentos"{% if not tipo %} aria-current="page"{% endif %}>Todos</a>
+          {% for t, n in tipos.items() %}
+          <a href="/documentos?tipo={{ t|urlencode }}"{% if t == tipo %} aria-current="page"{% endif %}>{{ t|replace("_", " ")|capitalize }} <span>{{ n }}</span></a>
+          {% endfor %}
+        </nav>
+        {% endif %}
+      </header>
+      {# Solo el consorcio elegido: los demás se ven en Consorcios #}
+      {% with documentos = grupos[0].documentos if grupos else [] %}{% include "_documentos.html" %}{% endwith %}
+    </section>
+
+    <aside class="docs-costado" id="subir">
+      {% if identidad.es_administracion %}
+      <form hx-post="/documentos" hx-encoding="multipart/form-data" hx-target="#resultado-carga" hx-indicator="#cargando" hx-disabled-elt="find button" class="docs-tarjeta docs-carga">
+        {% include "_csrf.html" %}
+        <header>
+          <h2>Subir PDFs</h2>
+          <span class="chip">• Administración</span>
+        </header>
+        <p class="nota">Van a <strong>{{ consorcio }}</strong>. Hasta {{ max_archivos }} archivos de {{ max_mb }} MB cada uno; si alguno ya estaba cargado, no se duplica. Para otro consorcio, cambiá desde la barra de arriba.</p>
+        <label class="archivo"><span class="solo-lector">Archivos PDF</span><input type="file" name="archivo" accept="application/pdf,.pdf" multiple required></label>
+        <button type="submit">{{ i.icono("subir") }}Cargar</button>
+        <span id="cargando" class="htmx-indicator"><span class="girando"></span>Subiendo…</span>
+        <div id="resultado-carga">{% if cargas %}{% with en_pagina = true %}{% include "_carga.html" %}{% endwith %}{% endif %}</div>
+      </form>
+      {% endif %}
+      <section class="docs-tarjeta">
+        <header><h2>Cómo se usan</h2></header>
+        <ol class="docs-pasos">
+          <li><span>1</span>El asistente busca en estos documentos cuando preguntás en el chat.</li>
+          <li><span>2</span>Cada respuesta cita la sección de donde sale.</li>
+          <li><span>3</span>Si no está acá, pasa la consulta a la administración.</li>
+        </ol>
+      </section>
+    </aside>
+  </div>
+</div>
+{% endblock %}

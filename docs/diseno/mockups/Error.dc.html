@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Página no encontrada</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0e0e0e}
+a{color:#ff7a4d}a:hover{color:#ffa07f}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0e0e0e; color: #f5f1eb; font-family: 'Inter', sans-serif; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column;">
+  <header style="display: flex; align-items: center; gap: 10px; padding: 18px 20px;">
+    <div style="width: 34px; height: 34px; border-radius: 10px; background: #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0e0e0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5.5L12 3l8 2.5V21"/><path d="M2.5 21h19M10 21v-4.5h4V21"/></svg></div>
+    <span style="font: 800 24px/1 'Inter Tight', sans-serif; color: #ff5b24;">[marca]</span>
+  </header>
+
+  <main style="flex: 1; background: #151515; border-radius: 28px; padding: 48px; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 48px;">
+    <div style="flex: 1 1 380px; max-width: 520px; display: flex; flex-direction: column; gap: 20px;">
+      <span style="align-self: flex-start; padding: 7px 13px; border-radius: 99px; background: #3a2016; color: #ff9b73; font: 600 13px 'Inter', sans-serif;">Error 404</span>
+      <h1 style="margin: 0; font: 900 72px/0.92 'Inter Tight', sans-serif; letter-spacing: -0.045em;">Esta puerta no lleva a ningún lado</h1>
+      <p style="margin: 0; font: 400 16px/1.55 'Inter', sans-serif; color: #a8a29b;">La página no existe o no tenés permiso para verla con tu rol. Si llegaste desde un enlace de invitación, puede que ya se haya usado.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px;">
+        <a href="Chat.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: 99px; background: #ff5b24; color: #0e0e0e; text-decoration: none; font: 700 15px 'Inter', sans-serif;">Volver al chat →</a>
+        <a href="Login.dc.html" style="display: inline-flex; align-items: center; padding: 14px 20px; border-radius: 99px; border: 1.5px solid #3a3a3a; color: #f5f1eb; text-decoration: none; font: 600 15px 'Inter', sans-serif;">Ingresar con otra cuenta</a>
+      </div>
+    </div>
+
+    <div style="flex: 1 1 340px; max-width: 460px; position: relative; height: 420px;" aria-hidden="true">
+      <div style="position: absolute; inset: 30px 40px 0 40px; background: #f6f2ec; border-radius: 28px; transform: rotate(-4deg);"></div>
+      <div style="position: absolute; inset: 0 20px 40px 60px; background: #ff5b24; border-radius: 28px; transform: rotate(3deg); display: flex; align-items: center; justify-content: center;">
+        <svg viewBox="0 0 200 220" width="70%" height="70%" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M40 210V30a10 10 0 0 1 10-10h100a10 10 0 0 1 10 10v180"/>
+          <path d="M20 210h160"/>
+          <rect x="62" y="44" width="76" height="150" rx="6" fill="#f6f2ec"/>
+          <circle cx="124" cy="122" r="6" fill="#141414"/>
+          <path d="M84 72h32M84 86h20"/>
+          <text x="100" y="168" text-anchor="middle" font-family="Inter Tight" font-weight="900" font-size="34" fill="#141414" stroke="none">404</text>
+        </svg>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,38 +1,32 @@
-"""Tests del login y los permisos. Necesitan un Postgres de prueba:
-    DATABASE_URL=postgresql://postgres:postgres@localhost/auth_test PYTHONPATH=src pytest tests/
-Cada test arranca con la base vacía."""
-import os
-from pathlib import Path
-
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost/auth_test")
-os.environ.setdefault("JWT_SECRETO", "secreto-solo-para-tests-0123456789abcdef")
-
+"""Tests del login y los permisos de la API JSON (de Lucas). Corren en la base descartable de los tests
+(`make test`), con el esquema de Alembic. Cada test arranca con la base vacía."""
 import pytest
+from apoyo_auth import CONTRASENA, base_vacia_con_esquema
 from fastapi.testclient import TestClient
 
-from auth.app import app
-from auth.db import conectar
-from auth.permisos import unidades_propias
-from auth.seguridad import crear_token_sesion, hashear_contrasena
+from consorcio.auth.app import app
+from consorcio.auth.db import conectar
+from consorcio.auth.permisos import unidades_propias
+from consorcio.auth.seguridad import crear_token_sesion, hashear_contrasena
 
-TABLAS = Path(__file__).resolve().parents[1] / "src" / "auth" / "01_tablas.sql"
-CONTRASENA = "una-contrasena-larga"
+A, B = "mercedes-274", "otro-edificio"
 
 
 @pytest.fixture(autouse=True)
 def base_limpia():
+    base_vacia_con_esquema()
     with conectar() as con:
-        con.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-        con.execute(TABLAS.read_text())
-        con.execute("""INSERT INTO consorcios (nombre, direccion) VALUES
-                       ('Mercedes 274', 'Mercedes 274'), ('Otro edificio', 'Calle Falsa 123')""")
-        con.execute("""INSERT INTO unidades (consorcio_id, piso, depto) VALUES
-                       (1, '5', 'D'), (1, '3', 'A'), (2, '1', 'A')""")
+        con.execute("""INSERT INTO consorcios (id, nombre, direccion, creado_en) VALUES
+                       (%s, 'Mercedes 274', 'Mercedes 274', now()), (%s, 'Otro edificio', 'Calle Falsa 123', now())""",
+                    (A, B))
+        con.execute("""INSERT INTO unidades_funcionales (consorcio_id, piso, depto) VALUES
+                       (%s, '5', 'D'), (%s, '3', 'A'), (%s, '1', 'A')""", (A, A, B))
         h = hashear_contrasena(CONTRASENA)
-        con.execute("""INSERT INTO usuarios (email, nombre, hash_contrasena) VALUES
-                       ('admin1@test.com', 'Admin 1', %s), ('admin2@test.com', 'Admin 2', %s)""", (h, h))
+        con.execute("""INSERT INTO usuarios (sujeto_externo, email, nombre, hash_contrasena) VALUES
+                       ('login:1', 'admin1@test.com', 'Admin 1', %s), ('login:2', 'admin2@test.com', 'Admin 2', %s)""",
+                    (h, h))
         con.execute("""INSERT INTO membresias (usuario_id, consorcio_id, unidad_id, rol) VALUES
-                       (1, 1, NULL, 'administracion'), (2, 2, NULL, 'administracion')""")
+                       (1, %s, NULL, 'administracion'), (2, %s, NULL, 'administracion')""", (A, B))
 
 
 cliente = TestClient(app)
@@ -52,7 +46,7 @@ def token_de(email):
     return r.json()["token"]
 
 
-def invitar_y_registrar(email, rol, unidad_id, admin="admin1@test.com", consorcio_id=1):
+def invitar_y_registrar(email, rol, unidad_id, admin="admin1@test.com", consorcio_id=A):
     r = cliente.post("/auth/invitaciones", headers=cabecera(token_de(admin)),
                      json={"consorcio_id": consorcio_id, "email": email, "rol": rol, "unidad_id": unidad_id})
     assert r.status_code == 201, r.text
@@ -134,7 +128,7 @@ def test_invitacion_no_se_puede_usar_dos_veces():
 
 def test_invitacion_vencida():
     r = cliente.post("/auth/invitaciones", headers=cabecera(token_de("admin1@test.com")),
-                     json={"consorcio_id": 1, "email": "tarde@test.com", "rol": "propietario", "unidad_id": 1})
+                     json={"consorcio_id": A, "email": "tarde@test.com", "rol": "propietario", "unidad_id": 1})
     with conectar() as con:
         con.execute("UPDATE invitaciones SET vence_en = now() - interval '1 day'")
     r = cliente.post("/auth/registro", json={"token": r.json()["token_invitacion"],
@@ -144,7 +138,7 @@ def test_invitacion_vencida():
 
 def test_contrasena_corta_rechazada():
     r = cliente.post("/auth/invitaciones", headers=cabecera(token_de("admin1@test.com")),
-                     json={"consorcio_id": 1, "email": "corta@test.com", "rol": "propietario", "unidad_id": 1})
+                     json={"consorcio_id": A, "email": "corta@test.com", "rol": "propietario", "unidad_id": 1})
     r = cliente.post("/auth/registro", json={"token": r.json()["token_invitacion"],
                                              "nombre": "x", "contrasena": "corta"})
     assert r.status_code == 422
@@ -152,9 +146,9 @@ def test_contrasena_corta_rechazada():
 
 def test_mismo_mail_en_dos_edificios_suma_membresia():
     invitar_y_registrar("dueno@test.com", "propietario", 1)
-    _, token = invitar_y_registrar("dueno@test.com", "propietario", 3, admin="admin2@test.com", consorcio_id=2)
+    _, token = invitar_y_registrar("dueno@test.com", "propietario", 3, admin="admin2@test.com", consorcio_id=B)
     consorcios = {m["consorcio_id"] for m in cliente.get("/auth/yo", headers=cabecera(token)).json()["membresias"]}
-    assert consorcios == {1, 2}
+    assert consorcios == {A, B}
 
 
 # --- Permisos ----------------------------------------------------------
@@ -162,30 +156,30 @@ def test_mismo_mail_en_dos_edificios_suma_membresia():
 def test_inquilino_no_puede_invitar():
     _, token = invitar_y_registrar("inquilino@test.com", "inquilino", 2)
     r = cliente.post("/auth/invitaciones", headers=cabecera(token),
-                     json={"consorcio_id": 1, "email": "x@test.com", "rol": "propietario", "unidad_id": 1})
+                     json={"consorcio_id": A, "email": "x@test.com", "rol": "propietario", "unidad_id": 1})
     assert r.status_code == 403
 
 
 def test_admin_de_otro_edificio_no_puede_invitar():
     r = cliente.post("/auth/invitaciones", headers=cabecera(token_de("admin2@test.com")),
-                     json={"consorcio_id": 1, "email": "x@test.com", "rol": "propietario", "unidad_id": 1})
+                     json={"consorcio_id": A, "email": "x@test.com", "rol": "propietario", "unidad_id": 1})
     assert r.status_code == 403
 
 
 def test_no_se_puede_invitar_a_una_unidad_de_otro_edificio():
     r = cliente.post("/auth/invitaciones", headers=cabecera(token_de("admin1@test.com")),
-                     json={"consorcio_id": 1, "email": "x@test.com", "rol": "propietario", "unidad_id": 3})
+                     json={"consorcio_id": A, "email": "x@test.com", "rol": "propietario", "unidad_id": 3})
     assert r.status_code == 422
 
 
 def test_inquilino_sin_unidad_rechazado():
     r = cliente.post("/auth/invitaciones", headers=cabecera(token_de("admin1@test.com")),
-                     json={"consorcio_id": 1, "email": "x@test.com", "rol": "inquilino", "unidad_id": None})
+                     json={"consorcio_id": A, "email": "x@test.com", "rol": "inquilino", "unidad_id": None})
     assert r.status_code == 422
 
 
 def test_vecino_solo_ve_su_unidad():
     _, token = invitar_y_registrar("inquilino@test.com", "inquilino", 2)
     usuario = cliente.get("/auth/yo", headers=cabecera(token)).json()
-    assert unidades_propias(usuario, 1) == [2]   # solo el 3A
-    assert unidades_propias(usuario, 2) == []    # nada en otro edificio
+    assert unidades_propias(usuario, A) == [2]   # solo el 3A
+    assert unidades_propias(usuario, B) == []    # nada en otro edificio

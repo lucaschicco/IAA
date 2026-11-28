@@ -1,5 +1,40 @@
+# Secretos y entorno
 .env
+*.env.local
+
+# Python
 __pycache__/
+*.pyc
+*.egg-info/
 .venv/
+venv/
 .pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# MLflow y volúmenes locales
+mlflow/
+mlruns/
+mlartifacts/
+mlflow.db
+
+# PDFs que llegan por Telegram (se ingestan y quedan en Postgres/procesados)
+datos/entrada/*
+!datos/entrada/LEEME.md
+
+# Salidas temporales de la ingesta (imágenes renderizadas, caches)
+datos/procesados/**/paginas_png/
+datos/procesados/**/*.tmp
+
+# IDE / SO
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db
+
+# Datos personales extraídos: no van al repo (es público). Se comparten por fuera.
+datos/respaldo/*.sql
+datos/procesados/*
+!datos/procesados/LEEME.md
+datos/documentos/contrato edificio cabrera.*

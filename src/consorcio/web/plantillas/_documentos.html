@@ -1,0 +1,21 @@
+{% import "_iconos.html" as i %}
+{% set ICONO_TIPO = {"reglamento": "libro", "liquidacion": "recibo", "acta": "documento", "comunicado": "campana", "factura": "recibo"} %}
+<div id="{{ lista_id or 'lista-documentos' }}"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if documentos %}
+  <ul class="docs-lista">
+    {% for d in documentos %}
+    <li class="docs-fila{% if not d.activo %} inactivo{% endif %}">
+      <span class="docs-icono" aria-hidden="true">{{ i.icono(ICONO_TIPO.get(d.tipo, "documento")) }}</span>
+      <div class="docs-fila-texto">
+        <strong>{{ d.titulo or "Sin título" }}</strong>
+        <span>{{ d.archivo }}</span>
+      </div>
+      <span class="docs-fila-datos">{{ (d.tipo or "—")|replace("_", " ")|capitalize }}{% if d.paginas %} · {{ d.paginas }} págs.{% endif %}</span>
+      {% if not d.activo %}<span class="chip">fuera del buscador</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="docs-vacio">Todavía no hay documentos en este consorcio.</p>
+  {% endif %}
+</div>

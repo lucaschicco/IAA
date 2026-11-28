@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% set rotulo_rol = {"administracion": "Administración", "consejo": "Consejo", "propietario": "Propietario", "inquilino": "Inquilino"} %}
+{% block titulo %}Consorcios{% endblock %}
+{% block contenido %}
+<div class="consorcios">
+  <div>
+    <h1>¿A qué consorcio entrás?</h1>
+    <p class="nota">Cada consorcio tiene sus documentos y sus conversaciones. Podés cambiar cuando quieras desde el menú.</p>
+  </div>
+  {% if membresias %}
+  <form method="post" action="/consorcios" class="consorcios-lista">
+    {% include "_csrf.html" %}
+    {% for membresia in membresias %}
+    <button type="submit" name="consorcio_id" value="{{ membresia.consorcio_id }}" class="opcion-consorcio">
+      {{ i.icono("edificio") }}
+      <strong>{{ membresia.nombre }}</strong>
+      <small>{{ rotulo_rol.get(membresia.rol, membresia.rol) }}{% if membresia.consorcio_id == sesion.consorcio_id %} · actual{% endif %}</small>
+    </button>
+    {% endfor %}
+    {% if puede_crear %}
+    <a href="/consorcios/nuevo" class="opcion-consorcio opcion-nueva">
+      {{ i.icono("nuevo") }}
+      <strong>Nuevo consorcio</strong>
+      <small>Sumar un edificio</small>
+    </a>
+    {% endif %}
+  </form>
+  {% if not puede_crear %}<p class="nota">¿Falta un consorcio? Pedile una invitación a su administración.</p>{% endif %}
+
+  {# Debajo de las cartas, la ficha de cada consorcio: se despliega y se elige qué ver. Las pestañas son radios y
+     CSS, sin scripts. Inquilinos e integrantes solo para quien administra ese consorcio #}
+  <section class="fichas" aria-labelledby="fichas-titulo">
+    <h2 id="fichas-titulo">Tus consorcios por dentro</h2>
+    {% for membresia in membresias %}
+    {% set f = fichas[membresia.consorcio_id] %}
+    {% set n = loop.index %}
+    <details class="ficha"{% if membresia.consorcio_id == sesion.consorcio_id or membresias|length == 1 %} open{% endif %}>
+      <summary>
+        <span class="ficha-nombre">{{ i.icono("edificio") }}{{ membresia.nombre }}</span>
+        <span class="chip">{{ f.documentos|length }} documento{% if f.documentos|length != 1 %}s{% endif %}</span>
+      </summary>
+      {% for clave in f.secciones %}<input type="radio" name="ficha-{{ n }}" id="ficha-{{ n }}-{{ clave }}" class="solo-lector ficha-radio-{{ clave }}"{% if loop.first %} checked{% endif %}>{% endfor %}
+      <div class="ficha-pestanas" aria-label="Qué ver de {{ membresia.nombre }}">
+        {% for clave, rotulo in f.secciones.items() %}<label for="ficha-{{ n }}-{{ clave }}" class="ficha-pestana-{{ clave }}">{{ rotulo }}</label>{% endfor %}
+      </div>
+      <div class="ficha-paneles">
+        <div class="ficha-panel ficha-panel-documentos">
+          {% if f.documentos %}
+          <ul class="ficha-lista">
+            {% for d in f.documentos %}
+            <li><span class="ficha-principal"><strong>{{ d.titulo or d.archivo }}</strong><small>{{ (d.tipo or "otro")|replace("_", " ")|capitalize }}{% if d.fecha %} · {{ d.fecha }}{% endif %}</small></span>{% if not d.activo %}<span class="chip">inactivo</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="ficha-vacio">Todavía no hay documentos cargados.</p>{% endif %}
+          {% if membresia.consorcio_id == sesion.consorcio_id %}
+          <a href="/documentos" class="ficha-ir">Ir a Documentos {{ i.icono("flecha") }}</a>
+          {% else %}
+          <form method="post" action="/consorcios" class="ficha-entrar">
+            {% include "_csrf.html" %}
+            <input type="hidden" name="consorcio_id" value="{{ membresia.consorcio_id }}">
+            <input type="hidden" name="destino" value="/documentos">
+            <button type="submit" class="enlace ficha-ir">Entrar a sus Documentos {{ i.icono("flecha") }}</button>
+          </form>
+          {% endif %}
+        </div>
+        {% if "inquilinos" in f.secciones %}
+        <div class="ficha-panel ficha-panel-inquilinos">
+          {% if f.inquilinos %}
+          <ul class="ficha-lista">
+            {% for m in f.inquilinos %}<li><span class="ficha-unidad">{{ m.unidad }}</span><span class="ficha-principal"><strong>{{ m.nombre }}</strong><small>{{ rotulo_rol.get(m.rol, m.rol) }}</small></span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="ficha-vacio">Todavía no se sumó ningún vecino a la app.</p>{% endif %}
+          {% if membresia.consorcio_id == sesion.consorcio_id %}<a href="/invitaciones" class="ficha-ir">Invitar a alguien {{ i.icono("flecha") }}</a>
+          {% else %}
+          <form method="post" action="/consorcios" class="ficha-entrar">
+            {% include "_csrf.html" %}
+            <input type="hidden" name="consorcio_id" value="{{ membresia.consorcio_id }}">
+            <input type="hidden" name="destino" value="/invitaciones">
+            <button type="submit" class="enlace ficha-ir">Invitar a alguien {{ i.icono("flecha") }}</button>
+          </form>
+          {% endif %}
+        </div>
+        <div class="ficha-panel ficha-panel-integrantes">
+          <ul class="ficha-lista">
+            {% for p in f.integrantes %}<li><span class="ficha-principal"><strong>{{ p.nombre }}</strong><small>{% for r in p.roles %}{{ rotulo_rol.get(r, r) }}{% if not loop.last %} · {% endif %}{% endfor %}{% if p.unidades %} · {{ p.unidades|join(", ") }}{% endif %}</small></span></li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        <div class="ficha-panel ficha-panel-eventos">
+          {% if f.eventos %}
+          <ul class="ficha-lista">
+            {% for e in f.eventos %}<li><span class="ficha-principal"><strong>{{ e.texto }}</strong><small>{{ e.fecha }}{% if e.fuente %} · {{ e.fuente }}{% endif %}{% if e.estado %} · {{ e.estado }}{% endif %}</small></span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="ficha-vacio">Sin eventos todavía: aparecen al cargar liquidaciones, actas o comunicados.</p>{% endif %}
+        </div>
+      </div>
+    </details>
+    {% endfor %}
+  </section>
+  {% else %}
+  <p class="alerta">{{ i.icono("info") }}<span>Tu usuario no tiene ningún consorcio asignado. Pedile acceso a la administración.</span></p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Elegir consorcio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0e0e0e}
+a{color:#ff7a4d}a:hover{color:#ffa07f}
+.op{border:0;text-align:left;cursor:pointer;border-radius:24px;padding:24px;min-height:250px;display:flex;flex-direction:column;justify-content:space-between;gap:16px;box-sizing:border-box;font-family:'Inter',sans-serif;transition:transform .15s}
+.op:hover{transform:translateY(-4px)}
+.rol{align-self:flex-start;padding:6px 12px;border-radius:99px;font:700 12px/1 'Inter',sans-serif;border:1.5px solid currentColor}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0e0e0e; color: #f5f1eb; font-family: 'Inter', sans-serif; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column;">
+  <header style="display: flex; align-items: center; gap: 10px; padding: 18px 20px;">
+    <div style="width: 34px; height: 34px; border-radius: 10px; background: #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0e0e0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5.5L12 3l8 2.5V21"/><path d="M2.5 21h19M10 21v-4.5h4V21"/></svg></div>
+    <span style="font: 800 24px/1 'Inter Tight', sans-serif; color: #ff5b24; margin-right: auto;">[marca]</span>
+    <span style="font: 500 14px 'Inter', sans-serif; color: #a8a29b;">marta@correo.com</span>
+    <a href="Login.dc.html" style="font: 600 14px 'Inter', sans-serif; margin-left: 16px;">Salir</a>
+  </header>
+
+  <main style="flex: 1; background: #151515; border-radius: 28px; padding: 56px 48px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 40px;">
+    <div style="text-align: center; display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
+      <span style="font: 500 16px 'Inter', sans-serif; color: #f2c9b6;">Hola, Marta</span>
+      <h1 style="margin: 0; font: 900 60px/0.96 'Inter Tight', sans-serif; letter-spacing: -0.04em;">¿A qué consorcio entrás?</h1>
+      <p style="margin: 0; font: 400 15px/1.5 'Inter', sans-serif; color: #a8a29b;">Cada consorcio tiene sus documentos y su conversación. Podés cambiar cuando quieras desde el menú.</p>
+    </div>
+
+    <form style="width: 100%; max-width: 980px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;">
+      <button type="submit" class="op" style="background: #ff5b24; color: #141414; transform: rotate(-2deg);">
+        <span style="font: 600 12px 'Inter', sans-serif;">01 · último usado</span>
+        <svg viewBox="0 0 80 60" width="100%" height="70" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 54V14l26-8 26 8v40"/><path d="M8 54h64M24 22h6M36 22h8M50 22h6M24 32h6M36 32h8M50 32h6M24 42h6M50 42h6M34 54V44h12v10"/></svg>
+        <span style="display: flex; flex-direction: column; gap: 10px;"><span style="font: 800 24px/1.05 'Inter Tight', sans-serif;">Mercedes 274</span><span class="rol">Propietario · 4B</span></span>
+      </button>
+      <button type="submit" class="op" style="background: #f6f2ec; color: #141414;">
+        <span style="font: 600 12px 'Inter', sans-serif; color: #5c544c;">02</span>
+        <svg viewBox="0 0 80 60" width="100%" height="70" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 54V26h24v28M34 54V10h36v44"/><path d="M4 54h72M42 18h6M56 18h6M42 28h6M56 28h6M42 38h6M56 38h6M16 34h4M24 34h4M16 44h4M24 44h4"/></svg>
+        <span style="display: flex; flex-direction: column; gap: 10px;"><span style="font: 800 24px/1.05 'Inter Tight', sans-serif;">Las Palmeras</span><span class="rol" style="color: #b03a0f;">Consejo</span></span>
+      </button>
+      <button type="submit" class="op" style="background: #1f1f1f; color: #f5f1eb; border: 1px solid #2e2e2e; transform: rotate(2deg);">
+        <span style="font: 600 12px 'Inter', sans-serif; color: #a8a29b;">03</span>
+        <svg viewBox="0 0 80 60" width="100%" height="70" fill="none" stroke="#f6f2ec" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 54V22l20-14 20 14v32"/><path d="M12 54h56M32 54V42h16v12M32 26h4M44 26h4M32 34h4M44 34h4"/><circle cx="64" cy="14" r="5" stroke="#ff5b24"/></svg>
+        <span style="display: flex; flex-direction: column; gap: 10px;"><span style="font: 800 24px/1.05 'Inter Tight', sans-serif;">Los Robles</span><span class="rol" style="color: #ff9b73;">Inquilino · 2A</span></span>
+      </button>
+    </form>
+
+    <div style="max-width: 560px; display: flex; gap: 14px; align-items: center; border: 1.5px dashed #3a3a3a; border-radius: 18px; padding: 16px 20px; color: #a8a29b; font: 400 14px/1.5 'Inter', sans-serif;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+      <span>¿Falta un consorcio? Pedile una invitación a su administración.</span>
+    </div>
+    <p style="margin: 0; font: 400 12px 'Inter', sans-serif; color: #8a837b;">Datos de ejemplo</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

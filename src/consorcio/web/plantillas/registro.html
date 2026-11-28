@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% set rotulo_rol = {"administracion": "Administración", "consejo": "Consejo", "propietario": "Propietario", "inquilino": "Inquilino"} %}
+{% block titulo %}Crear cuenta{% endblock %}
+{% block bienvenida %}
+<div class="bienvenida-texto">
+  <span>{{ "Te invitaron" if invitacion else "Invitación" }}</span>
+  <h1>{{ "Sumate a tu consorcio" if invitacion else "Esta invitación ya no sirve" }}</h1>
+</div>
+{% if invitacion %}
+<div class="invitacion">
+  <div class="invitacion-cabeza"><span>INVITACIÓN</span><strong>{{ rotulo_rol.get(invitacion.rol, invitacion.rol) }}</strong></div>
+  <div class="invitacion-nombre">{{ invitacion.consorcio }}</div>
+  <div class="invitacion-datos"><span>Para</span><strong>{{ invitacion.email }}</strong></div>
+</div>
+<p class="bienvenida-nota">¿Ya tenés cuenta con este mail por otro consorcio? Escribí tu contraseña de siempre y se suma este consorcio a tu cuenta.</p>
+{% endif %}
+{% endblock %}
+{% block contenido %}
+{% if invitacion %}
+<div>
+  <h1>Crear cuenta</h1>
+  <p class="nota">Invitación para <strong>{{ invitacion.email }}</strong> en {{ invitacion.consorcio }}.</p>
+</div>
+<form method="post" action="/registro" class="pila acceso">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Mail <input type="email" value="{{ invitacion.email }}" readonly></label>
+  <label>Nombre <input type="text" name="nombre" autocomplete="name" maxlength="200"></label>
+  <label>Contraseña (al menos 10 caracteres) <input type="password" name="contrasena" autocomplete="new-password" required minlength="10" maxlength="1024"></label>
+  <label>Repetir la contraseña <input type="password" name="repetida" autocomplete="new-password" required maxlength="1024"></label>
+  {% if error %}<p class="alerta" role="alert">{{ i.icono("alerta") }}<span>{{ error }}</span></p>{% endif %}
+  <button type="submit">Crear cuenta {{ i.icono("flecha") }}</button>
+</form>
+<p class="nota">¿Ya tenés cuenta? <a href="/entrar">Ingresar</a></p>
+{% else %}
+<div>
+  <h1>Crear cuenta</h1>
+</div>
+<p class="alerta" role="alert">{{ i.icono("alerta") }}<span>{{ error or "La invitación no existe, ya se usó o venció. Pedile una nueva a la administración." }}</span></p>
+<a href="/entrar" class="boton">Ir a ingresar</a>
+{% endif %}
+{% endblock %}

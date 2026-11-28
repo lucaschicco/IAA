@@ -1,0 +1,29 @@
+{# Lo que va bajo una respuesta del asistente: el voto y "Pasar a la administración". `a` sale de `rutas._acciones`. #}
+{% import "_iconos.html" as i %}
+{% if a.elevada %}{% with solicitud_id = a.solicitud_id %}{% include "_elevado.html" %}{% endwith %}
+{% elif a.solicitud_id %}<a href="/mis-solicitudes?solicitud={{ a.solicitud_id }}" class="pie">Ver en Mis solicitudes</a>
+{% endif %}
+{% if a.con_voto %}
+{% if a.feedback %}{% with valor = a.feedback %}{% include "_voto.html" %}{% endwith %}
+{% else %}
+<form class="voto" hx-post="/chat/feedback" hx-swap="outerHTML">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="turno_id" value="{{ a.turno_id }}">
+  <span>¿Te sirvió?</span>
+  <button type="submit" name="valor" value="1" aria-label="Me sirvió" title="Me sirvió">{{ i.icono("pulgar-arriba") }}</button>
+  <button type="submit" name="valor" value="-1" aria-label="No me sirvió" title="No me sirvió">{{ i.icono("pulgar-abajo") }}</button>
+</form>
+{% endif %}
+{% endif %}
+{% if a.elevable %}
+<details class="elevar">
+  <summary>{{ i.icono("elevacion") }}Pasar a la administración</summary>
+  <form class="elevar-form" hx-post="/chat/elevar" hx-target="closest details" hx-swap="outerHTML" hx-disabled-elt="find button">
+    {% include "_csrf.html" %}
+    <input type="hidden" name="turno_id" value="{{ a.turno_id }}">
+    <p class="pie">Le mandamos tu pregunta y la respuesta del asistente.</p>
+    <label class="campo">¿Querés agregar algo? (opcional)<textarea name="nota" rows="2" maxlength="{{ max_nota }}"></textarea></label>
+    <button type="submit" class="secundario">Enviar a la administración</button>
+  </form>
+</details>
+{% endif %}

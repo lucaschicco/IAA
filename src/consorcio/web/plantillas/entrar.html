@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% block titulo %}Entrar{% endblock %}
+{% block contenido %}
+<div>
+  <h1>Ingresar</h1>
+  <p class="nota">Con el mail que registraste en tu consorcio.</p>
+</div>
+<form method="post" action="/entrar" class="pila acceso">
+  {% include "_csrf.html" %}
+  <label>Mail <input type="email" name="email" value="{{ email or '' }}" autocomplete="username" required maxlength="320" placeholder="nombre@correo.com"></label>
+  <label>Contraseña <input type="password" name="contrasena" autocomplete="current-password" required maxlength="1024"></label>
+  {% if error %}<p class="alerta" role="alert">{{ i.icono("alerta") }}<span>{{ error }}</span></p>{% endif %}
+  <button type="submit">Entrar {{ i.icono("flecha") }}</button>
+</form>
+<div class="separador">
+  <strong>¿Te llegó una invitación?</strong>
+  <p>Abrí el enlace que te mandó la administración para crear tu cuenta.</p>
+</div>
+{% if selector %}
+<div class="separador">
+  <h2>Modo desarrollo</h2>
+  <p class="nota">Solo usuarios de demostración.</p>
+  {% if usuarios %}
+  <form method="post" action="/entrar" class="pila elecciones">
+    {% include "_csrf.html" %}
+    {% for usuario in usuarios %}
+    <button type="submit" name="sujeto" value="{{ usuario.sujeto_externo }}">{{ usuario.nombre }}</button>
+    {% endfor %}
+  </form>
+  {% else %}
+  <p class="aviso">No hay usuarios de demostración. Correr <code>consorcio sembrar-demo</code>.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

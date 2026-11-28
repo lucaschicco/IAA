@@ -1,30 +1,24 @@
-"""Tests del alta de consorcios y la carga de unidades."""
+"""Tests del alta de consorcios y la carga de unidades (de Lucas), en la base descartable de los tests."""
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost/auth_test")
-os.environ.setdefault("JWT_SECRETO", "secreto-solo-para-tests-0123456789abcdef")
-
 import pytest
+from apoyo_auth import CONTRASENA, base_vacia_con_esquema
 from fastapi.testclient import TestClient
 
-from auth.alta import cargar_unidades, crear_consorcio
-from auth.app import app
-from auth.db import conectar
+from consorcio.auth.alta import cargar_unidades, crear_consorcio
+from consorcio.auth.app import app
+from consorcio.auth.db import conectar
 
 RAIZ = Path(__file__).resolve().parents[1]
-TABLAS = RAIZ / "src" / "auth" / "01_tablas.sql"
-CONTRASENA = "una-contrasena-larga"
 cliente = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def base_vacia():
-    with conectar() as con:
-        con.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-        con.execute(TABLAS.read_text())
+    base_vacia_con_esquema()
 
 
 def cabecera(token):
@@ -67,7 +61,8 @@ def test_recargar_unidades_no_duplica_y_actualiza_porcentual():
     with conectar() as con:
         cargar_unidades(con, consorcio_id, [{"piso": "1", "depto": "A", "porcentual": "1,5"}])
         cargar_unidades(con, consorcio_id, [{"piso": "1", "depto": "A", "porcentual": "2"}])
-        filas = con.execute("SELECT porcentual FROM unidades WHERE consorcio_id = %s", (consorcio_id,)).fetchall()
+        filas = con.execute("SELECT porcentual FROM unidades_funcionales WHERE consorcio_id = %s",
+                            (consorcio_id,)).fetchall()
     assert len(filas) == 1 and float(filas[0]["porcentual"]) == 2.0
 
 
@@ -101,15 +96,15 @@ def test_vecino_no_ve_el_listado_de_unidades():
 
 def test_comando_de_terminal(tmp_path):
     entorno = {**os.environ, "PYTHONPATH": str(RAIZ / "src")}
-    r = subprocess.run([sys.executable, "-m", "auth.alta", "consorcio", "--nombre", "Mercedes 274",
+    r = subprocess.run([sys.executable, "-m", "consorcio.auth.alta", "consorcio", "--nombre", "Mercedes 274",
                         "--direccion", "CABA", "--admin-email", "admin@estudio.com"],
                        capture_output=True, text=True, env=entorno)
     assert r.returncode == 0, r.stderr
-    assert "Consorcio creado con id 1" in r.stdout
+    assert "Consorcio creado con id mercedes-274" in r.stdout
 
     archivo = tmp_path / "unidades.csv"
-    archivo.write_text("piso,depto,porcentual\n1,A,1.5\n1,B,1.5\n2,A,2\n", encoding="utf-8")
-    r = subprocess.run([sys.executable, "-m", "auth.alta", "unidades", "--consorcio-id", "1",
+    archivo.write_text("piso,depto,uf,porcentual\n1,A,1,1.5\n1,B,2,1.5\n2,A,3,2\n", encoding="utf-8")
+    r = subprocess.run([sys.executable, "-m", "consorcio.auth.alta", "unidades", "--consorcio-id", "mercedes-274",
                         "--csv", str(archivo)], capture_output=True, text=True, env=entorno)
     assert r.returncode == 0, r.stderr
     assert "3 unidades cargadas" in r.stdout

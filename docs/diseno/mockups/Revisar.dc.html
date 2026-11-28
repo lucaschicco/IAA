@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Revisar respuestas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f3eee7}
+a{color:#c2410c}a:hover{color:#9a3412}
+.sub{margin:0;font:400 13px/1.45 'Inter',sans-serif;color:#5f574e}
+.nav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:#4a433c;text-decoration:none;font:500 14px/1 'Inter',sans-serif}
+.nav:hover{background:#f3eee7;color:#141414}
+.nav.on{color:#141414;font-weight:600;box-shadow:inset 3px 0 0 #ff5b24;background:#fff4ee}
+.k{font:600 11px/1 'Inter',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7a7168;padding:0 12px 6px}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;font:600 12px/1 'Inter',sans-serif;border:1.5px solid}
+.q{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;text-decoration:none;color:#141414;border:1px solid transparent}
+.q:hover{background:#faf6f0}
+.ver{flex:1 1 150px;border-radius:16px;padding:16px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;cursor:pointer;background:#fffdfa;font:700 16px 'Inter Tight',sans-serif;text-align:left}
+.mot{border:1.5px solid #d9d0c4;background:#fffdfa;color:#3b352f;border-radius:99px;padding:9px 14px;font:500 13px 'Inter',sans-serif;cursor:pointer}
+.ta{width:100%;box-sizing:border-box;border:1.5px solid #d9d0c4;border-radius:12px;padding:12px 14px;font:400 14px/1.5 'Inter',sans-serif;color:#141414;background:#fffdfa;resize:vertical}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f3eee7; color: #141414; font-family: 'Inter', sans-serif; display: flex; flex-wrap: wrap; box-sizing: border-box;">
+
+  <aside style="flex: 1 1 230px; max-width: 250px; background: #fffdfa; border-right: 1px solid #e3dbd0; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; border: 2px solid #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V9l8-5 8 5v12"/><path d="M10 21v-6h4v6"/></svg></span>
+      <span style="font: 800 20px/1 'Inter Tight', sans-serif;">[marca]</span>
+    </div>
+    <div style="margin: 0 12px; padding: 10px 12px; border: 1.5px solid #141414; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;"><span><span style="display: block; font: 600 13px 'Inter', sans-serif;">Mercedes 274</span><span class="sub" style="font-size: 12px;">Administración</span></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></div>
+    <nav aria-label="Secciones" style="display: flex; flex-direction: column; gap: 2px;">
+      <div class="k">Consorcio</div>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8 8 0 0 1-11.7 7.1L4 20l1.4-5A8 8 0 1 1 21 11.5Z"/></svg>Chat</a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>Documentos</a>
+      <div class="k" style="margin-top: 14px;">Administración</div>
+      <a class="nav" href="Bandeja.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13.5 6.3 6A2 2 0 0 1 8.2 4.5h7.6A2 2 0 0 1 17.7 6l2.3 7.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg><span style="flex: 1;">Bandeja</span><span class="pill" style="border-color: #ff5b24; color: #c2410c; padding: 3px 8px;">5</span></a>
+      <a class="nav on" href="Revisar.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg><span style="flex: 1;">Revisar respuestas</span><span class="sub">24</span></a>
+      <a class="nav" href="Vecinos.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>Vecinos y unidades</a>
+    </nav>
+    <a class="nav" href="#" style="margin-top: auto;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4M8 8l-4 4 4 4"/></svg>Salir</a>
+  </aside>
+
+  <main style="flex: 999 1 640px; min-width: 0; padding: 22px 26px 30px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px;">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px;">
+      <div style="margin-right: auto;">
+        <h1 style="margin: 0; font: 800 26px/1 'Inter Tight', sans-serif; letter-spacing: -0.02em;">Revisar respuestas</h1>
+        <p class="sub" style="margin-top: 6px;">Tu veredicto mide qué tan bien responde el asistente. No se muestra quién preguntó.</p>
+      </div>
+      <div style="min-width: 220px; display: flex; flex-direction: column; gap: 6px;">
+        <div style="display: flex; justify-content: space-between;" class="sub"><span>Hoy revisaste <b style="color: #141414;">6</b></span><span>quedan 24</span></div>
+        <div style="height: 8px; border-radius: 99px; border: 1.5px solid #141414; padding: 1px; box-sizing: content-box;"><div style="width: 20%; height: 100%; border-radius: 99px; background: #ff5b24;"></div></div>
+      </div>
+      <div role="tablist" aria-label="Vista" style="display: flex; gap: 4px; border: 1.5px solid #141414; border-radius: 99px; padding: 3px;">
+        <button type="button" role="tab" aria-selected="true" style="border: 0; border-radius: 99px; padding: 8px 14px; background: #141414; color: #fffdfa; font: 600 13px 'Inter', sans-serif;">Sin revisar</button>
+        <button type="button" role="tab" aria-selected="false" style="border: 0; border-radius: 99px; padding: 8px 14px; background: transparent; color: #4a433c; font: 600 13px 'Inter', sans-serif;">Revisadas</button>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 18px; align-items: stretch;">
+      <!-- Cola por prioridad -->
+      <section style="flex: 1 1 260px; max-width: 320px; background: #fffdfa; border: 1px solid #e3dbd0; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 4px;" aria-label="Cola">
+        <div class="k" style="padding: 8px 14px;">Primero lo más dudoso</div>
+        <a class="q" href="#" style="border-color: #ff5b24; background: #fff4ee;">
+          <span class="pill" style="align-self: flex-start; border-color: #b91c1c; color: #b91c1c;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13V4H4v9Z"/><path d="M7 13l4 7a2 2 0 0 0 3-2l-1-4h5.5a2 2 0 0 0 2-2.4l-1.3-6A2 2 0 0 0 17.2 4H7"/></svg>el vecino votó mal</span>
+          <span style="font: 600 14px/1.3 'Inter', sans-serif;">¿Cuánto pago de expensas?</span><span class="sub">Expensas · certeza 0,70</span>
+        </a>
+        <a class="q" href="#">
+          <span class="pill" style="align-self: flex-start; border-color: #b91c1c; color: #b91c1c;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13V4H4v9Z"/><path d="M7 13l4 7a2 2 0 0 0 3-2l-1-4h5.5a2 2 0 0 0 2-2.4l-1.3-6A2 2 0 0 0 17.2 4H7"/></svg>el vecino votó mal</span>
+          <span style="font: 600 14px/1.3 'Inter', sans-serif;">¿Quién paga el arreglo del balcón?</span><span class="sub">Reglamento · certeza 0,74</span>
+        </a>
+        <a class="q" href="#">
+          <span class="pill" style="align-self: flex-start; border-color: #c2410c; color: #c2410c;">certeza baja</span>
+          <span style="font: 600 14px/1.3 'Inter', sans-serif;">¿Se puede alquilar la cochera?</span><span class="sub">Reglamento · certeza 0,58</span>
+        </a>
+        <a class="q" href="#">
+          <span class="pill" style="align-self: flex-start; border-color: #141414; color: #141414;">derivada</span>
+          <span style="font: 600 14px/1.3 'Inter', sans-serif;">¿Se puede cerrar el balcón con vidrio?</span><span class="sub">Derivar · sin certeza</span>
+        </a>
+        <a class="q" href="#">
+          <span class="pill" style="align-self: flex-start; border-color: #d9d0c4; color: #5f574e;">el resto</span>
+          <span style="font: 600 14px/1.3 'Inter', sans-serif;">¿Puedo tener mascotas?</span><span class="sub">Reglamento · certeza 0,91</span>
+        </a>
+      </section>
+
+      <!-- Respuesta en revisión -->
+      <section style="flex: 2 1 480px; min-width: 0; background: #fffdfa; border: 1px solid #e3dbd0; border-radius: 18px; padding: 26px; display: flex; flex-direction: column; gap: 20px;" aria-label="Respuesta a revisar">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <span class="pill" style="border-color: #141414; color: #141414;">Expensas</span>
+          <span class="pill" style="border-color: #c2410c; color: #c2410c;">certeza media · 0,70</span>
+          <span class="sub" style="margin-left: auto;">Preguntó un propietario · hoy 09:15</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="align-self: flex-end; max-width: 75%; background: #141414; color: #fffdfa; border-radius: 18px 18px 6px 18px; padding: 12px 16px; font: 500 15px/1.45 'Inter', sans-serif;">¿Cuánto pago de expensas?</div>
+          <div style="align-self: flex-start; max-width: 85%; border: 1.5px solid #141414; border-radius: 18px 18px 18px 6px; padding: 14px 16px; font: 400 15px/1.55 'Inter', sans-serif; display: flex; flex-direction: column; gap: 8px;">
+            <span>Tomé la última liquidación, la de octubre. El total de tu unidad es <b>$ 185.430</b> y vence el 10/11.</span>
+            <span class="sub">Por qué esta certeza: el período lo supuso el asistente, el vecino no lo dijo.</span>
+          </div>
+        </div>
+
+        <fieldset style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;">
+          <legend style="font: 600 14px 'Inter', sans-serif; margin-bottom: 12px;">¿Cómo respondió?</legend>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <button type="button" class="ver" style="border: 1.5px solid #d9d0c4; color: #15803d;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Correcta</button>
+            <button type="button" class="ver" style="border: 1.5px solid #d9d0c4; color: #c2410c;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>Parcial</button>
+            <button type="button" class="ver" aria-pressed="true" style="border: 2.5px solid #b91c1c; color: #b91c1c; background: #fdf0ef;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>Incorrecta</button>
+          </div>
+        </fieldset>
+        <fieldset style="border: 0; padding: 0; margin: 0;">
+          <legend style="font: 600 14px 'Inter', sans-serif; margin-bottom: 10px;">¿Qué falló?</legend>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button type="button" class="mot" aria-pressed="true" style="border-color: #141414; background: #141414; color: #fffdfa;">Dato incorrecto</button>
+            <button type="button" class="mot">Cita que no corresponde</button>
+            <button type="button" class="mot">Incompleta</button>
+            <button type="button" class="mot">Debía derivar</button>
+            <button type="button" class="mot">Derivó sin necesidad</button>
+            <button type="button" class="mot">No entendió la pregunta</button>
+          </div>
+        </fieldset>
+        <label style="display: flex; flex-direction: column; gap: 8px;"><span style="font: 600 14px 'Inter', sans-serif;">Lo que correspondía responder <span class="sub">(opcional; no sale de la administración)</span></span><textarea class="ta" rows="2">Ya salió la liquidación de noviembre: $ 191.200, vence el 10/12.</textarea></label>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+          <button type="button" style="border: 0; border-radius: 99px; padding: 13px 20px; background: #141414; color: #fffdfa; font: 600 14px 'Inter', sans-serif; cursor: pointer;">Guardar y seguir →</button>
+          <button type="button" style="border: 0; background: transparent; color: #5f574e; font: 500 14px 'Inter', sans-serif; cursor: pointer;">Saltear</button>
+        </div>
+      </section>
+    </div>
+    <p class="sub" style="text-align: right;">Datos de ejemplo</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

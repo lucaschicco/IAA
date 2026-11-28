@@ -1,0 +1,10 @@
+<div class="mensaje usuario"><div class="texto">{{ pregunta }}</div></div>
+<div class="mensaje asistente">
+  <div class="texto">{{ turno.mensaje }}</div>
+  {% with a = acciones %}{% include "_acciones_turno.html" %}{% endwith %}
+</div>
+{% with conversacion_id = turno.conversacion_id or "", oob = true %}
+{% include "_conversacion.html" %}
+{% include "_caja_mensaje.html" %}
+{% include "_lista_conversaciones.html" %}
+{% endwith %}

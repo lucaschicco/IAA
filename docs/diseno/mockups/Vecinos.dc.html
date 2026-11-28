@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Vecinos y unidades</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f3eee7}
+a{color:#c2410c}a:hover{color:#9a3412}
+.sub{margin:0;font:400 13px/1.45 'Inter',sans-serif;color:#5f574e}
+.nav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:#4a433c;text-decoration:none;font:500 14px/1 'Inter',sans-serif}
+.nav:hover{background:#f3eee7;color:#141414}
+.nav.on{color:#141414;font-weight:600;box-shadow:inset 3px 0 0 #ff5b24;background:#fff4ee}
+.k{font:600 11px/1 'Inter',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7a7168;padding:0 12px 6px}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;font:600 12px/1 'Inter',sans-serif;border:1.5px solid}
+.card{background:#fffdfa;border:1px solid #e3dbd0;border-radius:18px;padding:20px;box-sizing:border-box;min-width:0;display:flex;flex-direction:column;gap:12px}
+.big{font:700 32px/1 'Inter Tight',sans-serif;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.tb{width:100%;border-collapse:collapse;font:500 14px/1.2 'Inter',sans-serif;color:#3b352f}
+.tb th{font:600 11px/1 'Inter',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7a7168;text-align:left;padding:0 10px 12px 0}
+.tb td{padding:12px 10px 12px 0;border-top:1px solid #efe8de;vertical-align:middle}
+.lk{border:0;background:transparent;color:#c2410c;font:600 13px 'Inter',sans-serif;cursor:pointer;padding:0}
+.inp{width:100%;box-sizing:border-box;border:1.5px solid #d9d0c4;border-radius:12px;padding:11px 13px;font:400 14px 'Inter',sans-serif;color:#141414;background:#fffdfa}
+.lbl{display:flex;flex-direction:column;gap:6px;font:600 13px 'Inter',sans-serif}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f3eee7; color: #141414; font-family: 'Inter', sans-serif; display: flex; flex-wrap: wrap; box-sizing: border-box;">
+
+  <aside style="flex: 1 1 230px; max-width: 250px; background: #fffdfa; border-right: 1px solid #e3dbd0; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; border: 2px solid #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V9l8-5 8 5v12"/><path d="M10 21v-6h4v6"/></svg></span>
+      <span style="font: 800 20px/1 'Inter Tight', sans-serif;">[marca]</span>
+    </div>
+    <div style="margin: 0 12px; padding: 10px 12px; border: 1.5px solid #141414; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;"><span><span style="display: block; font: 600 13px 'Inter', sans-serif;">Mercedes 274</span><span class="sub" style="font-size: 12px;">Administración</span></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></div>
+    <nav aria-label="Secciones" style="display: flex; flex-direction: column; gap: 2px;">
+      <div class="k">Consorcio</div>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8 8 0 0 1-11.7 7.1L4 20l1.4-5A8 8 0 1 1 21 11.5Z"/></svg>Chat</a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>Documentos</a>
+      <div class="k" style="margin-top: 14px;">Administración</div>
+      <a class="nav" href="Bandeja.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13.5 6.3 6A2 2 0 0 1 8.2 4.5h7.6A2 2 0 0 1 17.7 6l2.3 7.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg><span style="flex: 1;">Bandeja</span><span class="pill" style="border-color: #ff5b24; color: #c2410c; padding: 3px 8px;">5</span></a>
+      <a class="nav" href="Revisar.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg><span style="flex: 1;">Revisar respuestas</span><span class="sub">24</span></a>
+      <a class="nav on" href="Vecinos.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>Vecinos y unidades</a>
+    </nav>
+    <a class="nav" href="#" style="margin-top: auto;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4M8 8l-4 4 4 4"/></svg>Salir</a>
+  </aside>
+
+  <main style="flex: 999 1 640px; min-width: 0; padding: 22px 26px 30px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px;">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+      <div style="margin-right: auto;">
+        <h1 style="margin: 0; font: 800 26px/1 'Inter Tight', sans-serif; letter-spacing: -0.02em;">Vecinos y unidades</h1>
+        <p class="sub" style="margin-top: 6px;">Quién vive en cada unidad y quién puede usar el asistente.</p>
+      </div>
+      <label style="display: flex; align-items: center; gap: 8px; border: 1.5px solid #d9d0c4; border-radius: 99px; padding: 8px 14px; background: #fffdfa; min-width: 240px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" aria-label="Buscar unidad o vecino" placeholder="Unidad, nombre o mail" style="border: 0; outline: none; background: transparent; font: 400 13px 'Inter', sans-serif; flex: 1; min-width: 0;"></label>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px;">
+      <div class="card"><span class="sub">Unidades</span><span class="big">141</span><span class="sub">cargadas de la liquidación</span></div>
+      <div class="card"><span class="sub">Con cuenta</span><span class="big">37</span><div style="height: 8px; border-radius: 99px; background: #efe8de;"><div style="width: 26%; height: 100%; border-radius: 99px; background: #15803d;"></div></div></div>
+      <div class="card"><span class="sub">Invitaciones pendientes</span><span class="big" style="color: #c2410c;">6</span><span class="sub">2 vencen esta semana</span></div>
+      <div class="card"><span class="sub">Sin invitar</span><span class="big">98</span><button type="button" class="lk" style="align-self: flex-start;">Invitar en lote →</button></div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start;">
+      <section class="card" style="flex: 2 1 520px;">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <h2 style="margin: 0 auto 0 0; font: 600 15px 'Inter Tight', sans-serif;">Unidades</h2>
+          <button type="button" class="pill" style="border-color: #141414; background: #141414; color: #fffdfa; cursor: pointer;">Todas</button>
+          <button type="button" class="pill" style="border-color: #d9d0c4; color: #3b352f; background: transparent; cursor: pointer;">Sin cuenta</button>
+          <button type="button" class="pill" style="border-color: #d9d0c4; color: #3b352f; background: transparent; cursor: pointer;">Pendientes</button>
+        </div>
+        <div style="overflow-x: auto;"><table class="tb">
+          <thead><tr><th scope="col">UF</th><th scope="col">Unidad</th><th scope="col">Personas</th><th scope="col">Estado</th><th scope="col"></th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight: 700; color: #141414;">012</td><td>4B</td><td><div style="display: flex; flex-direction: column; gap: 6px;"><span>Marta <span class="pill" style="border-color: #141414; color: #141414; padding: 2px 8px;">propietaria</span></span></div></td><td><span class="pill" style="border-color: #15803d; color: #15803d;">activa</span></td><td style="text-align: right;"><button type="button" class="lk">Editar</button></td></tr>
+            <tr><td style="font-weight: 700; color: #141414;">027</td><td>7A</td><td><div style="display: flex; flex-direction: column; gap: 6px;"><span>Jorge <span class="pill" style="border-color: #141414; color: #141414; padding: 2px 8px;">propietario</span></span><span>Paula <span class="pill" style="border-color: #d9d0c4; color: #5f574e; padding: 2px 8px;">inquilina</span></span></div></td><td><div style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;"><span class="pill" style="border-color: #15803d; color: #15803d;">activa</span><span class="pill" style="border-color: #c2410c; color: #c2410c;">invitada · vence 22/11</span></div></td><td style="text-align: right;"><button type="button" class="lk">Reenviar</button></td></tr>
+            <tr><td style="font-weight: 700; color: #141414;">035</td><td>9B</td><td>Ana <span class="pill" style="border-color: #141414; color: #141414; padding: 2px 8px;">consejo</span></td><td><span class="pill" style="border-color: #15803d; color: #15803d;">activa</span></td><td style="text-align: right;"><button type="button" class="lk">Editar</button></td></tr>
+            <tr><td style="font-weight: 700; color: #141414;">041</td><td>11C</td><td class="sub">—</td><td><span class="pill" style="border-color: #b91c1c; color: #b91c1c;">invitación vencida</span></td><td style="text-align: right;"><button type="button" class="lk">Reenviar</button></td></tr>
+            <tr><td style="font-weight: 700; color: #141414;">042</td><td>11D</td><td class="sub">—</td><td><span class="pill" style="border-color: #d9d0c4; color: #5f574e;">sin invitar</span></td><td style="text-align: right;"><button type="button" class="lk">Invitar</button></td></tr>
+          </tbody>
+        </table></div>
+        <p class="sub">Mostrando 5 de 141</p>
+      </section>
+
+      <section class="card" style="flex: 1 1 300px; border: 2px solid #141414;" aria-label="Invitar">
+        <h2 style="margin: 0; font: 700 18px 'Inter Tight', sans-serif;">Invitar a un vecino</h2>
+        <p class="sub">Le llega un mail con un enlace para crear su cuenta.</p>
+        <form style="display: flex; flex-direction: column; gap: 14px;">
+          <label class="lbl">Mail<input class="inp" type="email" placeholder="nombre@correo.com"></label>
+          <label class="lbl">Unidad<select class="inp"><option>11D · UF 042</option></select></label>
+          <fieldset style="border: 0; padding: 0; margin: 0;"><legend class="lbl" style="margin-bottom: 8px;">Rol</legend>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+              <label style="display: flex; gap: 8px; align-items: center; border: 2px solid #141414; border-radius: 12px; padding: 10px 12px; font: 600 13px 'Inter', sans-serif;"><input type="radio" name="rol" checked>Propietario</label>
+              <label style="display: flex; gap: 8px; align-items: center; border: 1.5px solid #d9d0c4; border-radius: 12px; padding: 10px 12px; font: 500 13px 'Inter', sans-serif;"><input type="radio" name="rol">Inquilino</label>
+              <label style="display: flex; gap: 8px; align-items: center; border: 1.5px solid #d9d0c4; border-radius: 12px; padding: 10px 12px; font: 500 13px 'Inter', sans-serif;"><input type="radio" name="rol">Consejo</label>
+              <label style="display: flex; gap: 8px; align-items: center; border: 1.5px solid #d9d0c4; border-radius: 12px; padding: 10px 12px; font: 500 13px 'Inter', sans-serif;"><input type="radio" name="rol">Administración</label>
+            </div>
+          </fieldset>
+          <button type="submit" style="border: 0; border-radius: 99px; padding: 13px 18px; background: #ff5b24; color: #141414; font: 700 14px 'Inter', sans-serif; cursor: pointer;">Enviar invitación</button>
+        </form>
+        <div style="border-top: 1px solid #efe8de; padding-top: 14px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font: 600 13px 'Inter', sans-serif;">¿Muchas a la vez?</span>
+          <p class="sub">Subí una planilla con mail, unidad y rol. Antes de mandar nada te muestra qué filas tienen errores.</p>
+          <button type="button" class="lk" style="align-self: flex-start;">Subir planilla CSV →</button>
+        </div>
+      </section>
+    </div>
+    <p class="sub" style="text-align: right;">Datos de ejemplo · pantalla nueva, todavía no existe en la app</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

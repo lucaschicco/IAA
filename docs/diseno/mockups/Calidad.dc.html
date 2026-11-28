@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CRM · Calidad</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f3eee7}
+a{color:#c2410c}a:hover{color:#9a3412}
+.card{background:#fffdfa;border:1px solid #e3dbd0;border-radius:18px;padding:20px;box-sizing:border-box;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ct{margin:0;font:600 14px/1.2 'Inter Tight',sans-serif;color:#141414}
+.hd{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.big{font:700 36px/1 'Inter Tight',sans-serif;color:#141414;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.sub{margin:0;font:400 13px/1.45 'Inter',sans-serif;color:#5f574e}
+.up{color:#15803d;font-weight:600}.down{color:#b91c1c;font-weight:600}
+.nav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:#4a433c;text-decoration:none;font:500 14px/1 'Inter',sans-serif}
+.nav:hover{background:#f3eee7;color:#141414}
+.nav.on{color:#141414;font-weight:600;box-shadow:inset 3px 0 0 #ff5b24;background:#fff4ee}
+.sn{padding:8px 12px 8px 44px;color:#5f574e;text-decoration:none;font:500 13px 'Inter',sans-serif;border-radius:10px;display:block}
+.sn:hover{color:#141414}.sn.on{color:#c2410c;font-weight:600}
+.k{font:600 11px/1 'Inter',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7a7168;padding:0 12px 6px}
+.fl{display:flex;align-items:center;gap:8px;background:#fffdfa;border:1.5px solid #141414;border-radius:99px;padding:8px 14px;font:500 13px 'Inter',sans-serif;color:#141414}
+.hb{display:grid;grid-template-columns:110px minmax(0,1fr) 24px;gap:9px 10px;align-items:center;font:500 13px/1.2 'Inter',sans-serif;color:#3b352f}
+.hb b{text-align:right;color:#141414;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:99px;background:#efe8de;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:#ff5b24}
+.leg{display:inline-flex;align-items:center;gap:6px;font:500 12px 'Inter',sans-serif;color:#5f574e}
+.leg i{width:8px;height:8px;border-radius:99px;display:inline-block}
+.tb{width:100%;border-collapse:collapse;font:500 13px/1.2 'Inter',sans-serif;color:#3b352f}
+.tb th{font:600 11px/1 'Inter',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7a7168;text-align:left;padding:0 8px 10px 0}
+.tb td{padding:10px 8px 10px 0;border-top:1px solid #efe8de;font-variant-numeric:tabular-nums}
+.tb .r{text-align:right}
+.pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:99px;font:600 12px/1 'Inter',sans-serif;border:1.5px solid}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f3eee7; color: #141414; font-family: 'Inter', sans-serif; display: flex; flex-wrap: wrap; box-sizing: border-box;">
+
+  <aside style="flex: 1 1 230px; max-width: 250px; background: #fffdfa; border-right: 1px solid #e3dbd0; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; border: 2px solid #ff5b24; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V9l8-5 8 5v12"/><path d="M10 21v-6h4v6"/></svg></span>
+      <span style="font: 800 20px/1 'Inter Tight', sans-serif;">[marca]</span>
+    </div>
+    <nav aria-label="Secciones" style="display: flex; flex-direction: column; gap: 2px;">
+      <div class="k">Vecinos</div>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8 8 0 0 1-11.7 7.1L4 20l1.4-5A8 8 0 1 1 21 11.5Z"/></svg>Chat</a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>Documentos</a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 11h6M9 15.5h4"/></svg>Mis solicitudes</a>
+      <div class="k" style="margin-top: 14px;">Administración</div>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13.5 6.3 6A2 2 0 0 1 8.2 4.5h7.6A2 2 0 0 1 17.7 6l2.3 7.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg><span style="flex: 1;">Bandeja</span><span class="pill" style="border-color: #ff5b24; color: #c2410c; padding: 3px 8px;">13</span></a>
+      <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg>Revisar respuestas</a>
+      <div class="k" style="margin-top: 14px;">Plataforma</div>
+      <a class="nav on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>CRM</a>
+      <a class="sn" href="Main.dc.html">Resumen</a>
+      <a class="sn on" href="Calidad.dc.html">Calidad</a>
+      <a class="sn" href="Uso.dc.html">Uso y costos</a>
+    </nav>
+    <a class="nav" href="#" style="margin-top: auto;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4M8 8l-4 4 4 4"/></svg>Salir</a>
+  </aside>
+
+  <main style="flex: 999 1 640px; min-width: 0; padding: 22px 26px 30px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px;">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+      <h1 style="margin: 0 auto 0 0; font: 800 26px/1 'Inter Tight', sans-serif; letter-spacing: -0.02em;">Calidad de las respuestas</h1>
+      <label class="fl">Consorcio <select style="border: 0; background: transparent; font: 600 13px 'Inter', sans-serif; color: #141414;"><option>Todos</option><option>mercedes-274</option></select></label>
+      <label class="fl">Intención <select style="border: 0; background: transparent; font: 600 13px 'Inter', sans-serif; color: #141414;"><option>Todas</option><option>Reglamento</option><option>Expensas</option></select></label>
+      <label class="fl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><select aria-label="Período" style="border: 0; background: transparent; font: 600 13px 'Inter', sans-serif; color: #141414;"><option>21/10 – 19/11</option></select></label>
+      <span style="width: 38px; height: 38px; border-radius: 99px; border: 2px solid #141414; display: flex; align-items: center; justify-content: center; font: 700 13px 'Inter Tight', sans-serif;" aria-label="Equipo de plataforma">EP</span>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <section class="card" style="flex: 1;">
+          <h2 class="ct">Correctas según la administración</h2>
+          <div class="big">76,9 %</div>
+          <p class="sub"><span class="up">▲ 4 pts</span> · 40 de 52 revisadas</p>
+        </section>
+        <section class="card" style="flex: 1;">
+          <h2 class="ct">Certeza promedio</h2>
+          <div style="display: flex; align-items: baseline; gap: 10px;"><span class="big">0,81</span><span class="pill" style="border-color: #15803d; color: #15803d;">alta</span></div>
+          <p class="sub">medidor versión 1</p>
+        </section>
+      </div>
+      <section class="card" style="grid-column: span 3;">
+        <div class="hd"><h2 class="ct">Tres medidas por semana</h2><div style="display: flex; gap: 14px; flex-wrap: wrap;"><span class="leg"><i style="background: #ff5b24;"></i>cita verificada</span><span class="leg"><i style="background: #141414;"></i>votos positivos</span><span class="leg"><i style="background: #15803d;"></i>correctas (revisión)</span></div></div>
+        <p class="sub">Miden cosas distintas: se muestran juntas, no se promedian.</p>
+        <div style="display: flex; gap: 12px;">
+          <div style="display: flex; flex-direction: column; justify-content: space-between; height: 200px;" class="sub"><span>100 %</span><span>75 %</span><span>50 %</span></div>
+          <svg viewBox="0 0 800 200" width="100%" height="200" preserveAspectRatio="none" role="img" aria-label="Por semana: cita verificada de 82 a 88 %, votos positivos de 74 a 81 %, correctas de 70 a 77 %">
+            <path d="M0 100H800M0 1H800M0 199H800" stroke="#efe8de" stroke-width="1"/>
+            <path d="M0 72 C130 66 200 60 266 58 S400 52 533 48 S700 44 800 46" fill="none" stroke="#ff5b24" stroke-width="2.8" vector-effect="non-scaling-stroke"/>
+            <path d="M0 104 C120 98 200 90 266 94 S420 84 533 80 S700 76 800 76" fill="none" stroke="#141414" stroke-width="2" vector-effect="non-scaling-stroke"/>
+            <path d="M0 120 C120 118 200 112 266 108 S420 100 533 96 S700 94 800 92" fill="none" stroke="#15803d" stroke-width="2" stroke-dasharray="5 5" vector-effect="non-scaling-stroke"/>
+          </svg>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding-left: 44px;" class="sub"><span>sem 43</span><span>sem 44</span><span>sem 45</span><span>sem 46</span><span>sem 47</span></div>
+      </section>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;">
+      <section class="card" style="align-items: center;">
+        <h2 class="ct" style="align-self: flex-start;">Cita verificada</h2>
+        <div style="width: 150px; height: 150px; border-radius: 99px; background: conic-gradient(#ff5b24 0 88.4%, #efe8de 0); display: flex; align-items: center; justify-content: center;" role="img" aria-label="88 % de las respuestas de reglamento con cita verificada"><div style="width: 124px; height: 124px; border-radius: 99px; background: #fffdfa; display: flex; flex-direction: column; align-items: center; justify-content: center;"><span class="big" style="font-size: 30px;">88 %</span><span class="sub">153 de 173</span></div></div>
+        <div style="align-self: stretch; display: flex; flex-direction: column; gap: 6px;">
+          <div class="hd sub"><span>Votos positivos</span><b style="color: #141414;">81 %</b></div>
+          <div class="hd sub"><span>Evaluación (12 preguntas)</span><b style="color: #141414;">75 %</b></div>
+        </div>
+      </section>
+      <section class="card" style="grid-column: span 2;">
+        <div class="hd"><h2 class="ct">Últimas revisiones</h2><a href="#" class="sub" style="color: #c2410c; font-weight: 600;">279 sin revisar →</a></div>
+        <div style="overflow-x: auto;"><table class="tb">
+          <thead><tr><th scope="col">Veredicto</th><th scope="col">Intención</th><th scope="col">Consorcio</th><th scope="col" class="r">Certeza</th><th scope="col">Motivo</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pill" style="border-color: #15803d; color: #15803d;">correcta</span></td><td>Reglamento</td><td>mercedes-274</td><td class="r">0,90</td><td>—</td></tr>
+            <tr><td><span class="pill" style="border-color: #b91c1c; color: #b91c1c;">incorrecta</span></td><td>Expensas</td><td>demo-palmeras</td><td class="r">0,70</td><td>dato incorrecto</td></tr>
+            <tr><td><span class="pill" style="border-color: #c2410c; color: #c2410c;">parcial</span></td><td>Reglamento</td><td>mercedes-274</td><td class="r">0,62</td><td>incompleta</td></tr>
+            <tr><td><span class="pill" style="border-color: #b91c1c; color: #b91c1c;">incorrecta</span></td><td>Reglamento</td><td>mercedes-274</td><td class="r">0,58</td><td>debía derivar</td></tr>
+          </tbody>
+        </table></div>
+        <p class="sub">Sin texto: pregunta y respuesta solo las ve la administración.</p>
+      </section>
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <section class="card">
+          <div class="hd"><h2 class="ct">Calibración</h2><span class="sub">correctas por nivel</span></div>
+          <div style="display: flex; align-items: flex-end; gap: 14px; height: 96px; border-bottom: 1px solid #e3dbd0;" role="img" aria-label="Alta 90 %, media 64 %, baja 38 %">
+            <div style="flex: 1; height: 90%; border: 2px solid #15803d; background: #e5f4ea; border-radius: 10px 10px 0 0; box-sizing: border-box;"></div>
+            <div style="flex: 1; height: 64%; border: 2px solid #c2410c; background: #ffeee5; border-radius: 10px 10px 0 0; box-sizing: border-box;"></div>
+            <div style="flex: 1; height: 38%; border: 2px solid #b91c1c; background: #fbe9e9; border-radius: 10px 10px 0 0; box-sizing: border-box;"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center;" class="sub"><span>alta 90 %</span><span>media 64 %</span><span>baja 38 %</span></div>
+        </section>
+        <section class="card">
+          <h2 class="ct">Motivos de error</h2>
+          <div class="hb">
+            <span>Dato incorrecto</span><div class="bar"><i style="width: 100%; background: #b91c1c;"></i></div><b>4</b>
+            <span>Cita errónea</span><div class="bar"><i style="width: 75%; background: #b91c1c;"></i></div><b>3</b>
+            <span>Incompleta</span><div class="bar"><i style="width: 50%;"></i></div><b>2</b>
+            <span>Debía derivar</span><div class="bar"><i style="width: 50%;"></i></div><b>2</b>
+          </div>
+        </section>
+      </div>
+    </div>
+    <p class="sub" style="text-align: right;">Datos de ejemplo</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

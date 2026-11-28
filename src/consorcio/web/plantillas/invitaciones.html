@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% import "_iconos.html" as i %}
+{% set rotulo_rol = {"administracion": "Administración", "consejo": "Consejo", "propietario": "Propietario", "inquilino": "Inquilino"} %}
+{% set rotulo_estado = {"pendiente": "Sin usar", "usada": "Usada", "vencida": "Vencida o anulada"} %}
+{% block titulo %}Invitar{% endblock %}
+{% block tema %}claro{% endblock %}
+{% block cabeza %}<script src="/estaticos/copiar.js" defer></script>{% endblock %}
+{% block contenido %}
+<div class="ancho invitar">
+<header class="encabezado">
+  <div>
+    <h1>Invitar a {{ consorcio }}</h1>
+    <p class="nota">Armás un link para una persona y se lo mandás por donde quieras. Con el link crea su cuenta y entra con el rol que le diste. Vence a los {{ dias }} días y sirve una sola vez.</p>
+  </div>
+</header>
+
+<div class="invitar-cuerpo">
+  <section class="invitar-tarjeta">
+    {% if link %}
+    <div class="invitar-link" role="status">
+      <span class="invitar-link-icono">{{ i.icono("listo") }}</span>
+      <div class="invitar-link-texto">
+        <h2>Link listo para {{ creada.email }}</h2>
+        <p class="nota">{{ rotulo_rol.get(creada.rol, creada.rol) }}{% if creada.unidad %} · unidad {{ creada.unidad }}{% endif %}. Vence el {{ creada.vence_en.strftime("%d/%m/%Y") }}. Copialo ahora: por seguridad no se guarda y no se puede volver a ver.</p>
+        <div class="invitar-copiar">
+          <label class="solo-lector" for="link-invitacion">Link de invitación</label>
+          <input id="link-invitacion" type="text" value="{{ link }}" readonly>
+          <button type="button" class="secundario" data-copiar="link-invitacion" data-copiado="Copiado">{{ i.icono("hoja") }}<span>Copiar</span></button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <h2>{{ "Invitar a otra persona" if link else "Nueva invitación" }}</h2>
+    <form method="post" action="/invitaciones" class="pila invitar-form">
+      {% include "_csrf.html" %}
+      <label>Mail de quien invitás <input type="email" name="email" value="{{ email or '' }}" required maxlength="320" autocomplete="off" placeholder="vecina@mail.com"></label>
+      <fieldset class="invitar-roles">
+        <legend>Qué va a ser en el consorcio</legend>
+        {% for clave, rotulo in roles.items() %}
+        <label class="invitar-rol"><input type="radio" name="rol" value="{{ clave }}"{% if clave == (rol or "propietario") %} checked{% endif %}><span>{{ rotulo }}</span></label>
+        {% endfor %}
+      </fieldset>
+      <fieldset class="invitar-unidad">
+        <legend>Unidad <small>(para propietarios e inquilinos)</small></legend>
+        <label>Piso <input type="text" name="piso" value="{{ piso or '' }}" maxlength="20" placeholder="3" list="pisos"></label>
+        <label>Depto <input type="text" name="depto" value="{{ depto or '' }}" maxlength="20" placeholder="A" list="deptos"></label>
+        <datalist id="pisos">{% for p in unidades|map(attribute="piso")|unique %}<option value="{{ p }}">{% endfor %}</datalist>
+        <datalist id="deptos">{% for d in unidades|map(attribute="depto")|unique %}<option value="{{ d }}">{% endfor %}</datalist>
+      </fieldset>
+      {% if error %}<p class="alerta" role="alert">{{ i.icono("alerta") }}<span>{{ error }}</span></p>{% endif %}
+      <button type="submit">{{ i.icono("enviar") }}Generar link</button>
+    </form>
+  </section>
+
+  <section class="invitar-tarjeta">
+    <header class="invitar-lista-cabeza"><h2>Invitaciones</h2><span class="chip">{{ lista|selectattr("estado", "equalto", "pendiente")|list|length }} sin usar</span></header>
+    {% if lista %}
+    <ul class="invitar-lista">
+      {% for inv in lista %}
+      <li class="invitar-fila invitar-{{ inv.estado }}">
+        <span class="invitar-fila-texto">
+          <strong>{{ inv.email }}</strong>
+          <small>{{ rotulo_rol.get(inv.rol, inv.rol) }}{% if inv.piso %} · {{ inv.piso }}-{{ inv.depto }}{% endif %} · {{ inv.creada_en.strftime("%d/%m") }}{% if inv.estado == "pendiente" %} · vence {{ inv.vence_en.strftime("%d/%m") }}{% endif %}</small>
+        </span>
+        <span class="estado">{{ rotulo_estado.get(inv.estado, inv.estado) }}</span>
+        {% if inv.estado == "pendiente" %}
+        <form method="post" action="/invitaciones/{{ inv.id }}/anular">
+          {% include "_csrf.html" %}
+          <button type="submit" class="enlace">Anular</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="vacio">Todavía no invitaste a nadie a {{ consorcio }}.</p>
+    {% endif %}
+  </section>
+</div>
+</div>
+{% endblock %}
