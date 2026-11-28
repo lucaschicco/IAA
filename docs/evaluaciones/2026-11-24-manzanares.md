@@ -162,10 +162,10 @@ Del 24/11:
 3. **Errores del proveedor:** un 429 de cuota diaria tiene que cortar enseguida y no crear una derivación.
 4. **Datos de prueba:** las rondas 3 a 5 dejaron en Manzanares 38 derivaciones y 9 reclamos. Hay que decidir si se
    borran.
-5. **Script e2e:** está fuera del repo, en el scratchpad de la sesión. Conviene moverlo a `scripts/` para repetir
-   la prueba:
+5. **Script e2e:** ya está en el repo (27/11), en `scripts/e2e_web.py`. Las rutas y los usuarios se configuran con
+   variables `E2E_*` (ver README §10.3):
 
    ```
-   E2E_CLAVE=... python -u e2e_manzanares.py rondaN [--sin-carga]
+   E2E_CLAVE=... python -u scripts/e2e_web.py rondaN [--sin-carga]
    ```
 6. **Tests:** pasa la suite completa, con Postgres de test y S3. Son 943 tests y ninguno salteado (25/11).
